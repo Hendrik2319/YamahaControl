@@ -115,16 +115,31 @@ public class YamahaControl {
 		
 		YamahaControl yamahaControl = new YamahaControl();
 		yamahaControl.createGUI();
-		yamahaControl.testCommand("192.168.2.34","<YAMAHA_AV cmd=\"GET\"><System><Power_Control><Power>GetParam</Power></Power_Control></System></YAMAHA_AV>");
+		//yamahaControl.testCommand("192.168.2.34","<YAMAHA_AV cmd=\"GET\"><System><Power_Control><Power>GetParam</Power></Power_Control></System></YAMAHA_AV>");
+		//yamahaControl.testCommand("192.168.2.34","<YAMAHA_AV cmd=\"GET\"><Main_Zone><Basic_Status><Power_Control><Power>GetParam</Power></Power_Control></Basic_Status></Main_Zone></YAMAHA_AV>");
+		//yamahaControl.testCommand("192.168.2.34","<YAMAHA_AV cmd=\"GET\"><Main_Zone><Basic_Status><Power_Control><Power>On</Power></Power_Control></Basic_Status></Main_Zone></YAMAHA_AV>");
+		//yamahaControl.testCommand("192.168.2.34","<YAMAHA_AV cmd=\"GET\"><Main_Zone><Basic_Status><Power_Control><Power>On</Power></Power_Control></Basic_Status></Main_Zone></YAMAHA_AV>");
+		
+		yamahaControl.testCommand("192.168.2.34","<YAMAHA_AV cmd=\"GET\"><Main_Zone><Input><Input_Sel>GetParam</Input_Sel></Input></Main_Zone></YAMAHA_AV>");
+		yamahaControl.testCommand("192.168.2.34","<YAMAHA_AV cmd=\"GET\"><Main_Zone><Input><Input_Sel_Item>GetParam</Input_Sel_Item></Input></Main_Zone></YAMAHA_AV>");
+		yamahaControl.testCommand("192.168.2.34","<YAMAHA_AV cmd=\"GET\"><Main_Zone><Scene><Scene_Sel>GetParam</Scene_Sel></Scene></Main_Zone></YAMAHA_AV>");
+		yamahaControl.testCommand("192.168.2.34","<YAMAHA_AV cmd=\"GET\"><Main_Zone><Scene><Scene_Sel_Item>GetParam</Scene_Sel_Item></Scene></Main_Zone></YAMAHA_AV>");
+		
+		//yamahaControl.testCommand("192.168.2.34","<YAMAHA_AV cmd=\"GET\"><Main_Zone><Basic_Status><Power_Control><Power></Power></Power_Control></Basic_Status></Main_Zone></YAMAHA_AV>");
+		//yamahaControl.testCommand("192.168.2.34","<YAMAHA_AV cmd=\"PUT\"><Main_Zone><Power_Control><Power>On</Power></Power_Control></Main_Zone></YAMAHA_AV>");
+		//yamahaControl.testCommand("192.168.2.34","<YAMAHA_AV cmd=\"PUT\"><Main_Zone><Power_Control><Power>Standby</Power></Power_Control></Main_Zone></YAMAHA_AV>");
+		//yamahaControl.testCommand("192.168.2.34","<YAMAHA_AV cmd=\"GET\"><Main_Zone><Power_Control><Power>GetParam</Power></Power_Control></Main_Zone></YAMAHA_AV>");
+		
 	}
 	
 	YamahaControl() {
 	}
 
 	public void testCommand(String ip, String command) {
-		System.out.println("Command : "+command);
 		String response = sendCommand(ip, command, true);
+		System.out.println("Command : "+command);
 		System.out.println("Response: "+response);
+		System.out.println();
 	}
 
 	public String sendCommand(String ip, String command) {
@@ -166,24 +181,9 @@ public class YamahaControl {
 		try { outputStream.write(bytes); }
 		catch (IOException e) { e.printStackTrace(); try { outputStream.close(); } catch (IOException e1) { e1.printStackTrace(); } connection.disconnect(); return null; }
 		
-		if (verbose) {
-			Map<String, List<String>> headerFields = connection.getHeaderFields();
-			for (Entry<String, List<String>> entry:headerFields.entrySet()) {
-				String key = entry.getKey();
-				StringBuilder values = new StringBuilder();
-				entry.getValue().stream().forEach(str->values.append(" \"").append(str).append("\""));
-				System.out.printf("Header[%-20s]: %s%n", key, values.toString());
-			}
-			try { System.out.println("ResponseCode   : "+connection.getResponseCode   ()); } catch (IOException e) {}
-			try { System.out.println("ResponseMessage: "+connection.getResponseMessage()); } catch (IOException e) {}
-			System.out.println("ContentLength  : "+connection.getContentLength  ());
-			System.out.println("ContentType    : "+connection.getContentType    ());
-			System.out.println("ContentEncoding: "+connection.getContentEncoding());
-		}
-		
 		Object content;
 		try { content = connection.getContent(); }
-		catch (IOException e) { e.printStackTrace(); connection.disconnect(); return null; }
+		catch (IOException e) { e.printStackTrace(); if (verbose) showConnection(connection); connection.disconnect(); return null; }
 		if (verbose) System.out.println("Content: "+content); 
 		
 		String contentStr = null;
@@ -199,9 +199,26 @@ public class YamahaControl {
 			if (verbose) System.out.println("Content (as String): "+new String(responseBytes)); 
 		}
 		
+		if (verbose && contentStr==null) showConnection(connection);
+		
 		connection.disconnect();
 		
 		return contentStr;
+	}
+
+	private void showConnection(HttpURLConnection connection) {
+		Map<String, List<String>> headerFields = connection.getHeaderFields();
+		for (Entry<String, List<String>> entry:headerFields.entrySet()) {
+			String key = entry.getKey();
+			StringBuilder values = new StringBuilder();
+			entry.getValue().stream().forEach(str->values.append(" \"").append(str).append("\""));
+			System.out.printf("Header[%-20s]: %s%n", key, values.toString());
+		}
+		try { System.out.println("ResponseCode   : "+connection.getResponseCode   ()); } catch (IOException e) {}
+		try { System.out.println("ResponseMessage: "+connection.getResponseMessage()); } catch (IOException e) {}
+		System.out.println("ContentLength  : "+connection.getContentLength  ());
+		System.out.println("ContentType    : "+connection.getContentType    ());
+		System.out.println("ContentEncoding: "+connection.getContentEncoding());
 	}
 
 	private void createGUI() {
