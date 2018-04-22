@@ -12,25 +12,36 @@ import java.net.URL;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.Enumeration;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Vector;
 
 import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
 import javax.swing.JButton;
+import javax.swing.JComboBox;
 import javax.swing.JFrame;
-import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTree;
 import javax.swing.UIManager;
 import javax.swing.UnsupportedLookAndFeelException;
+import javax.swing.tree.DefaultTreeModel;
+import javax.swing.tree.TreeNode;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.ParserConfigurationException;
 
+import org.w3c.dom.CDATASection;
+import org.w3c.dom.Comment;
 import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.NamedNodeMap;
+import org.w3c.dom.Node;
+import org.w3c.dom.NodeList;
+import org.w3c.dom.Text;
 import org.xml.sax.InputSource;
 import org.xml.sax.SAXException;
 
@@ -53,28 +64,50 @@ public class CommandList {
 //		String addr = "RX_V475";
 //		commandList.readCommandList(addr,true);
 	}
-
+	
+	private enum TreeViewType { DOM } 
+	
 	private void createGUI() {
 		
-		JTree tree = new JTree();
+		DefaultTreeModel treeModel = new DefaultTreeModel(null);
+		JTree tree = new JTree(treeModel);
 		JScrollPane treeScrollPane = new JScrollPane(tree);
 		treeScrollPane.setPreferredSize(new Dimension(600,800));
 		
+		JComboBox<TreeViewType> treeViewTypeComboBox = createComboBox(TreeViewType.values(),null);
+		treeViewTypeComboBox.addActionListener(e->showCommandList(tree,treeModel,(TreeViewType)(treeViewTypeComboBox.getSelectedItem())));
+		
 		JPanel northPanel = new JPanel();
 		northPanel.setLayout(new BoxLayout(northPanel, BoxLayout.X_AXIS));
-		northPanel.add(createButton("Get Data",e->readCommandList()));
+		northPanel.add(createButton("Get Data",e->{readCommandList();showCommandList(tree,treeModel,(TreeViewType)(treeViewTypeComboBox.getSelectedItem()));}));
+		northPanel.add(treeViewTypeComboBox);
 		
 		JPanel contentPane = new JPanel(new BorderLayout(3,3));
 		contentPane.setBorder(BorderFactory.createEmptyBorder(3, 3, 3, 3));
 		contentPane.add(northPanel,BorderLayout.NORTH);
 		contentPane.add(treeScrollPane,BorderLayout.CENTER);
 		
-		// TODO Auto-generated method stub
 		mainWindow = new JFrame("YamahaControl - CommandList");
 		mainWindow.setContentPane(contentPane);
 		mainWindow.pack();
 		mainWindow.setLocationRelativeTo(null);
 		mainWindow.setVisible(true);
+	}
+
+	private void showCommandList(JTree tree, DefaultTreeModel treeModel, TreeViewType treeViewType) {
+		if (document==null) return;
+		if (treeViewType==null)
+			treeModel.setRoot(null);
+		else
+			switch(treeViewType) {
+			case DOM: treeModel.setRoot(new DOMTreeNode(document));
+			}
+	}
+
+	private <A> JComboBox<A> createComboBox(A[] values, ActionListener l) {
+		JComboBox<A> comboBox = new JComboBox<A>(values);
+		if (l!=null) comboBox.addActionListener(l);
+		return comboBox;
 	}
 
 	private JButton createButton(String title, ActionListener l) {
@@ -171,6 +204,87 @@ public class CommandList {
 		connection.disconnect();
 		
 		return contentStr;
+	}
+
+	private static final class DOMTreeNode implements TreeNode {
+	
+		private DOMTreeNode parent;
+		private Node node;
+		private Vector<DOMTreeNode> children;
+
+		public DOMTreeNode(Document document) {
+			this(null,document);
+		}
+		public DOMTreeNode(DOMTreeNode parent, Node node) {
+			this.parent = parent;
+			this.node = node;
+			this.children = null;
+		}
+
+		private void createChildren() {
+			children = new Vector<>();
+			NodeList childNodes = node.getChildNodes();
+			for (int i=0; i<childNodes.getLength(); ++i)
+				children.add(new DOMTreeNode(this, childNodes.item(i)));
+		}
+		
+		@Override
+		public String toString() {
+			switch (node.getNodeType()) {
+			case Node.DOCUMENT_NODE     : return toString((Document    )node);
+			case Node.ELEMENT_NODE      : return toString((Element     )node);
+			case Node.TEXT_NODE         : return toString((Text        )node);
+			case Node.COMMENT_NODE      : return toString((Comment     )node);
+			case Node.CDATA_SECTION_NODE: return toString((CDATASection)node);
+			}
+			
+			return String.format("[%d] %s", node.getNodeType(), node.getNodeName());
+			//return "DOMTreeNode [parent=" + parent + ", node=" + node + ", children=" + children + "]";
+		}
+		
+		private String toString(Comment comment) {
+			return String.format("<!-- %s -->", comment.getNodeValue());
+		}
+		private String toString(CDATASection cdataSection) {
+			return String.format("[CDATA %s ]", cdataSection.getNodeValue());
+		}
+		private String toString(Text text) {
+			return String.format("\"%s\"", text.getNodeValue());
+		}
+		private String toString(Element element) {
+			StringBuilder sb = new StringBuilder();
+			NamedNodeMap attributes = element.getAttributes();
+			for (int i=0; i<attributes.getLength(); ++i) {
+				Node attr = attributes.item(i);
+				sb.append(String.format(" %s=\"%s\"", attr.getNodeName(), attr.getNodeValue()));
+			}
+			return String.format("<%s%s>", element.getNodeName(), sb.toString());
+		}
+		private String toString(Document document) {
+			return "Document "+document.getNodeName();
+		}
+		
+		@Override public TreeNode getParent() { return parent; }
+		@Override public boolean getAllowsChildren() { return true; }
+		@Override public boolean isLeaf() { return getChildCount()==0; }
+		@Override public int getChildCount() { return node.getChildNodes().getLength(); }
+		
+		@Override public int getIndex(TreeNode node) {
+			if (children==null) createChildren();
+			return children.indexOf(node);
+		}
+	
+		@Override public TreeNode getChildAt(int childIndex) {
+			if (children==null) createChildren();
+			return children.get(childIndex);
+		}
+		
+		@SuppressWarnings("rawtypes")
+		@Override public Enumeration children() {
+			if (children==null) createChildren();
+			return children.elements();
+		}
+	
 	}
 
 }
