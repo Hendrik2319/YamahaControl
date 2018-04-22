@@ -20,11 +20,13 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+
+import javax.swing.UIManager;
+import javax.swing.UnsupportedLookAndFeelException;
+
 import java.util.Vector;
 
 public class YamahaControl {
-
-	private static final String CONFIG_FILENAME = "YamahaControl.cfg";
 
 	@SuppressWarnings("unused")
 	private static void testByteBuffers() {
@@ -98,6 +100,10 @@ public class YamahaControl {
 	}
 
 	public static void main(String[] args) {
+		try { UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName()); }
+		catch (ClassNotFoundException | InstantiationException | IllegalAccessException | UnsupportedLookAndFeelException e) {}
+		
+		Config.readConfig();
 
 //		testByteBuffers();
 		
@@ -108,39 +114,11 @@ public class YamahaControl {
 //		}
 		
 		YamahaControl yamahaControl = new YamahaControl();
-		yamahaControl.readConfig();
 		yamahaControl.createGUI();
-		yamahaControl.testCommand("rx-v475","<YAMAHA_AV cmd=\"GET\"><System><Power_Control><Power>GetParam</Power></Power_Control></System></YAMAHA_AV>");
+		yamahaControl.testCommand("192.168.2.34","<YAMAHA_AV cmd=\"GET\"><System><Power_Control><Power>GetParam</Power></Power_Control></System></YAMAHA_AV>");
 	}
-
-	Vector<String> knownIPs;
 	
 	YamahaControl() {
-		knownIPs = new Vector<>();
-		
-	}
-	
-	void readConfig() {
-		try (BufferedReader config = new BufferedReader( new InputStreamReader( new FileInputStream(CONFIG_FILENAME), StandardCharsets.UTF_8 ) )) {
-			String line;
-			while ( (line=config.readLine())!=null ) {
-				if (line.startsWith("ip="))
-					knownIPs.add(line.substring("ip=".length()));
-			}
-		}
-		catch (FileNotFoundException e) {}
-		catch (IOException e) {
-			e.printStackTrace();
-		}
-	}
-	
-	@SuppressWarnings("unused")
-	private void writeConfig() {
-		try (PrintWriter config = new PrintWriter( new OutputStreamWriter( new FileOutputStream(CONFIG_FILENAME), StandardCharsets.UTF_8 ) )) {
-			for (String ip:knownIPs)
-				config.printf("ip=%s%n", ip);
-		}
-		catch (FileNotFoundException e) {}
 	}
 
 	public void testCommand(String ip, String command) {
