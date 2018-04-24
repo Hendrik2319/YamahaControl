@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Vector;
+import java.util.function.Predicate;
 
 import javax.activation.DataHandler;
 import javax.swing.BorderFactory;
@@ -49,12 +50,13 @@ import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 import org.w3c.dom.Text;
 
+import net.schwarzbaer.gui.Disabler;
 import net.schwarzbaer.gui.IconSource;
 
 public class CommandList {
 	
 	private static IconSource.CachedIcons<ParsedTreeIcons> parsedTreeIcons = null;
-	private enum ParsedTreeIcons { Menu, Command, Language, UnitDescription, Document }
+	private enum ParsedTreeIcons { Menu, Command, Command_P, Command_G, Language, UnitDescription, Document }
 	
 	public static void main(String[] args) {
 		try { UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName()); }
@@ -74,21 +76,75 @@ public class CommandList {
 //		String addr = "RX_V475";
 //		commandList.readCommandList(addr,true);
 	}
+	private TreeViewType selectedTreeViewType;
+	private String selectedAddress;
 
 	private Document document;
 	private JFrame mainWindow;
-	private JPopupMenu contextMenu_node;
-	private JPopupMenu contextMenu_tree;
-	private TreePath contextMenuTarget;
-	private TreeViewType selectedTreeViewType;
+	private ContextMenuHandler contextMenu;
 
 	CommandList() {
 		document = null;
-		contextMenuTarget = null;
 		selectedTreeViewType = null;
+		selectedAddress = null;
+		contextMenu = new ContextMenuHandler();
 	}
 	
 	private enum TreeViewType { DOM, Parsed_Experimental } 
+	
+	private enum ContextMenuItemType {
+		TreeFunction(node->true),
+		NodeFunction(node->(node!=null)),
+		CommandFunction(node->(node instanceof ParsedTreeNode_Exp.CallableCommandNode));
+		
+		private Predicate<Object> checkClickedNode;
+		ContextMenuItemType( Predicate<Object> checkClickedNode ) {
+			this.checkClickedNode = checkClickedNode;
+		}
+	}
+	
+	private class ContextMenuHandler {
+		
+		private TreePath clickedTreePath;
+		private Object clickedTreeNode;
+		private JPopupMenu contextMenu;
+		private Disabler<ContextMenuItemType> disabler;
+
+		ContextMenuHandler() {
+			contextMenu = new JPopupMenu();
+			disabler = new Disabler<>();
+			disabler.setCareFor(ContextMenuItemType.values());
+			clickedTreePath = null;
+			clickedTreeNode = null;
+		}
+		
+		public void activate(JTree tree, int x, int y) {
+			clickedTreePath = tree.getPathForLocation(x,y);
+			if (clickedTreePath == null) clickedTreeNode = null;
+			else clickedTreeNode = clickedTreePath.getLastPathComponent();
+			
+			for (ContextMenuItemType type:ContextMenuItemType.values())
+				disabler.setEnable(type, type.checkClickedNode.test(clickedTreeNode));
+			
+			contextMenu.show(tree,x,y);
+		}
+
+		public void add(ContextMenuItemType type, String title, ActionListener l) {
+			JMenuItem menuItem = new JMenuItem(title);
+			if (l!=null) menuItem.addActionListener(l);
+			disabler.add(type, menuItem);
+			contextMenu.add(menuItem);
+		}
+
+		public void addSeparator() {
+			contextMenu.addSeparator();
+		}
+
+		public Object getClickedTreeNode() {
+			if (clickedTreePath==null) return null;
+			return clickedTreePath.getLastPathComponent();
+		}
+	}
 	
 	private void createGUI() {
 		
@@ -96,23 +152,19 @@ public class CommandList {
 		JTree tree = new JTree(treeModel);
 		tree.addMouseListener(new MouseAdapter() {
 			@Override public void mouseClicked(MouseEvent e) {
-				if (e.getButton()==MouseEvent.BUTTON3) {
-					contextMenuTarget = tree.getPathForLocation(e.getX(), e.getY());
-					if (contextMenuTarget!=null) contextMenu_node.show(tree, e.getX(), e.getY());
-					else                         contextMenu_tree.show(tree, e.getX(), e.getY());
-				}
+				if (e.getButton()==MouseEvent.BUTTON3)
+					contextMenu.activate(tree, e.getX(), e.getY());
 			}
 		});
 		
 		JScrollPane treeScrollPane = new JScrollPane(tree);
 		treeScrollPane.setPreferredSize(new Dimension(800,800));
 		
-		contextMenu_node = new JPopupMenu("Contextmenu");
-		contextMenu_node.add(createMenuItem("Copy Value to Clipboard",e->copyToClipBoard(getClickedNodeText())));
-		contextMenu_node.add(createMenuItem("Copy Path to Clipboard" ,e->copyToClipBoard(getClickedNodePath())));
-		
-		contextMenu_tree = new JPopupMenu("Contextmenu");
-		contextMenu_tree.add(createMenuItem("Expand Full Tree",e->expandFullTree(tree)));
+		contextMenu.add(ContextMenuItemType.NodeFunction, "Copy Value to Clipboard", e->copyToClipBoard(getClickedNodeText()));
+		contextMenu.add(ContextMenuItemType.NodeFunction, "Copy Path to Clipboard", e->copyToClipBoard(getClickedNodePath()));
+		contextMenu.add(ContextMenuItemType.CommandFunction, "Test Command", e->testCommand(contextMenu.getClickedTreeNode()));
+		contextMenu.addSeparator();
+		contextMenu.add(ContextMenuItemType.TreeFunction, "Expand Full Tree", e->expandFullTree(tree));
 
 		selectedTreeViewType = TreeViewType.DOM;
 		JComboBox<TreeViewType> treeViewTypeComboBox = createComboBox(TreeViewType.values(),null);
@@ -138,6 +190,15 @@ public class CommandList {
 		mainWindow.pack();
 		mainWindow.setLocationRelativeTo(null);
 		mainWindow.setVisible(true);
+	}
+
+	private void testCommand(Object clickedTreeNode) {
+		if (!(clickedTreeNode instanceof ParsedTreeNode_Exp.CallableCommandNode)) return;
+		ParsedTreeNode_Exp.CallableCommandNode commandNode = (ParsedTreeNode_Exp.CallableCommandNode)clickedTreeNode;
+		String xmlCommand = commandNode.buildXmlCommand();
+		if (selectedAddress==null) return;
+		if (xmlCommand==null) return;
+		YamahaControl.testCommand(selectedAddress, xmlCommand);
 	}
 
 	private void expandFullTree(JTree tree) {
@@ -180,24 +241,17 @@ public class CommandList {
 		return comboBox;
 	}
 
-	private JMenuItem createMenuItem(String label, ActionListener l) {
-		JMenuItem menuItem = new JMenuItem(label);
-		if (l!=null) menuItem.addActionListener(l);
-		return menuItem;
-	}
-
 	private String getClickedNodePath() {
-		Object pathComp = contextMenuTarget.getLastPathComponent();
+		Object pathComp = contextMenu.getClickedTreeNode();
 		if (pathComp instanceof DOMTreeNode       ) return XML.getPath(((DOMTreeNode)pathComp).node);;
 		if (pathComp instanceof ParsedTreeNode_Exp) return XML.getPath(((ParsedTreeNode_Exp)pathComp).getNode());
 		return null;
 	}
 
 	private String getClickedNodeText() {
-		if (contextMenuTarget==null) return null;
-		Object pathComp = contextMenuTarget.getLastPathComponent();
-		if (pathComp!=null) return pathComp.toString();
-		return null;
+		Object pathComp = contextMenu.getClickedTreeNode();
+		if (pathComp == null) return null;
+		return pathComp.toString();
 	}
 
 	public static void copyToClipBoard(String str) {
@@ -210,8 +264,7 @@ public class CommandList {
 	}
 
 	private void readCommandList() {
-		//Object selectedAddress = JOptionPane.showInputDialog(mainWindow, "message", "title", JOptionPane.QUESTION_MESSAGE, null, Config.knownIPs.toArray(), null);
-		String selectedAddress = Config.selectAddress(mainWindow);
+		selectedAddress = Config.selectAddress(mainWindow);
 		if (selectedAddress!=null)
 			readCommandList(selectedAddress.toString(), true);
 	}
@@ -677,13 +730,51 @@ public class CommandList {
 			}
 		}
 
-		private static class BaseCommandDefineNode extends ElementNode {
+		private static abstract class CallableGetCommandNode extends CallableCommandNode {
+			CallableGetCommandNode(ParsedTreeNode_Exp parent, Element node) {
+				super(parent, node, ParsedTreeIcons.Command_G);
+			}
+		}
+
+		private static abstract class CallablePutCommandNode extends CallableCommandNode {
+			CallablePutCommandNode(ParsedTreeNode_Exp parent, Element node) {
+				super(parent, node, ParsedTreeIcons.Command_P);
+			}
+		}
+
+		private static abstract class CallableCommandNode extends ElementNode {
+			CallableCommandNode(ParsedTreeNode_Exp parent, Element node, ParsedTreeIcons icon) {
+				super(parent, node, icon);
+			}
+			public abstract String buildXmlCommand();
+			
+			protected String buildSimplePutCommand(String command, String commandValue) {
+				// <YAMAHA_AV cmd="PUT"><System><Power_Control><Power>On</Power></Power_Control></System></YAMAHA_AV>
+				return buildSimpleCommand("PUT", command, commandValue);
+			}
+			
+			protected String buildSimpleGetCommand(String command) {
+				// <YAMAHA_AV cmd="GET"><System><Power_Control><Power>GetParam</Power></Power_Control></System></YAMAHA_AV>
+				return buildSimpleCommand("GET", command, "GetParam");
+			}
+			
+			protected String buildSimpleCommand(String cmd, String command, String value) {
+				String xmlStr = value;
+				String[] parts = command.split(",");
+				for (int i=parts.length-1; i>=0; --i)
+					xmlStr = "<"+parts[i]+">"+xmlStr+"</"+parts[i]+">";
+				
+				return "<YAMAHA_AV cmd=\""+cmd+"\">"+xmlStr+"</YAMAHA_AV>";
+			}
+		}
+
+		private static class BaseCommandDefineNode extends CallableGetCommandNode {
 		
 			public String id;
 			public String command;
 
 			public BaseCommandDefineNode(ParsedTreeNode_Exp parent, Element node) {
-				super(parent,node,ParsedTreeIcons.Command);
+				super(parent,node);
 				this.id = null;
 				this.command = null;
 				// <Define ID="P7">command</Define>
@@ -713,22 +804,28 @@ public class CommandList {
 			
 			@Override public String toString() { return String.format("%s: %s", id, command); }
 			@Override protected void createChildren() { throw new UnsupportedOperationException("Caling CommandNode.createChildren() is not allowed."); }
+
+			@Override
+			public String buildXmlCommand() {
+				if (command==null) return null;
+				return buildSimpleGetCommand(command);
+			}
 		}
 
-		private static class Put1CommandNode extends ElementNode {
+		private static class Put1CommandNode extends CallablePutCommandNode {
 		
 			private String cmdID;
+			private String command;
+			private String commandValue;
 			private String func;
 			private String funcEx;
 			private String title;
 			private String playable;
 			private String layout;
 			private String visible;
-			private String commandValue;
-			private String command;
-
+			
 			public Put1CommandNode(ParsedTreeNode_Exp parent, Element node) {
-				super(parent, node, ParsedTreeIcons.Command);
+				super(parent, node);
 				this.cmdID  = null;
 				this.command = null;
 				this.commandValue = null;
@@ -755,11 +852,13 @@ public class CommandList {
 				
 				children = new Vector<>();
 				
-				if (cmdID == null)
-					reportError("Found \"Put_1\" node with no ID.");
-				else {
-					HashMap<String, String> cmdList = MenuNode.getCmdListFromParent(parent);
-					if (cmdList!=null) command = cmdList.get(cmdID);
+				HashMap<String, String> cmdList = MenuNode.getCmdListFromParent(parent);
+				if (cmdList==null) reportError("Can't find command list for \"Put_1\" node.");
+				if (cmdID == null) reportError("Found \"Put_1\" node with no ID.");
+				
+				if (cmdList!=null && cmdID!=null) {
+					command = cmdList.get(cmdID);
+					if (command==null) reportError("Found \"Put_1\" node with ID \"%s\", that isn't associated with a command.", cmdID);
 				}
 				
 				NodeList childNodes = this.node.getChildNodes();
@@ -780,6 +879,12 @@ public class CommandList {
 				commandValue = child.getNodeValue();
 				
 				children.add( new TextNode(this, ParsedTreeIcons.Command, "PUT[%s]     %s = %s", cmdID==null?"??":cmdID, command==null?"????":command, commandValue==null?"???":commandValue) );
+			}
+
+			@Override
+			public String buildXmlCommand() {
+				if (command==null || commandValue==null) return null;
+				return buildSimplePutCommand(command, commandValue);
 			}
 			
 			private String getTags() {

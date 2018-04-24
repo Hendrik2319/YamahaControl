@@ -20,6 +20,7 @@ import org.xml.sax.SAXException;
 final class XML {
 
 	public static Document parse(String xmlStr) {
+		if (xmlStr==null) return null;
 		try {
 			return DocumentBuilderFactory
 					.newInstance()
