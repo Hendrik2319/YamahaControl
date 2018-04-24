@@ -130,9 +130,6 @@ public class YamahaControl {
 //		testCommand("192.168.2.34","<YAMAHA_AV cmd=\"GET\"><NET_RADIO><Config>GetParam</Config></NET_RADIO></YAMAHA_AV>");
 	}
 	
-	YamahaControl() {
-	}
-
 	public static void testCommand(String ip, String command) {
 		testCommand(ip, command, false);
 	}
@@ -148,7 +145,7 @@ public class YamahaControl {
 	public static String sendCommand(String ip, String command) {
 		return sendCommand(ip, command, false);
 	}
-
+	
 	public static String sendCommand(String ip, String command, boolean verbose) {
 		ByteBuffer byteBuf = StandardCharsets.UTF_8.encode(command);
 		byte[] bytes = new byte[byteBuf.limit()];
@@ -156,6 +153,43 @@ public class YamahaControl {
 		
 		int port = 80; // 50100 bei BD-Playern
 		String urlStr = "http://"+ip+":"+port+"/YamahaRemoteControl/ctrl";
+		
+		return sendHTTPRequest(
+				urlStr,
+				connection -> {
+					try { connection.setRequestMethod("POST"); }
+					catch (ProtocolException e) { e.printStackTrace(); return false; }
+					connection.setRequestProperty("Content-Type", "text/xml; charset=UTF-8");
+					connection.setRequestProperty("Content-Length", ""+bytes.length);
+					connection.setDoOutput(true);
+					connection.setDoInput(true);
+					return true;
+				},
+				connection -> {
+					try { connection.getOutputStream().write(bytes); return true; }
+					catch (IOException e) { e.printStackTrace(); return false; }
+				},
+				verbose);
+	}
+	
+	public static String getContentFromURL(String urlStr, boolean verbose) {
+		return sendHTTPRequest(
+				urlStr,
+				connection->{ connection.setDoInput(true); return true; },
+				null,
+				verbose);
+	}
+
+	private static interface ConfigureConn {
+		public boolean configure(HttpURLConnection connection);
+	}
+	
+	private static interface WriteRequestContent {
+		public boolean writeTo(HttpURLConnection connection);
+	}
+
+	private static String sendHTTPRequest(String urlStr, ConfigureConn configureConn, WriteRequestContent writeRequestContent, boolean verbose) {
+		
 		if (verbose) System.out.println("URL: "+urlStr);
 		URL url;
 		try { url = new URL(urlStr); }
@@ -166,28 +200,23 @@ public class YamahaControl {
 		try { connection = (HttpURLConnection)url.openConnection(); }
 		catch (IOException e) { e.printStackTrace(); return null; }
 		
-		try { connection.setRequestMethod("POST"); }
-		catch (ProtocolException e) { e.printStackTrace(); return null; }
-		
-		connection.setRequestProperty("Content-Type", "text/xml; charset=UTF-8");
-		connection.setRequestProperty("Content-Length", ""+bytes.length);
-		connection.setDoOutput(true);
-		connection.setDoInput(true);
+		if (configureConn!=null) {
+			boolean successful = configureConn.configure(connection);
+			if (!successful) return null;
+		}
 		
 		try { connection.connect(); }
 		catch (IOException e) { e.printStackTrace(); return null; }
 		
-		OutputStream outputStream;
-		try { outputStream = connection.getOutputStream(); }
-		catch (IOException e) { e.printStackTrace(); connection.disconnect(); return null; }
-		
-		try { outputStream.write(bytes); }
-		catch (IOException e) { e.printStackTrace(); try { outputStream.close(); } catch (IOException e1) { e1.printStackTrace(); } connection.disconnect(); return null; }
+		if (writeRequestContent!=null) {
+			boolean successful = writeRequestContent.writeTo(connection);
+			if (!successful) { if (verbose) showConnection(connection); connection.disconnect(); return null; }
+		}
 		
 		Object content;
 		try { content = connection.getContent(); }
-		catch (IOException e) { e.printStackTrace(); if (verbose) showConnection(connection); connection.disconnect(); return null; }
-		if (verbose) System.out.println("Content: "+content); 
+		catch (IOException e) { if (verbose) showConnection(connection); e.printStackTrace(); connection.disconnect(); return null; }
+		if (verbose) System.out.println("Content: "+content);
 		
 		String contentStr = null;
 		if (content instanceof InputStream) {
@@ -196,13 +225,26 @@ public class YamahaControl {
 			int n,pos=0;
 			try { while ( (n=input.read(responseBytes, pos, responseBytes.length-pos))>=0 ) pos += n; }
 			catch (IOException e) { e.printStackTrace(); if (verbose) System.out.println("abort reading response");}
-			if (verbose) System.out.println("Content (bytes read): "+(pos!=responseBytes.length?(" "+pos+" of "+responseBytes.length+" bytes "):"")+""+Arrays.toString(responseBytes)); 
+			
+			if (verbose) {
+				String bytesReadStr = pos!=responseBytes.length?(" "+pos+" of "+responseBytes.length+" bytes "):"";
+				if (pos<1000) {
+					System.out.println("Content (bytes read): "+bytesReadStr+""+Arrays.toString(responseBytes));
+				}
+			}
 			
 			contentStr = StandardCharsets.UTF_8.decode(ByteBuffer.wrap(responseBytes, 0, pos)).toString();
-			if (verbose) System.out.println("Content (as String): "+new String(responseBytes)); 
+			
+			if (verbose) {
+				if (contentStr.length()>1000) {
+					System.out.println("Content (as String): "+contentStr.substring(0, 100)+" ...");
+					System.out.println("                     ... "+contentStr.substring(contentStr.length()-100,contentStr.length()));
+				} else
+					System.out.println("Content (as String): "+contentStr);
+			}
 		}
 		
-		if (verbose && contentStr==null) showConnection(connection);
+		if (verbose && contentStr==null) showConnection(connection); 
 		
 		connection.disconnect();
 		
@@ -222,6 +264,9 @@ public class YamahaControl {
 		System.out.println("ContentLength  : "+connection.getContentLength  ());
 		System.out.println("ContentType    : "+connection.getContentType    ());
 		System.out.println("ContentEncoding: "+connection.getContentEncoding());
+	}
+
+	YamahaControl() {
 	}
 
 	private void createGUI() {
