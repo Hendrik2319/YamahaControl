@@ -42,11 +42,12 @@ import org.w3c.dom.Text;
 
 import net.schwarzbaer.gui.Disabler;
 import net.schwarzbaer.gui.IconSource;
+import net.schwarzbaer.java.tools.yamahacontrol.XML.TagList;
 
 public class CommandList {
 	
 	private static IconSource.CachedIcons<ParsedTreeIcon> parsedTreeIcons = null;
-	private enum ParsedTreeIcon { Menu, Command, Command_P, Command_G, Language, UnitDescription, Document }
+	private enum ParsedTreeIcon { Menu, Command, Command_PUT, Command_GET, Language, UnitDescription, Document }
 	
 	public static void main(String[] args) {
 		try { UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName()); }
@@ -191,7 +192,7 @@ public class CommandList {
 		String xmlCommand = commandNode.buildXmlCommand();
 		if (selectedAddress==null) return;
 		if (xmlCommand==null) return;
-		YamahaControl.testCommand(selectedAddress, xmlCommand);
+		Ctrl.testCommand(selectedAddress, xmlCommand, false);
 	}
 
 	private void expandFullTree(JTree tree) {
@@ -263,7 +264,7 @@ public class CommandList {
 	}
 
 	private void readCommandList(String addr, boolean verbose) {
-		String content = YamahaControl.getContentFromURL("http://"+addr+"/YamahaRemoteControl/desc.xml", verbose);
+		String content = Ctrl.getContentFromURL("http://"+addr+"/YamahaRemoteControl/desc.xml", verbose);
 		document = content==null?null:XML.parse(content);
 		if (verbose) System.out.println("done");
 	}
@@ -271,16 +272,28 @@ public class CommandList {
 	public static boolean findUnsupportedNodeTypes(Document document) {
 		HashMap<Short, Integer> foundNodeTypes = new HashMap<>();
 		addToNodeTypes(document,foundNodeTypes);
-		System.out.println("Found NodeTypes in DOM:");
 		boolean foundUnknownNodeTypes = false;
 		for (Entry<Short, Integer> entry:foundNodeTypes.entrySet()) {
 			switch (entry.getKey()) {
-			case Node.DOCUMENT_NODE     : System.out.println("   DOCUMENT: "+entry.getValue()); break;
-			case Node.ELEMENT_NODE      : System.out.println("   ELEMENT : "+entry.getValue()); break;
-			case Node.TEXT_NODE         : System.out.println("   TEXT    : "+entry.getValue()); break;
-			case Node.COMMENT_NODE      : System.out.println("   COMMENT : "+entry.getValue()); break;
-			case Node.CDATA_SECTION_NODE: System.out.println("   CDATA   : "+entry.getValue()); break;
-			default: System.err.println("   Unknown["+entry.getKey()+"]: "+entry.getValue()); foundUnknownNodeTypes = true; break;
+			case Node.DOCUMENT_NODE     : break;
+			case Node.ELEMENT_NODE      : break;
+			case Node.TEXT_NODE         : break;
+			case Node.COMMENT_NODE      : break;
+			case Node.CDATA_SECTION_NODE: break;
+			default: foundUnknownNodeTypes = true; break;
+			}
+		}
+		if (foundUnknownNodeTypes) {
+			System.out.println("Found NodeTypes in DOM:");
+			for (Entry<Short, Integer> entry:foundNodeTypes.entrySet()) {
+				switch (entry.getKey()) {
+				case Node.DOCUMENT_NODE     : System.out.println("   DOCUMENT: "+entry.getValue()); break;
+				case Node.ELEMENT_NODE      : System.out.println("   ELEMENT : "+entry.getValue()); break;
+				case Node.TEXT_NODE         : System.out.println("   TEXT    : "+entry.getValue()); break;
+				case Node.COMMENT_NODE      : System.out.println("   COMMENT : "+entry.getValue()); break;
+				case Node.CDATA_SECTION_NODE: System.out.println("   CDATA   : "+entry.getValue()); break;
+				default: System.err.println("   Unknown["+entry.getKey()+"]: "+entry.getValue()); break;
+				}
 			}
 		}
 		return foundUnknownNodeTypes;
@@ -534,13 +547,13 @@ public class CommandList {
 				return null;
 			}
 			
-			String cmdValueStr = child.getNodeValue();
-			if (cmdValueStr==null) {
+			String str = child.getNodeValue();
+			if (str==null) {
 				reportError("Content of text node [%d] inside of node is null.", 0);
 				return null;
 			}
 			
-			return cmdValueStr;
+			return str;
 		}
 
 		private static class UnitDescriptionNode extends ElementNode {
@@ -619,7 +632,7 @@ public class CommandList {
 				});
 			}
 			
-			public static HashMap<String, String> getCmdListFromParent(ParsedTreeNode_Exp parent) {
+			public static HashMap<String, TagList> getCmdListFromParent(ParsedTreeNode_Exp parent) {
 				if (parent instanceof MenuNode) {
 					MenuNode menu = ((MenuNode)parent);
 					if (menu.cmdListNode!=null) return menu.cmdListNode.commands;
@@ -659,7 +672,7 @@ public class CommandList {
 
 		private static class BaseCommandListNode extends ElementNode {
 			
-			private HashMap<String,String> commands;
+			private HashMap<String,TagList> commands;
 			
 			public BaseCommandListNode(ParsedTreeNode_Exp parent, Element node) {
 				super(parent,node,ParsedTreeIcon.Command);
@@ -706,10 +719,10 @@ public class CommandList {
 		private static class BaseCommandDefineNode extends ElementNode implements CallableGetCommandNode {
 		
 			public String id;
-			public String tagList;
+			public TagList tagList;
 
 			public BaseCommandDefineNode(ParsedTreeNode_Exp parent, Element node) {
-				super(parent,node, ParsedTreeIcon.Command_G);
+				super(parent,node, ParsedTreeIcon.Command_GET);
 				this.id = null;
 				this.tagList = null;
 				// <Define ID="P7">command</Define>
@@ -719,13 +732,14 @@ public class CommandList {
 				if (id == null)
 					reportError("Found \"Define\" node with no ID.");
 				
-				tagList = getContentOfSingleChildTextNode(this.node);
-				if (tagList==null) {
+				String tagListStr = getContentOfSingleChildTextNode(this.node);
+				if (tagListStr==null) {
 					NodeList childNodes = this.node.getChildNodes();
 					for (int i=0; i<childNodes.getLength(); ++i)
 						children.add(new GenericXMLNode(this, childNodes.item(i)));
 					return;
 				}
+				tagList = new TagList(tagListStr);
 			}
 			
 			@Override public String toString() { return String.format("%s: %s", id, tagList); }
@@ -734,14 +748,14 @@ public class CommandList {
 			@Override
 			public String buildXmlCommand() {
 				if (tagList==null) return null;
-				return YamahaControl.buildSimpleGetCommand(tagList);
+				return Ctrl.buildSimpleGetCommand(tagList);
 			}
 		}
 
 		private static class SimplePutCommandNode extends ElementNode implements CallablePutCommandNode {
 		
 			private String cmdID;
-			private String tagList;
+			private TagList tagList;
 			private String commandValue;
 			private String func;
 			private String funcEx;
@@ -751,7 +765,7 @@ public class CommandList {
 			private String visible;
 			
 			public SimplePutCommandNode(ParsedTreeNode_Exp parent, Element node) {
-				super(parent, node, ParsedTreeIcon.Command_P);
+				super(parent, node, ParsedTreeIcon.Command_PUT);
 				this.cmdID  = null;
 				this.tagList = null;
 				this.commandValue = null;
@@ -779,7 +793,7 @@ public class CommandList {
 				
 				children = new Vector<>();
 				
-				HashMap<String, String> cmdList = MenuNode.getCmdListFromParent(parent);
+				HashMap<String, TagList> cmdList = MenuNode.getCmdListFromParent(parent);
 				if (cmdList==null) reportError("Can't find command list for \"Put_1\" node.");
 				if (cmdID == null) reportError("Found \"Put_1\" node with no ID.");
 				
@@ -802,7 +816,7 @@ public class CommandList {
 			@Override
 			public String buildXmlCommand() {
 				if (tagList==null || commandValue==null) return null;
-				return YamahaControl.buildSimplePutCommand(tagList, commandValue);
+				return Ctrl.buildSimplePutCommand(tagList, commandValue);
 			}
 			
 			private String getTags() {
@@ -939,7 +953,7 @@ public class CommandList {
 					return true;
 				});
 				
-				HashMap<String, String> cmdList = MenuNode.getCmdListFromParent(parent);
+				HashMap<String, TagList> cmdList = MenuNode.getCmdListFromParent(parent);
 				if (cmdList==null) { reportError("Can't find command list for \"Put_2\" node."); error=true; }
 				if (cmd.cmdID==null) { reportError("Found \"Cmd\" child of \"Put_2\" node with no ID."); error=true; }
 				
@@ -969,7 +983,7 @@ public class CommandList {
 			protected static class Cmd {
 				@SuppressWarnings("unused") public String type;
 				public String cmdID;
-				public String baseTagList;
+				public TagList baseTagList;
 				public CmdParam[] params;
 				public Cmd() {
 					this.type = null;
@@ -979,11 +993,11 @@ public class CommandList {
 				}
 			}
 			protected static class CmdParam {
-				public String valueTagList;
+				public TagList valueTagList;
 				public String paramID;
 				public Param param;
 				public CmdParam(String valueTagList, String paramID) {
-					this.valueTagList = valueTagList;
+					this.valueTagList = valueTagList==null?null:new TagList(valueTagList);
 					this.paramID = paramID;
 					this.param = null;
 				}
@@ -1133,7 +1147,7 @@ public class CommandList {
 					error=true; return null;
 				}
 				
-				HashMap<String, String> cmdList = MenuNode.getCmdListFromParent(parent);
+				HashMap<String, TagList> cmdList = MenuNode.getCmdListFromParent(parent);
 				if (cmdList==null) reportError("Can't find command list for command node.");
 				if (value.cmdID==null) reportError("Found \"Indirect\" value of param node with no ID.");
 				
@@ -1225,14 +1239,14 @@ public class CommandList {
 			}
 			
 			protected static class IndirectValue extends ParamValue {
-				public String tagList;
+				public TagList tagList;
 				public String cmdID;
 				IndirectValue() {
 					this.cmdID   = null;
 					this.tagList = null;
 				}
 				@Override public String toString() {
-					return "Values [GET["+cmdID+"]:"+tagList+"]";
+					return "Values [GET["+cmdID+"]:"+tagList.toString()+"]";
 				}
 			}
 		}
@@ -1268,14 +1282,14 @@ public class CommandList {
 				
 				if (cmd.params.length==1) {
 					CmdParam cp = cmd.params[0];
-					String tagListStr = cp.valueTagList==null?"":(",  "+cp.valueTagList);
-					nodeReplacement = new PlainCommandNode(this, "PUT["+cmd.cmdID+"]", cmd.baseTagList+tagListStr, "=", cp.param.mergeValues(""," | ",""));
+					String tagListStr = cp.valueTagList==null?"":(",  "+cp.valueTagList.toString());
+					nodeReplacement = new PlainCommandNode(this, "PUT["+cmd.cmdID+"]", cmd.baseTagList.toString()+tagListStr, "=", cp.param.mergeValues(""," | ",""));
 				} else {
-					PlainCommandNode commandNode = new PlainCommandNode(this,"PUT["+cmd.cmdID+"]",cmd.baseTagList);
+					PlainCommandNode commandNode = new PlainCommandNode(this,"PUT["+cmd.cmdID+"]",cmd.baseTagList.toString());
 					nodeReplacement = commandNode;
 					for (int i=0; i<cmd.params.length; ++i) {
 						CmdParam cp = cmd.params[i];
-						String tagListStr = cp.valueTagList==null?"":(cp.valueTagList+" = ");
+						String tagListStr = cp.valueTagList==null?"":(cp.valueTagList.toString()+" = ");
 						commandNode.add(new TextNode(this, /*icon,*/ "Value %d:   %s%s", i, tagListStr, cp.param.mergeValues(""," | ","")));
 					}
 				}
@@ -1312,14 +1326,14 @@ public class CommandList {
 				
 				if (cmd.params.length==1) {
 					CmdParam cp = cmd.params[0];
-					String tagListStr = cp.valueTagList==null?"":(cp.valueTagList+" -> ");
+					String tagListStr = cp.valueTagList==null?"":(cp.valueTagList.toString()+" -> ");
 					nodeReplacement = new PlainGetCommandNode(this, "GET["+cmd.cmdID+"]", cmd.baseTagList, tagListStr+cp.param.mergeValues(""," | ",""));
 				} else {
 					PlainCommandNode commandNode = new PlainGetCommandNode(this,"GET["+cmd.cmdID+"]",cmd.baseTagList);
 					nodeReplacement = commandNode;
 					for (int i=0; i<cmd.params.length; ++i) {
 						CmdParam cp = cmd.params[i];
-						String tagListStr = cp.valueTagList==null?"":(cp.valueTagList+" -> ");
+						String tagListStr = cp.valueTagList==null?"":(cp.valueTagList.toString()+" -> ");
 						commandNode.add(new TextNode(this, /*icon,*/ "Value %d:   %s%s", i, tagListStr, cp.param.mergeValues(""," | ","")));
 					}
 				}
@@ -1353,21 +1367,26 @@ public class CommandList {
 		}
 		
 		private static class PlainGetCommandNode extends PlainCommandNode implements CallableGetCommandNode {
-			PlainGetCommandNode(ParsedTreeNode_Exp parent, String label, String tagList) {
-				super(parent, ParsedTreeIcon.Command_G, label, tagList);
+			private TagList tagList;
+			PlainGetCommandNode(ParsedTreeNode_Exp parent, String label, TagList tagList) {
+				super(parent, ParsedTreeIcon.Command_GET, label, tagList.toString());
+				this.tagList = tagList;
 			}
-			PlainGetCommandNode(ParsedTreeNode_Exp parent, String label, String tagList, String value) {
-				super(parent, ParsedTreeIcon.Command_G, label, tagList, "->", value);
+			PlainGetCommandNode(ParsedTreeNode_Exp parent, String label, TagList tagList, String value) {
+				super(parent, ParsedTreeIcon.Command_GET, label, tagList.toString(), "->", value);
+				this.tagList = tagList;
 			}
-			@Override public String buildXmlCommand() { return YamahaControl.buildSimpleGetCommand(tagList); }
+			@Override public String buildXmlCommand() { return Ctrl.buildSimpleGetCommand(tagList); }
 		}
 		
 		@SuppressWarnings("unused")
 		private static class PlainPutCommandNode extends PlainCommandNode implements CallablePutCommandNode {
-			PlainPutCommandNode(ParsedTreeNode_Exp parent, String label, String tagList, String value) {
-				super(parent, ParsedTreeIcon.Command_P, label, tagList, "=", value);
+			private TagList tagList;
+			PlainPutCommandNode(ParsedTreeNode_Exp parent, String label, TagList tagList, String value) {
+				super(parent, ParsedTreeIcon.Command_PUT, label, tagList.toString(), "=", value);
+				this.tagList = tagList;
 			}
-			@Override public String buildXmlCommand() { return YamahaControl.buildSimplePutCommand(tagList, value); }
+			@Override public String buildXmlCommand() { return Ctrl.buildSimplePutCommand(tagList, value); }
 		}
 		
 	}

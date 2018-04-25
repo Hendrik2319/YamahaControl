@@ -1,23 +1,47 @@
 package net.schwarzbaer.java.tools.yamahacontrol;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.net.HttpURLConnection;
-import java.net.MalformedURLException;
-import java.net.ProtocolException;
-import java.net.URL;
+import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
+import java.awt.GridLayout;
+import java.awt.event.ActionListener;
+import java.awt.image.BufferedImage;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
-import java.util.List;
-import java.util.Map;
-import java.util.Map.Entry;
+import java.util.EnumMap;
+import java.util.Vector;
 
+import javax.swing.BorderFactory;
+import javax.swing.Icon;
+import javax.swing.ImageIcon;
+import javax.swing.JButton;
+import javax.swing.JPanel;
+import javax.swing.JScrollPane;
+import javax.swing.JTabbedPane;
 import javax.swing.UIManager;
 import javax.swing.UnsupportedLookAndFeelException;
 
+import net.schwarzbaer.gui.Canvas;
+import net.schwarzbaer.gui.StandardMainWindow;
+import net.schwarzbaer.java.tools.yamahacontrol.XML.TagList;
+
 public class YamahaControl {
+
+	@SuppressWarnings("unused")
+	private static void testByteBuffers() {
+		String command = "<YAMAHA_AV cmd=\"GET\"><System><Power_Control><Power>GetParam</Power></Power_Control></System></YAMAHA_AV>";
+		ByteBuffer bytes = StandardCharsets.UTF_8.encode(command);
+		System.out.println("capacity: "+bytes.capacity());
+		System.out.println("limit   : "+bytes.limit   ());
+		System.out.println("position: "+bytes.position());
+		
+		byte[] array = new byte[bytes.limit()];
+		bytes.get(array);		
+		System.out.println("array.length: "+array.length);
+		System.out.println("array: "+Arrays.toString(array));
+	}
 
 	public static void main(String[] args) {
 		try { UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName()); }
@@ -36,263 +60,219 @@ public class YamahaControl {
 		YamahaControl yamahaControl = new YamahaControl();
 		yamahaControl.createGUI();
 		
-//		testCommand("192.168.2.34","<YAMAHA_AV cmd=\"GET\"><System><Power_Control><Power>GetParam</Power></Power_Control></System></YAMAHA_AV>");
-//		testCommand("192.168.2.34","<YAMAHA_AV cmd=\"PUT\"><System><Power_Control><Power>On</Power></Power_Control></System></YAMAHA_AV>");
-		testCommand("192.168.2.34","<YAMAHA_AV cmd=\"PUT\"><System><Power_Control><Power>Standby</Power></Power_Control></System></YAMAHA_AV>");
-//		testCommand("192.168.2.34","<YAMAHA_AV cmd=\"GET\"><Main_Zone><Basic_Status><Power_Control><Power>GetParam</Power></Power_Control></Basic_Status></Main_Zone></YAMAHA_AV>");
-//		testCommand("192.168.2.34","<YAMAHA_AV cmd=\"GET\"><Main_Zone><Basic_Status><Power_Control><Power>On</Power></Power_Control></Basic_Status></Main_Zone></YAMAHA_AV>");
-//		testCommand("192.168.2.34","<YAMAHA_AV cmd=\"GET\"><Main_Zone><Basic_Status><Power_Control><Power>On</Power></Power_Control></Basic_Status></Main_Zone></YAMAHA_AV>");
+//		Ctrl.testCommand("192.168.2.34","<YAMAHA_AV cmd=\"GET\"><System><Power_Control><Power>GetParam</Power></Power_Control></System></YAMAHA_AV>");
+//		Ctrl.testCommand("192.168.2.34","<YAMAHA_AV cmd=\"PUT\"><System><Power_Control><Power>On</Power></Power_Control></System></YAMAHA_AV>");
+//		Ctrl.testCommand("192.168.2.34","<YAMAHA_AV cmd=\"PUT\"><System><Power_Control><Power>Standby</Power></Power_Control></System></YAMAHA_AV>");
+//		Ctrl.testCommand("192.168.2.34","<YAMAHA_AV cmd=\"GET\"><Main_Zone><Basic_Status><Power_Control><Power>GetParam</Power></Power_Control></Basic_Status></Main_Zone></YAMAHA_AV>");
+//		Ctrl.testCommand("192.168.2.34","<YAMAHA_AV cmd=\"GET\"><Main_Zone><Basic_Status><Power_Control><Power>On</Power></Power_Control></Basic_Status></Main_Zone></YAMAHA_AV>");
+//		Ctrl.testCommand("192.168.2.34","<YAMAHA_AV cmd=\"GET\"><Main_Zone><Basic_Status><Power_Control><Power>On</Power></Power_Control></Basic_Status></Main_Zone></YAMAHA_AV>");
 		
-//		testCommand("192.168.2.34","<YAMAHA_AV cmd=\"GET\"><Main_Zone><Input><Input_Sel>GetParam</Input_Sel></Input></Main_Zone></YAMAHA_AV>");
-//		testCommand("192.168.2.34","<YAMAHA_AV cmd=\"GET\"><Main_Zone><Input><Input_Sel_Item>GetParam</Input_Sel_Item></Input></Main_Zone></YAMAHA_AV>");
-//		testCommand("192.168.2.34","<YAMAHA_AV cmd=\"GET\"><Main_Zone><Scene><Scene_Sel>GetParam</Scene_Sel></Scene></Main_Zone></YAMAHA_AV>");
-//		testCommand("192.168.2.34","<YAMAHA_AV cmd=\"GET\"><Main_Zone><Scene><Scene_Sel_Item>GetParam</Scene_Sel_Item></Scene></Main_Zone></YAMAHA_AV>");
+//		Ctrl.testCommand("192.168.2.34","<YAMAHA_AV cmd=\"GET\"><Main_Zone><Input><Input_Sel>GetParam</Input_Sel></Input></Main_Zone></YAMAHA_AV>");
+//		Ctrl.testCommand("192.168.2.34","<YAMAHA_AV cmd=\"GET\"><Main_Zone><Input><Input_Sel_Item>GetParam</Input_Sel_Item></Input></Main_Zone></YAMAHA_AV>");
+//		Ctrl.testCommand("192.168.2.34","<YAMAHA_AV cmd=\"GET\"><Main_Zone><Scene><Scene_Sel>GetParam</Scene_Sel></Scene></Main_Zone></YAMAHA_AV>");
+//		Ctrl.testCommand("192.168.2.34","<YAMAHA_AV cmd=\"GET\"><Main_Zone><Scene><Scene_Sel_Item>GetParam</Scene_Sel_Item></Scene></Main_Zone></YAMAHA_AV>");
 		
-//		testCommand("192.168.2.34","<YAMAHA_AV cmd=\"GET\"><Main_Zone><Basic_Status><Power_Control><Power></Power></Power_Control></Basic_Status></Main_Zone></YAMAHA_AV>");
-//		testCommand("192.168.2.34","<YAMAHA_AV cmd=\"PUT\"><Main_Zone><Power_Control><Power>On</Power></Power_Control></Main_Zone></YAMAHA_AV>");
-//		testCommand("192.168.2.34","<YAMAHA_AV cmd=\"PUT\"><Main_Zone><Power_Control><Power>Standby</Power></Power_Control></Main_Zone></YAMAHA_AV>");
-//		testCommand("192.168.2.34","<YAMAHA_AV cmd=\"GET\"><Main_Zone><Power_Control><Power>GetParam</Power></Power_Control></Main_Zone></YAMAHA_AV>");
+//		Ctrl.testCommand("192.168.2.34","<YAMAHA_AV cmd=\"GET\"><Main_Zone><Basic_Status><Power_Control><Power></Power></Power_Control></Basic_Status></Main_Zone></YAMAHA_AV>");
+//		Ctrl.testCommand("192.168.2.34","<YAMAHA_AV cmd=\"PUT\"><Main_Zone><Power_Control><Power>On</Power></Power_Control></Main_Zone></YAMAHA_AV>");
+//		Ctrl.testCommand("192.168.2.34","<YAMAHA_AV cmd=\"PUT\"><Main_Zone><Power_Control><Power>Standby</Power></Power_Control></Main_Zone></YAMAHA_AV>");
+//		Ctrl.testCommand("192.168.2.34","<YAMAHA_AV cmd=\"GET\"><Main_Zone><Power_Control><Power>GetParam</Power></Power_Control></Main_Zone></YAMAHA_AV>");
 		
-//		testCommand("192.168.2.34","<YAMAHA_AV cmd=\"GET\"><Main_Zone><Basic_Status>GetParam</Basic_Status></Main_Zone></YAMAHA_AV>");
-//		testCommand("192.168.2.34","<YAMAHA_AV cmd=\"GET\"><Main_Zone><Config>GetParam</Config></Main_Zone></YAMAHA_AV>");
+//		Ctrl.testCommand("192.168.2.34","<YAMAHA_AV cmd=\"GET\"><Main_Zone><Basic_Status>GetParam</Basic_Status></Main_Zone></YAMAHA_AV>");
+//		Ctrl.testCommand("192.168.2.34","<YAMAHA_AV cmd=\"GET\"><Main_Zone><Config>GetParam</Config></Main_Zone></YAMAHA_AV>");
 		
-//		testCommand("192.168.2.34","<YAMAHA_AV cmd=\"GET\"><NET_RADIO><List_Info>GetParam</List_Info></NET_RADIO></YAMAHA_AV>");
-//		testCommand("192.168.2.34","<YAMAHA_AV cmd=\"GET\"><NET_RADIO><Play_Info>GetParam</Play_Info></NET_RADIO></YAMAHA_AV>");
-//		testCommand("192.168.2.34","<YAMAHA_AV cmd=\"GET\"><NET_RADIO><Config>GetParam</Config></NET_RADIO></YAMAHA_AV>");
-	}
-	
-	public static void testCommand(String ip, String command) {
-		testCommand(ip, command, false);
+//		Ctrl.testCommand("192.168.2.34","<YAMAHA_AV cmd=\"GET\"><NET_RADIO><List_Info>GetParam</List_Info></NET_RADIO></YAMAHA_AV>");
+//		Ctrl.testCommand("192.168.2.34","<YAMAHA_AV cmd=\"GET\"><NET_RADIO><Play_Info>GetParam</Play_Info></NET_RADIO></YAMAHA_AV>");
+//		Ctrl.testCommand("192.168.2.34","<YAMAHA_AV cmd=\"GET\"><NET_RADIO><Config>GetParam</Config></NET_RADIO></YAMAHA_AV>");
 	}
 
-	public static void testCommand(String ip, String command, boolean verbose) {
-		String response = sendCommand(ip, command, verbose);
-		System.out.println("Command : "+command);
-		System.out.println("Response: "+response);
-		if (response!=null) XML.showXMLformated(response);
-		System.out.println();
-	}
-
-	public static String sendCommand(String ip, String command) {
-		return sendCommand(ip, command, false);
-	}
+	private enum SmallImages { IconOn, IconOff }
+	private EnumMap<SmallImages,Icon> smallImages;
+	private StandardMainWindow mainWindow;
+	private Device device;
+	private MainGui mainGui;
+	private Vector<GuiRegion> guiRegion;
 	
-	public static String sendCommand(String ip, String command, boolean verbose) {
-		ByteBuffer byteBuf = StandardCharsets.UTF_8.encode(command);
-		byte[] bytes = new byte[byteBuf.limit()];
-		byteBuf.get(bytes);
-		
-		int port = 80; // 50100 bei BD-Playern
-		String urlStr = "http://"+ip+":"+port+"/YamahaRemoteControl/ctrl";
-		
-		return sendHTTPRequest(
-				urlStr,
-				connection -> {
-					try { connection.setRequestMethod("POST"); }
-					catch (ProtocolException e) { e.printStackTrace(); return false; }
-					connection.setRequestProperty("Content-Type", "text/xml; charset=UTF-8");
-					connection.setRequestProperty("Content-Length", ""+bytes.length);
-					connection.setDoOutput(true);
-					connection.setDoInput(true);
-					return true;
-				},
-				connection -> {
-					try { connection.getOutputStream().write(bytes); return true; }
-					catch (IOException e) { e.printStackTrace(); return false; }
-				},
-				verbose);
-	}
-	
-	public static String getContentFromURL(String urlStr, boolean verbose) {
-		return sendHTTPRequest(
-				urlStr,
-				connection->{ connection.setDoInput(true); return true; },
-				null,
-				verbose);
-	}
-
-	private static interface ConfigureConn {
-		public boolean configure(HttpURLConnection connection);
-	}
-	
-	private static interface WriteRequestContent {
-		public boolean writeTo(HttpURLConnection connection);
-	}
-
-	private static String sendHTTPRequest(String urlStr, ConfigureConn configureConn, WriteRequestContent writeRequestContent, boolean verbose) {
-		
-		if (verbose) System.out.println("URL: "+urlStr);
-		URL url;
-		try { url = new URL(urlStr); }
-		catch (MalformedURLException e2) { e2.printStackTrace(); return null; }
-		
-		if (verbose) System.out.println("Open Connection ...");
-		HttpURLConnection connection;
-		try { connection = (HttpURLConnection)url.openConnection(); }
-		catch (IOException e) { e.printStackTrace(); return null; }
-		
-		if (configureConn!=null) {
-			boolean successful = configureConn.configure(connection);
-			if (!successful) return null;
-		}
-		
-		try { connection.connect(); }
-		catch (IOException e) { e.printStackTrace(); return null; }
-		
-		if (writeRequestContent!=null) {
-			boolean successful = writeRequestContent.writeTo(connection);
-			if (!successful) { if (verbose) showConnection(connection); connection.disconnect(); return null; }
-		}
-		
-		Object content;
-		try { content = connection.getContent(); }
-		catch (IOException e) { if (verbose) showConnection(connection); e.printStackTrace(); connection.disconnect(); return null; }
-		if (verbose) System.out.println("Content: "+content);
-		
-		String contentStr = null;
-		if (content instanceof InputStream) {
-			InputStream input = (InputStream)content;
-			byte[] responseBytes = new byte[connection.getContentLength()];
-			int n,pos=0;
-			try { while ( (n=input.read(responseBytes, pos, responseBytes.length-pos))>=0 ) pos += n; }
-			catch (IOException e) { e.printStackTrace(); if (verbose) System.out.println("abort reading response");}
-			
-			if (verbose) {
-				String bytesReadStr = pos!=responseBytes.length?(" "+pos+" of "+responseBytes.length+" bytes "):"";
-				if (pos<1000) {
-					System.out.println("Content (bytes read): "+bytesReadStr+""+Arrays.toString(responseBytes));
-				}
-			}
-			
-			contentStr = StandardCharsets.UTF_8.decode(ByteBuffer.wrap(responseBytes, 0, pos)).toString();
-			
-			if (verbose) {
-				if (contentStr.length()>1000) {
-					System.out.println("Content (as String): "+contentStr.substring(0, 100)+" ...");
-					System.out.println("                     ... "+contentStr.substring(contentStr.length()-100,contentStr.length()));
-				} else
-					System.out.println("Content (as String): "+contentStr);
-			}
-		}
-		
-		if (verbose && contentStr==null) showConnection(connection); 
-		
-		connection.disconnect();
-		
-		return contentStr;
-	}
-
-	private static void showConnection(HttpURLConnection connection) {
-		Map<String, List<String>> headerFields = connection.getHeaderFields();
-		for (Entry<String, List<String>> entry:headerFields.entrySet()) {
-			String key = entry.getKey();
-			StringBuilder values = new StringBuilder();
-			entry.getValue().stream().forEach(str->values.append(" \"").append(str).append("\""));
-			System.out.printf("Header[%-20s]: %s%n", key, values.toString());
-		}
-		try { System.out.println("ResponseCode   : "+connection.getResponseCode   ()); } catch (IOException e) {}
-		try { System.out.println("ResponseMessage: "+connection.getResponseMessage()); } catch (IOException e) {}
-		System.out.println("ContentLength  : "+connection.getContentLength  ());
-		System.out.println("ContentType    : "+connection.getContentType    ());
-		System.out.println("ContentEncoding: "+connection.getContentEncoding());
-	}
-	
-	public static String buildSimplePutCommand(String tagList, String value) {
-		// <YAMAHA_AV cmd="PUT"><System><Power_Control><Power>On</Power></Power_Control></System></YAMAHA_AV>
-		return buildSimpleCommand("PUT", tagList, value);
-	}
-	
-	public static String buildSimpleGetCommand(String tagList) {
-		// <YAMAHA_AV cmd="GET"><System><Power_Control><Power>GetParam</Power></Power_Control></System></YAMAHA_AV>
-		return buildSimpleCommand("GET", tagList, "GetParam");
-	}
-	
-	public static String buildSimpleCommand(String cmd, String tagList, String value) {
-		String xmlStr = value;
-		String[] parts = tagList.split(",");
-		for (int i=parts.length-1; i>=0; --i)
-			xmlStr = "<"+parts[i]+">"+xmlStr+"</"+parts[i]+">";
-		
-		return "<YAMAHA_AV cmd=\""+cmd+"\">"+xmlStr+"</YAMAHA_AV>";
-	}
-
 	YamahaControl() {
+		smallImages = new EnumMap<>(SmallImages.class);
+		mainWindow = null;
+		device = null;
+		mainGui = null;
+		guiRegion = new Vector<>();
 	}
-
+	
 	private void createGUI() {
-		// TODO Auto-generated method stub
+		createSmallImages();
 		
+		mainGui = new MainGui();
+		guiRegion.add(mainGui);
+		
+		mainGui.createOnOffBtn();
+		
+		JPanel devicePanel = new JPanel(new GridLayout(1,0,3,3));
+		devicePanel.setBorder(BorderFactory.createTitledBorder("Device"));
+		devicePanel.add(createButton("Connect",e->connectToReciever(),true));
+		devicePanel.add(mainGui.onoffBtn);
+		
+		mainGui.createScenePanel();
+		JScrollPane scenePanel = new JScrollPane(mainGui.scenePanel);
+		scenePanel.setBorder(BorderFactory.createTitledBorder("Scene/Input"));
+		
+		mainGui.createVolumeControl(200);
+		mainGui.volumeControl.setBorder(BorderFactory.createTitledBorder("Volume"));
+		
+		JPanel mainControlPanel = new JPanel(new BorderLayout(3,3));
+		mainControlPanel.add(devicePanel,BorderLayout.NORTH);
+		mainControlPanel.add(scenePanel,BorderLayout.CENTER);
+		mainControlPanel.add(mainGui.volumeControl,BorderLayout.SOUTH);
+		
+		JTabbedPane subUnitPanel = new JTabbedPane();
+		
+		JPanel contentPane = new JPanel(new BorderLayout(3,3));
+		contentPane.setBorder(BorderFactory.createEmptyBorder(3,3,3,3));
+		contentPane.add(mainControlPanel,BorderLayout.WEST);
+		contentPane.add(subUnitPanel,BorderLayout.CENTER);
+		
+		// TODO YamahaControl.createGUI
+		
+		mainWindow = new StandardMainWindow("YamahaControl");
+		mainWindow.startGUI(contentPane);
+		
+		guiRegion.forEach(gr->gr.setEnabled(false));
 	}
+	
+	private static class ImageToolbox {
 
-	@SuppressWarnings("unused")
-	private static void test() throws MalformedURLException {
-		
-		String command = "<YAMAHA_AV cmd=\"GET\"><System><Power_Control><Power>GetParam</Power></Power_Control></System></YAMAHA_AV>";
-		ByteBuffer byteBuf = StandardCharsets.UTF_8.encode(command);
-		byte[] bytes = new byte[byteBuf.limit()];
-		byteBuf.get(bytes);		
-		
-		String ip = "rx-v475";
-		int port = 80; // 50100 bei BD-Playern
-		URL url = new URL("http://"+ip+":"+port+"/YamahaRemoteControl/ctrl");
-		
-		System.out.println("Open Connection ...");
-		HttpURLConnection connection;
-		try { connection = (HttpURLConnection)url.openConnection(); }
-		catch (IOException e) { e.printStackTrace(); return; }
-		
-		try { connection.setRequestMethod("POST"); }
-		catch (ProtocolException e) { e.printStackTrace(); return; }
-		
-		connection.setRequestProperty("Content-Type", "text/xml; charset=UTF-8");
-		connection.setRequestProperty("Content-Length", ""+bytes.length);
-		connection.setDoOutput(true);
-		connection.setDoInput(true);
-		
-		try { connection.connect(); }
-		catch (IOException e) { e.printStackTrace(); return; }
-		
-		OutputStream outputStream;
-		try { outputStream = connection.getOutputStream(); }
-		catch (IOException e) { e.printStackTrace(); connection.disconnect(); return; }
-		
-		try { outputStream.write(bytes); }
-		catch (IOException e) { e.printStackTrace(); try { outputStream.close(); } catch (IOException e1) { e1.printStackTrace(); } connection.disconnect(); return; }
-		
-		System.out.println("ContentLength  : "+connection.getContentLength  ());
-		System.out.println("ContentType    : "+connection.getContentType    ());
-		System.out.println("ContentEncoding: "+connection.getContentEncoding());
-		
-		Object content;
-		try { content = connection.getContent(); }
-		catch (IOException e) { e.printStackTrace(); connection.disconnect(); return; }
-		System.out.println("Content: "+content); 
-		
-		if (content instanceof InputStream) {
-			InputStream input = (InputStream)content;
-			byte[] responseBytes = new byte[connection.getContentLength()];
-			int n,pos=0;
-			try { while ( (n=input.read(responseBytes, pos, responseBytes.length-pos))>=0 ) pos += n; }
-			catch (IOException e) { e.printStackTrace(); System.out.println("abort reading response");}
-			System.out.println("Content (bytes read): "+(pos!=responseBytes.length?(" "+pos+" of "+responseBytes.length+" bytes "):"")+""+Arrays.toString(responseBytes)); 
-			System.out.println("Content (as String): "+new String(responseBytes)); 
+		public static Icon createIcon_Circle(int imgWidth, int imgHeight, int diameter, Color border, Color fill) {
+			BufferedImage image = new BufferedImage(imgWidth, imgHeight, BufferedImage.TYPE_INT_ARGB);
+			Graphics2D g2 = image.createGraphics();
+			
+			g2.setPaint(fill);
+			g2.fillOval(imgWidth/2-diameter/2, imgHeight/2-diameter/2, diameter, diameter);
+			
+			g2.setPaint(border);
+			g2.drawOval(imgWidth/2-diameter/2, imgHeight/2-diameter/2, diameter, diameter);
+			
+			return new ImageIcon(image);
 		}
 		
-		connection.disconnect();
 	}
 
-	@SuppressWarnings("unused")
-	private static void testByteBuffers() {
-		String command = "<YAMAHA_AV cmd=\"GET\"><System><Power_Control><Power>GetParam</Power></Power_Control></System></YAMAHA_AV>";
-		ByteBuffer bytes = StandardCharsets.UTF_8.encode(command);
-		System.out.println("capacity: "+bytes.capacity());
-		System.out.println("limit   : "+bytes.limit   ());
-		System.out.println("position: "+bytes.position());
+	private void createSmallImages() {
+		for (SmallImages id:SmallImages.values()) {
+			switch (id) {
+			case IconOff: smallImages.put(id, ImageToolbox.createIcon_Circle(16,16,10,Color.BLACK,Color.GREEN.darker())); break;
+			case IconOn : smallImages.put(id, ImageToolbox.createIcon_Circle(16,16,10,Color.BLACK,Color.GREEN)); break;
+			}
+		}
+	}
+
+	private void connectToReciever() {
+		String addr = Config.selectAddress(mainWindow);
+		if (addr!=null) {
+			device = new Device(addr);
+			device.updateConfig();
+			guiRegion.forEach(gr->gr.updateGUI());
+		}
+	}
+
+	private JButton createButton(String title, ActionListener l, boolean enabled) {
+		JButton button = new JButton(title);
+		button.setEnabled(enabled);
+		if (l!=null) button.addActionListener(l);
+		return button;
+	}
+	
+	public static interface GuiRegion {
+		void setEnabled(boolean enabled);
+		void updateGUI();
+	}
+	
+	private class MainGui implements GuiRegion {
+
+		public JPanel scenePanel;
+		public JButton onoffBtn;
+		private VolumeControl volumeControl;
+
+		@Override
+		public void setEnabled(boolean enabled) {
+			onoffBtn.setEnabled(enabled);
+			volumeControl.setEnabled(enabled);
+		}
+
+		@Override
+		public void updateGUI() {
+			setEnabled(device!=null);
+			setOnOffButton(device==null?false:device.isOn);
+			//volumeControl.setValue(device==null?0:device.volume);
+			
+			// TODO Auto-generated method stub
+		}
+
+		public void createScenePanel() {
+			scenePanel = new JPanel();
+			// TODO Auto-generated method stub
+		}
+
+		public void createVolumeControl(int width) {
+			volumeControl = new VolumeControl(width);
+		}
+
+		public void createOnOffBtn() {
+			onoffBtn = createButton("", e->toggleOnOff(), false);
+			setOnOffButton(false);
+		}
+
+		private void setOnOffButton(boolean isOn) {
+			onoffBtn.setIcon(smallImages.get(isOn?SmallImages.IconOn:SmallImages.IconOff));
+			onoffBtn.setText(isOn?"On":"Off");
+		}
+
+		private void toggleOnOff() {
+			if (device!=null) device.setOn(!device.isOn());
+			setOnOffButton(device==null?false:device.isOn());
+		}
 		
-		byte[] array = new byte[bytes.limit()];
-		bytes.get(array);		
-		System.out.println("array.length: "+array.length);
-		System.out.println("array: "+Arrays.toString(array));
+	}
+	
+	private static class VolumeControl extends Canvas {
+		private static final long serialVersionUID = -5870265710270984615L;
+		
+		VolumeControl(int width) {
+			super(width, width);
+			
+		}
+		
+		@Override
+		protected void paintCanvas(Graphics g, int width, int height) {
+			// TODO Auto-generated method stub
+	
+		}
+	
+	}
+
+	private static final class Device {
+
+		private boolean isOn;
+		private String address;
+		
+		Device(String address) {
+			this.address = address;
+		}
+
+		public void updateConfig() {
+			String value = Ctrl.sendGetCommand(address,new TagList("System,Power_Control,Power"));
+			isOn = "On".equals(value);
+			// TODO Auto-generated method stub
+		}
+
+		public boolean isOn() { return isOn; }
+		public void setOn(boolean isOn) {
+			// System,Power_Control,Power = On
+			// System,Power_Control,Power = Standby
+			int rc = Ctrl.sendPutCommand(address,new TagList("System,Power_Control,Power"),isOn?"On":"Standby");
+			if (rc==Ctrl.RC_OK) this.isOn = isOn;
+		}
+	
 	}
 
 }

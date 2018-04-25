@@ -2,6 +2,7 @@ package net.schwarzbaer.java.tools.yamahacontrol;
 
 import java.io.IOException;
 import java.io.StringReader;
+import java.util.Vector;
 
 import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.ParserConfigurationException;
@@ -18,7 +19,30 @@ import org.xml.sax.InputSource;
 import org.xml.sax.SAXException;
 
 final class XML {
+	
+	public static class TagList {
+		private final String originalTagList;
+		public final String[] tagList;
 
+		TagList(String tagList) {
+			this.originalTagList = tagList;
+			this.tagList = tagList.split(",");
+		}
+
+		public String toXML(String value) {
+			String xmlStr = value;
+			for (int i=tagList.length-1; i>=0; --i)
+				xmlStr = "<"+tagList[i]+">"+xmlStr+"</"+tagList[i]+">";
+			return xmlStr;
+		}
+
+		@Override
+		public String toString() {
+			return originalTagList;
+		}
+		
+	}
+	
 	public static Document parse(String xmlStr) {
 		if (xmlStr==null) return null;
 		try {
@@ -58,6 +82,56 @@ final class XML {
 			if (childNodes.item(i)==node) { index = ""+i; break; }
 		
 		return getPath(parent)+".["+index+"]"+str;
+	}
+
+	public static Vector<Node> getChildNodesByNodeName(Node node, String nodeName) {
+		Vector<Node> nodes = new Vector<>();
+		getChildNodesByNodeName(node, nodeName, nodes);
+		return nodes;
+	}
+
+	public static void getChildNodesByNodeName(Node node, String nodeName, Vector<Node> nodes) {
+		NodeList childNodes = node.getChildNodes();
+		for (int i=0; i<childNodes.getLength(); ++i) {
+			Node child = childNodes.item(i);
+			if (nodeName.equalsIgnoreCase(child.getNodeName()))
+				nodes.add(child);
+		}
+	}
+
+	public static Vector<Node> getNodes(Document document, TagList tagList) {
+		Vector<Node> nodes=new Vector<>(), subNodes;
+		nodes.add(document);
+		for (String part:tagList.tagList) {
+			subNodes = new Vector<>();
+			for (Node node:nodes)
+				getChildNodesByNodeName(node, part, subNodes);
+			nodes = subNodes;
+		}
+		return nodes;
+	}
+
+	public static String getNodeAttribute(Document document, TagList tagList, String attrName) {
+		Vector<Node> nodes = getNodes(document, tagList);
+		if (nodes.isEmpty()) return null;
+		
+		NamedNodeMap attrs = nodes.get(0).getAttributes();
+		if (attrs==null) return null;
+		
+		Node attr = attrs.getNamedItem(attrName);
+		if (attr==null) return null;
+		
+		return attr.getNodeValue();
+	}
+	
+	public static String getContentOfSingleChildTextNode(Node node) {
+		NodeList childNodes = node.getChildNodes();
+		if (childNodes.getLength()!=1) return null;
+		
+		Node child = childNodes.item(0);
+		if (child.getNodeType()!=Node.TEXT_NODE || !(child instanceof Text)) return null;
+		
+		return child.getNodeValue();
 	}
 
 	public static String getShortName(short nodeType) {
