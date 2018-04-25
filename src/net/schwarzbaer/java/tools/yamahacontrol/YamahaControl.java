@@ -19,77 +19,6 @@ import javax.swing.UnsupportedLookAndFeelException;
 
 public class YamahaControl {
 
-	@SuppressWarnings("unused")
-	private static void testByteBuffers() {
-		String command = "<YAMAHA_AV cmd=\"GET\"><System><Power_Control><Power>GetParam</Power></Power_Control></System></YAMAHA_AV>";
-		ByteBuffer bytes = StandardCharsets.UTF_8.encode(command);
-		System.out.println("capacity: "+bytes.capacity());
-		System.out.println("limit   : "+bytes.limit   ());
-		System.out.println("position: "+bytes.position());
-		
-		byte[] array = new byte[bytes.limit()];
-		bytes.get(array);		
-		System.out.println("array.length: "+array.length);
-		System.out.println("array: "+Arrays.toString(array));
-	}
-
-	@SuppressWarnings("unused")
-	private static void test() throws MalformedURLException {
-		
-		String command = "<YAMAHA_AV cmd=\"GET\"><System><Power_Control><Power>GetParam</Power></Power_Control></System></YAMAHA_AV>";
-		ByteBuffer byteBuf = StandardCharsets.UTF_8.encode(command);
-		byte[] bytes = new byte[byteBuf.limit()];
-		byteBuf.get(bytes);		
-		
-		String ip = "rx-v475";
-		int port = 80; // 50100 bei BD-Playern
-		URL url = new URL("http://"+ip+":"+port+"/YamahaRemoteControl/ctrl");
-		
-		System.out.println("Open Connection ...");
-		HttpURLConnection connection;
-		try { connection = (HttpURLConnection)url.openConnection(); }
-		catch (IOException e) { e.printStackTrace(); return; }
-		
-		try { connection.setRequestMethod("POST"); }
-		catch (ProtocolException e) { e.printStackTrace(); return; }
-		
-		connection.setRequestProperty("Content-Type", "text/xml; charset=UTF-8");
-		connection.setRequestProperty("Content-Length", ""+bytes.length);
-		connection.setDoOutput(true);
-		connection.setDoInput(true);
-		
-		try { connection.connect(); }
-		catch (IOException e) { e.printStackTrace(); return; }
-		
-		OutputStream outputStream;
-		try { outputStream = connection.getOutputStream(); }
-		catch (IOException e) { e.printStackTrace(); connection.disconnect(); return; }
-		
-		try { outputStream.write(bytes); }
-		catch (IOException e) { e.printStackTrace(); try { outputStream.close(); } catch (IOException e1) { e1.printStackTrace(); } connection.disconnect(); return; }
-		
-		System.out.println("ContentLength  : "+connection.getContentLength  ());
-		System.out.println("ContentType    : "+connection.getContentType    ());
-		System.out.println("ContentEncoding: "+connection.getContentEncoding());
-		
-		Object content;
-		try { content = connection.getContent(); }
-		catch (IOException e) { e.printStackTrace(); connection.disconnect(); return; }
-		System.out.println("Content: "+content); 
-		
-		if (content instanceof InputStream) {
-			InputStream input = (InputStream)content;
-			byte[] responseBytes = new byte[connection.getContentLength()];
-			int n,pos=0;
-			try { while ( (n=input.read(responseBytes, pos, responseBytes.length-pos))>=0 ) pos += n; }
-			catch (IOException e) { e.printStackTrace(); System.out.println("abort reading response");}
-			System.out.println("Content (bytes read): "+(pos!=responseBytes.length?(" "+pos+" of "+responseBytes.length+" bytes "):"")+""+Arrays.toString(responseBytes)); 
-			System.out.println("Content (as String): "+new String(responseBytes)); 
-		}
-		
-		connection.disconnect();
-	}
-
 	public static void main(String[] args) {
 		try { UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName()); }
 		catch (ClassNotFoundException | InstantiationException | IllegalAccessException | UnsupportedLookAndFeelException e) {}
@@ -107,20 +36,22 @@ public class YamahaControl {
 		YamahaControl yamahaControl = new YamahaControl();
 		yamahaControl.createGUI();
 		
-		testCommand("192.168.2.34","<YAMAHA_AV cmd=\"GET\"><System><Power_Control><Power>GetParam</Power></Power_Control></System></YAMAHA_AV>");
-		//testCommand("192.168.2.34","<YAMAHA_AV cmd=\"GET\"><Main_Zone><Basic_Status><Power_Control><Power>GetParam</Power></Power_Control></Basic_Status></Main_Zone></YAMAHA_AV>");
-		//testCommand("192.168.2.34","<YAMAHA_AV cmd=\"GET\"><Main_Zone><Basic_Status><Power_Control><Power>On</Power></Power_Control></Basic_Status></Main_Zone></YAMAHA_AV>");
-		//testCommand("192.168.2.34","<YAMAHA_AV cmd=\"GET\"><Main_Zone><Basic_Status><Power_Control><Power>On</Power></Power_Control></Basic_Status></Main_Zone></YAMAHA_AV>");
+//		testCommand("192.168.2.34","<YAMAHA_AV cmd=\"GET\"><System><Power_Control><Power>GetParam</Power></Power_Control></System></YAMAHA_AV>");
+//		testCommand("192.168.2.34","<YAMAHA_AV cmd=\"PUT\"><System><Power_Control><Power>On</Power></Power_Control></System></YAMAHA_AV>");
+		testCommand("192.168.2.34","<YAMAHA_AV cmd=\"PUT\"><System><Power_Control><Power>Standby</Power></Power_Control></System></YAMAHA_AV>");
+//		testCommand("192.168.2.34","<YAMAHA_AV cmd=\"GET\"><Main_Zone><Basic_Status><Power_Control><Power>GetParam</Power></Power_Control></Basic_Status></Main_Zone></YAMAHA_AV>");
+//		testCommand("192.168.2.34","<YAMAHA_AV cmd=\"GET\"><Main_Zone><Basic_Status><Power_Control><Power>On</Power></Power_Control></Basic_Status></Main_Zone></YAMAHA_AV>");
+//		testCommand("192.168.2.34","<YAMAHA_AV cmd=\"GET\"><Main_Zone><Basic_Status><Power_Control><Power>On</Power></Power_Control></Basic_Status></Main_Zone></YAMAHA_AV>");
 		
 //		testCommand("192.168.2.34","<YAMAHA_AV cmd=\"GET\"><Main_Zone><Input><Input_Sel>GetParam</Input_Sel></Input></Main_Zone></YAMAHA_AV>");
 //		testCommand("192.168.2.34","<YAMAHA_AV cmd=\"GET\"><Main_Zone><Input><Input_Sel_Item>GetParam</Input_Sel_Item></Input></Main_Zone></YAMAHA_AV>");
 //		testCommand("192.168.2.34","<YAMAHA_AV cmd=\"GET\"><Main_Zone><Scene><Scene_Sel>GetParam</Scene_Sel></Scene></Main_Zone></YAMAHA_AV>");
 //		testCommand("192.168.2.34","<YAMAHA_AV cmd=\"GET\"><Main_Zone><Scene><Scene_Sel_Item>GetParam</Scene_Sel_Item></Scene></Main_Zone></YAMAHA_AV>");
 		
-		//testCommand("192.168.2.34","<YAMAHA_AV cmd=\"GET\"><Main_Zone><Basic_Status><Power_Control><Power></Power></Power_Control></Basic_Status></Main_Zone></YAMAHA_AV>");
-		//testCommand("192.168.2.34","<YAMAHA_AV cmd=\"PUT\"><Main_Zone><Power_Control><Power>On</Power></Power_Control></Main_Zone></YAMAHA_AV>");
-		//testCommand("192.168.2.34","<YAMAHA_AV cmd=\"PUT\"><Main_Zone><Power_Control><Power>Standby</Power></Power_Control></Main_Zone></YAMAHA_AV>");
-		//testCommand("192.168.2.34","<YAMAHA_AV cmd=\"GET\"><Main_Zone><Power_Control><Power>GetParam</Power></Power_Control></Main_Zone></YAMAHA_AV>");
+//		testCommand("192.168.2.34","<YAMAHA_AV cmd=\"GET\"><Main_Zone><Basic_Status><Power_Control><Power></Power></Power_Control></Basic_Status></Main_Zone></YAMAHA_AV>");
+//		testCommand("192.168.2.34","<YAMAHA_AV cmd=\"PUT\"><Main_Zone><Power_Control><Power>On</Power></Power_Control></Main_Zone></YAMAHA_AV>");
+//		testCommand("192.168.2.34","<YAMAHA_AV cmd=\"PUT\"><Main_Zone><Power_Control><Power>Standby</Power></Power_Control></Main_Zone></YAMAHA_AV>");
+//		testCommand("192.168.2.34","<YAMAHA_AV cmd=\"GET\"><Main_Zone><Power_Control><Power>GetParam</Power></Power_Control></Main_Zone></YAMAHA_AV>");
 		
 //		testCommand("192.168.2.34","<YAMAHA_AV cmd=\"GET\"><Main_Zone><Basic_Status>GetParam</Basic_Status></Main_Zone></YAMAHA_AV>");
 //		testCommand("192.168.2.34","<YAMAHA_AV cmd=\"GET\"><Main_Zone><Config>GetParam</Config></Main_Zone></YAMAHA_AV>");
@@ -265,6 +196,25 @@ public class YamahaControl {
 		System.out.println("ContentType    : "+connection.getContentType    ());
 		System.out.println("ContentEncoding: "+connection.getContentEncoding());
 	}
+	
+	public static String buildSimplePutCommand(String tagList, String value) {
+		// <YAMAHA_AV cmd="PUT"><System><Power_Control><Power>On</Power></Power_Control></System></YAMAHA_AV>
+		return buildSimpleCommand("PUT", tagList, value);
+	}
+	
+	public static String buildSimpleGetCommand(String tagList) {
+		// <YAMAHA_AV cmd="GET"><System><Power_Control><Power>GetParam</Power></Power_Control></System></YAMAHA_AV>
+		return buildSimpleCommand("GET", tagList, "GetParam");
+	}
+	
+	public static String buildSimpleCommand(String cmd, String tagList, String value) {
+		String xmlStr = value;
+		String[] parts = tagList.split(",");
+		for (int i=parts.length-1; i>=0; --i)
+			xmlStr = "<"+parts[i]+">"+xmlStr+"</"+parts[i]+">";
+		
+		return "<YAMAHA_AV cmd=\""+cmd+"\">"+xmlStr+"</YAMAHA_AV>";
+	}
 
 	YamahaControl() {
 	}
@@ -272,6 +222,77 @@ public class YamahaControl {
 	private void createGUI() {
 		// TODO Auto-generated method stub
 		
+	}
+
+	@SuppressWarnings("unused")
+	private static void test() throws MalformedURLException {
+		
+		String command = "<YAMAHA_AV cmd=\"GET\"><System><Power_Control><Power>GetParam</Power></Power_Control></System></YAMAHA_AV>";
+		ByteBuffer byteBuf = StandardCharsets.UTF_8.encode(command);
+		byte[] bytes = new byte[byteBuf.limit()];
+		byteBuf.get(bytes);		
+		
+		String ip = "rx-v475";
+		int port = 80; // 50100 bei BD-Playern
+		URL url = new URL("http://"+ip+":"+port+"/YamahaRemoteControl/ctrl");
+		
+		System.out.println("Open Connection ...");
+		HttpURLConnection connection;
+		try { connection = (HttpURLConnection)url.openConnection(); }
+		catch (IOException e) { e.printStackTrace(); return; }
+		
+		try { connection.setRequestMethod("POST"); }
+		catch (ProtocolException e) { e.printStackTrace(); return; }
+		
+		connection.setRequestProperty("Content-Type", "text/xml; charset=UTF-8");
+		connection.setRequestProperty("Content-Length", ""+bytes.length);
+		connection.setDoOutput(true);
+		connection.setDoInput(true);
+		
+		try { connection.connect(); }
+		catch (IOException e) { e.printStackTrace(); return; }
+		
+		OutputStream outputStream;
+		try { outputStream = connection.getOutputStream(); }
+		catch (IOException e) { e.printStackTrace(); connection.disconnect(); return; }
+		
+		try { outputStream.write(bytes); }
+		catch (IOException e) { e.printStackTrace(); try { outputStream.close(); } catch (IOException e1) { e1.printStackTrace(); } connection.disconnect(); return; }
+		
+		System.out.println("ContentLength  : "+connection.getContentLength  ());
+		System.out.println("ContentType    : "+connection.getContentType    ());
+		System.out.println("ContentEncoding: "+connection.getContentEncoding());
+		
+		Object content;
+		try { content = connection.getContent(); }
+		catch (IOException e) { e.printStackTrace(); connection.disconnect(); return; }
+		System.out.println("Content: "+content); 
+		
+		if (content instanceof InputStream) {
+			InputStream input = (InputStream)content;
+			byte[] responseBytes = new byte[connection.getContentLength()];
+			int n,pos=0;
+			try { while ( (n=input.read(responseBytes, pos, responseBytes.length-pos))>=0 ) pos += n; }
+			catch (IOException e) { e.printStackTrace(); System.out.println("abort reading response");}
+			System.out.println("Content (bytes read): "+(pos!=responseBytes.length?(" "+pos+" of "+responseBytes.length+" bytes "):"")+""+Arrays.toString(responseBytes)); 
+			System.out.println("Content (as String): "+new String(responseBytes)); 
+		}
+		
+		connection.disconnect();
+	}
+
+	@SuppressWarnings("unused")
+	private static void testByteBuffers() {
+		String command = "<YAMAHA_AV cmd=\"GET\"><System><Power_Control><Power>GetParam</Power></Power_Control></System></YAMAHA_AV>";
+		ByteBuffer bytes = StandardCharsets.UTF_8.encode(command);
+		System.out.println("capacity: "+bytes.capacity());
+		System.out.println("limit   : "+bytes.limit   ());
+		System.out.println("position: "+bytes.position());
+		
+		byte[] array = new byte[bytes.limit()];
+		bytes.get(array);		
+		System.out.println("array.length: "+array.length);
+		System.out.println("array: "+Arrays.toString(array));
 	}
 
 }
