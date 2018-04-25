@@ -869,6 +869,7 @@ public class CommandList {
 			
 			protected void parseChildNodes() {
 				children = new Vector<>();
+				boolean cmdFound=false, param1Found=false, param2Found=false, param3Found=false;
 				NodeList childNodes = node.getChildNodes();
 				for (int i=0; i<childNodes.getLength(); ++i) {
 					Node child = childNodes.item(i);
@@ -884,21 +885,25 @@ public class CommandList {
 					case "Cmd":
 						if (cmd!=null) { reportError("Found additional \"Cmd\" node in command."); /*children.add(new GenericXMLNode(this, child));*/ }
 						else cmd = parseCmdNode(childElement);
+						cmdFound = true;
 						break;
 						
 					case "Param_1":
 						if (param1!=null) { reportError("Found additional \"Param_1\" node in command."); /*children.add(new GenericXMLNode(this, child));*/ }
 						else param1 = parseParamNode(childElement);
+						param1Found = true;
 						break;
 						
 					case "Param_2":
 						if (param2!=null) { reportError("Found additional \"Param_2\" node in command."); /*children.add(new GenericXMLNode(this, child));*/ }
 						else param2 = parseParamNode(childElement);
+						param2Found = true;
 						break;
 						
 					case "Param_3":
 						if (param3!=null) { reportError("Found additional \"Param_3\" node in command."); /*children.add(new GenericXMLNode(this, child));*/ }
 						else param3 = parseParamNode(childElement);
+						param3Found = true;
 						break;
 						
 					default:
@@ -912,11 +917,32 @@ public class CommandList {
 					children.add(new GenericXMLNode(this, child));
 				}
 				
-				if (cmd   ==null) reportError("Can't find any \"Cmd\" node in command.");
-				if (param1==null) reportError("Can't find any \"Param_1\" node in command.");
-				if (param2==null && param3!=null) reportError("Found \"Param_3\" node but no \"Param_2\" node in command.");
+				if (!cmdFound) reportError("Can't find any \"Cmd\" node in command.");
+				if (!param1Found) reportError("Can't find any \"Param_1\" node in command.");
+				if (!param2Found && param3Found) reportError("Found \"Param_3\" node but no \"Param_2\" node in command.");
 				
-				
+				if (cmd!=null) {
+					switch (cmd.params.length) {
+					case 0: reportError("No values in Cmd node."); break;
+					case 1: if (!param1Found ||  param2Found ||  param3Found) reportError("Different number of values in Cmd node and number of Param nodes."); break;
+					case 2: if (!param1Found || !param2Found ||  param3Found) reportError("Different number of values in Cmd node and number of Param nodes."); break;
+					case 3: if (!param1Found || !param2Found || !param3Found) reportError("Different number of values in Cmd node and number of Param nodes."); break;
+					default: reportError("To many values (%d) in Cmd node.", cmd.params.length); break;
+					}
+					// "Sound_Video,Tone,Bass,Val=Param_1:Sound_Video,Tone,Bass,Exp=Param_2:Sound_Video,Tone,Bass,Unit=Param_3"
+					for (int i=0; i<cmd.params.length; ++i)
+						cmd.params[i].param = getParam(cmd.params[i].paramID);
+				}
+			}
+
+			private Param getParam(String paramID) {
+				switch (paramID) {
+				case "Param_1": return param1;
+				case "Param_2": return param2;
+				case "Param_3": return param3;
+				default: reportError("Found unexpected param name (\"%s\") in \"Cmd\" node.", paramID); break;
+				}
+				return null;
 			}
 			
 			private Cmd parseCmdNode(Element cmdNode) {
@@ -936,11 +962,14 @@ public class CommandList {
 				
 				if (cmdList!=null && cmd.cmdID!=null) {
 					cmd.baseTagList = cmdList.get(cmd.cmdID);
-					if (cmd.baseTagList==null) reportError("Found \"Cmd\" child of \"Put_2\" node with ID \"%s\", that isn't associated with a command.", cmd.cmdID);
-				}
+					if (cmd.baseTagList==null) {
+						reportError("Found \"Cmd\" child of \"Put_2\" node with ID \"%s\", that isn't associated with a command.", cmd.cmdID);
+						return null;
+					}
+				} else return null;
 				
 				String cmdValueStr = getContentOfSingleChildTextNode(cmdNode);
-				if (cmdValueStr==null) return cmd;
+				if (cmdValueStr==null) return null;
 				
 				String[] cmdValueParts = cmdValueStr.split(":");
 				cmd.params = new CmdParam[cmdValueParts.length];
@@ -967,11 +996,13 @@ public class CommandList {
 				}
 			}
 			protected static class CmdParam {
-				@SuppressWarnings("unused") public String valueTagList;
-				@SuppressWarnings("unused") public String param;
-				public CmdParam(String valueTagList, String param) {
+				public String valueTagList;
+				public String paramID;
+				public Param param;
+				public CmdParam(String valueTagList, String paramID) {
 					this.valueTagList = valueTagList;
-					this.param = param;
+					this.paramID = paramID;
+					this.param = null;
 				}
 			}
 			
@@ -1006,19 +1037,37 @@ public class CommandList {
 				parseAttributes(childElement, (attrName, attrValue) -> false);
 				
 				String textRangeStr = getContentOfSingleChildTextNode(childElement);
-				if (textRangeStr==null) return value;
+				if (textRangeStr==null) return null;
 				
 				// "1,15,UTF-8"
 				String[] parts = textRangeStr.split(",");
-				if (parts.length!=3) reportError("Found unexpected number of parts in text value (\"%s\") of param node. (found:%d, expected:%d)", textRangeStr, parts.length, 3);
+				if (parts.length!=3) {
+					reportError("Found unexpected number of parts in text value (\"%s\") of param node. (found:%d, expected:%d)", textRangeStr, parts.length, 3);
+					return null;
+				}
 				
 				try { value.minLength = Integer.parseInt(parts[0]); }
-				catch (NumberFormatException e) { reportError("Can't parse 1st part (minLength) in text value (\"%s\") of param node. (part:\"%s\")", textRangeStr, parts[0]); }
+				catch (NumberFormatException e) {
+					reportError("Can't parse 1st part (minLength) in text value (\"%s\") of param node. (part:\"%s\")", textRangeStr, parts[0]);
+					return null;
+				}
 				
 				try { value.maxLength = Integer.parseInt(parts[1]); }
-				catch (NumberFormatException e) { reportError("Can't parse 2nd part (maxLength) in text value (\"%s\") of param node. (part:\"%s\")", textRangeStr, parts[1]); }
+				catch (NumberFormatException e) {
+					reportError("Can't parse 2nd part (maxLength) in text value (\"%s\") of param node. (part:\"%s\")", textRangeStr, parts[1]);
+					return null;
+				}
 				
 				value.charset = parts[2];
+				
+				if (value.minLength>value.maxLength) {
+					reportError("Parsed wrong minLength (%d) and maxLength (%d) of text value (\"%s\") of param node.", value.minLength, value.maxLength, textRangeStr);
+					return null;
+				}
+				if (!value.charset.equalsIgnoreCase("UTF-8") && !value.charset.equalsIgnoreCase("Ascii") && !value.charset.equalsIgnoreCase("Latin-1")) {
+					reportError("Found unexpected charset (%s) in text value (\"%s\") of param node.", value.charset, textRangeStr);
+					return null; 
+				}
 				
 				return value;
 			}
@@ -1028,24 +1077,41 @@ public class CommandList {
 				parseAttributes(childElement, (attrName, attrValue) -> false);
 				
 				String numberRangeStr = getContentOfSingleChildTextNode(childElement);
-				if (numberRangeStr==null) return value;
+				if (numberRangeStr==null) return null;
 				
 				// "-805,165,5"
 				String[] parts = numberRangeStr.split(",");
-				if (parts.length!=3 && parts.length!=4)
+				if (parts.length!=3 && parts.length!=4) {
 					reportError("Found unexpected number of parts in range value (\"%s\") of param node. (found:%d, expected:%s)", numberRangeStr, parts.length, "3 or 4");
-				
+					return null;
+				}
 				try { value.minValue = Integer.parseInt(parts[0]); }
-				catch (NumberFormatException e) { reportError("Can't parse 1st part (minValue) in range value (\"%s\") of param node. (part:\"%s\")", numberRangeStr, parts[0]); }
-				
+				catch (NumberFormatException e) {
+					reportError("Can't parse 1st part (minValue) in range value (\"%s\") of param node. (part:\"%s\")", numberRangeStr, parts[0]);
+					return null;
+				}
 				try { value.maxValue = Integer.parseInt(parts[1]); }
-				catch (NumberFormatException e) { reportError("Can't parse 2nd part (maxValue) in range value (\"%s\") of param node. (part:\"%s\")", numberRangeStr, parts[1]); }
-				
+				catch (NumberFormatException e) {
+					reportError("Can't parse 2nd part (maxValue) in range value (\"%s\") of param node. (part:\"%s\")", numberRangeStr, parts[1]);
+					return null;
+				}
 				try { value.stepWidth = Integer.parseInt(parts[2]); }
-				catch (NumberFormatException e) { reportError("Can't parse 3rd part (stepWidth) in range value (\"%s\") of param node. (part:\"%s\")", numberRangeStr, parts[2]); }
+				catch (NumberFormatException e) {
+					reportError("Can't parse 3rd part (stepWidth) in range value (\"%s\") of param node. (part:\"%s\")", numberRangeStr, parts[2]);
+					return null;
+				}
 				
 				if (parts.length==4)
 					value.format = parts[3];
+				
+				if (value.minValue>value.maxValue) {
+					reportError("Parsed wrong minValue (%d) and maxValue (%d) of range value (\"%s\") of param node.", value.minValue, value.maxValue, numberRangeStr);
+					return null;
+				}
+				if (value.stepWidth<=0) {
+					reportError("Parsed wrong stepWidth (%d) of range value (\"%s\") of param node.", value.stepWidth, numberRangeStr);
+					return null;
+				}
 				
 				return value;
 			}
@@ -1070,7 +1136,7 @@ public class CommandList {
 				else {
 					value.isDummy = false;
 					value.value = getContentOfSingleChildTextNode(childElement);
-					//if (value.value==null) return value;
+					if (value.value==null) return null;
 				}
 				
 				return value;
@@ -1079,7 +1145,10 @@ public class CommandList {
 			private IndirectValue parseIndirectValue(Element childElement) {
 				IndirectValue value = new IndirectValue();
 				parseAttributes(childElement, (attrName, attrValue) -> { if ("ID".equals(attrName)) { value.cmdID = attrValue; return true; } return false; });
-				if (value.cmdID==null) reportError("Found \"Indirect\" value of param node with no ID.");
+				if (value.cmdID==null) {
+					reportError("Found \"Indirect\" value of param node with no ID.");
+					return null;
+				}
 				
 				HashMap<String, String> cmdList = MenuNode.getCmdListFromParent(parent);
 				if (cmdList==null) reportError("Can't find command list for command node.");
@@ -1087,8 +1156,11 @@ public class CommandList {
 				
 				if (cmdList!=null && value.cmdID!=null) {
 					value.tagList = cmdList.get(value.cmdID);
-					if (value.tagList==null) reportError("Found \"Indirect\" value of param node with ID \"%s\", that isn't associated with a command.", value.cmdID);
-				}
+					if (value.tagList==null) {
+						reportError("Found \"Indirect\" value of param node with ID \"%s\", that isn't associated with a command.", value.cmdID);
+						return null;
+					}
+				} else return null;
 				
 				return value;
 			}
@@ -1100,26 +1172,34 @@ public class CommandList {
 					this.func = null;
 					this.values = new Vector<>();
 				}
+				public String mergeValues(String openBracket, String spearator, String closeBracket) {
+					return openBracket+values.stream().map(v->v==null?"<null>":v.toString()).reduce(null,(a,b)->a!=null?(a+spearator+b):b)+closeBracket;
+				}
 			}
-			protected static class ParamValue {}
+			protected static abstract class ParamValue {
+				@Override public abstract String toString();
+			}
 			
 			protected static class TextValue extends ParamValue {
-				@SuppressWarnings("unused") public int minLength;
-				@SuppressWarnings("unused") public int maxLength;
-				@SuppressWarnings("unused") public String charset;
+				public int minLength;
+				public int maxLength;
+				public String charset;
 				
 				public TextValue() {
 					this.minLength = Integer.MAX_VALUE;
 					this.maxLength = Integer.MIN_VALUE;
 					this.charset = null;
 				}
+				@Override public String toString() {
+					return "Text: "+minLength+".."+maxLength+" ("+charset+")";
+				}
 			}
 			
 			protected static class RangeValue extends ParamValue {
-				@SuppressWarnings("unused") public int minValue;
-				@SuppressWarnings("unused") public int maxValue;
-				@SuppressWarnings("unused") public int stepWidth;
-				@SuppressWarnings("unused") public String format;
+				public int minValue;
+				public int maxValue;
+				public int stepWidth;
+				public String format;
 				
 				public RangeValue() {
 					this.minValue = Integer.MAX_VALUE;
@@ -1127,11 +1207,16 @@ public class CommandList {
 					this.stepWidth = -1;
 					this.format = null;
 				}
+				@Override public String toString() {
+					String range = minValue+".."+(stepWidth==1?"":("("+stepWidth+").."))+maxValue;
+					if (format == null) return "Number: "+range;
+					else                return "Label: "+format+" ("+range+")";
+				}
 			}
 			
 			protected static class DirectValue extends ParamValue {
-				@SuppressWarnings("unused") public String value;
-				@SuppressWarnings("unused") public boolean isDummy;
+				public String value;
+				public boolean isDummy;
 				
 				@SuppressWarnings("unused") public String func;
 				@SuppressWarnings("unused") public String funcEx;
@@ -1149,6 +1234,11 @@ public class CommandList {
 					this.value   = null;
 					this.isDummy = false;
 				}
+				@Override public String toString() {
+					if (isDummy) return "<no value>";
+					return "\""+value+"\"";
+					//return "Text: "+minLength+".."+maxLength+" letters (charset: "+charset+")";
+				}
 			}
 			
 			protected static class IndirectValue extends ParamValue {
@@ -1157,6 +1247,9 @@ public class CommandList {
 				IndirectValue() {
 					this.cmdID   = null;
 					this.tagList = null;
+				}
+				@Override public String toString() {
+					return "Values [GET:"+tagList+"]";
 				}
 			}
 		}
@@ -1180,21 +1273,70 @@ public class CommandList {
 
 		private static class GetCommandNode extends ComplexCommandNode {
 		
+			private String label;
 			public GetCommandNode(ParsedTreeNode_Exp parent, Element node) {
 				super(parent, node, ParsedTreeIcon.Command);
+				label = "Get";
 				// <Get>
 				parseAttributes((attrName, attrValue) -> false);
 				parseChildNodes();
 				
-				// TODO Auto-generated constructor stub
+				if (cmd==null) { label += ": No Cmd found"; return; }
+				if (cmd.baseTagList==null) { label += ": No base GET command found"; return; }
+				
+				children.add(new PlainGetCommandNode(this,"Base GET",cmd.baseTagList));
+				if (cmd.params==null || cmd.params.length==0) { label += ": No parameters found"; return; }
+				
+				for (int i=0; i<cmd.params.length; ++i) {
+					CmdParam cp = cmd.params[i];
+					String labelStr;
+					if (cmd.params.length==1) labelStr="Result"; else labelStr="Value "+i;
+					children.add(new TextNode(this, /*icon,*/ "%s:   %s %s", labelStr, cp.valueTagList==null?"":(cp.valueTagList+" ->"), cp.param.mergeValues(""," | ","")));
+				}
 			}
 		
-			@Override public String toString() { return "Get"; }
+			@Override public String toString() { return label; }
 			@Override protected void createChildren() {
 				throw new UnsupportedOperationException("Calling GetCommandNode.createChildren() is not allowed.");
 			}
 		}
 		
+		private static class PlainGetCommandNode extends CallableGetCommandNode {
+
+			private String label;
+			private String tagList;
+			PlainGetCommandNode(ParsedTreeNode_Exp parent, String label, String tagList) {
+				super(parent, null);
+				this.label = label;
+				this.tagList = tagList;
+				children = new Vector<>();
+			}
+			@Override public String buildXmlCommand() { return buildSimpleGetCommand(tagList); }
+			@Override public String toString() { return label+":    "+tagList; }
+			@Override protected void createChildren() {
+				throw new UnsupportedOperationException("Calling PlainGetCommandNode.createChildren() is not allowed.");
+			}
+		}
+		
+		@SuppressWarnings("unused")
+		private static class PlainPutCommandNode extends CallablePutCommandNode {
+
+			private String label;
+			private String tagList;
+			private String value;
+			PlainPutCommandNode(ParsedTreeNode_Exp parent, String label, String tagList, String value) {
+				super(parent, null);
+				this.label = label;
+				this.tagList = tagList;
+				this.value = value;
+				children = new Vector<>();
+			}
+			@Override public String buildXmlCommand() { return buildSimplePutCommand(tagList, value); }
+			@Override public String toString() { return label+":    "+tagList+" = "+value; }
+			@Override protected void createChildren() {
+				throw new UnsupportedOperationException("Calling PlainGetCommandNode.createChildren() is not allowed.");
+			}
+		}
 		
 	}
 }
