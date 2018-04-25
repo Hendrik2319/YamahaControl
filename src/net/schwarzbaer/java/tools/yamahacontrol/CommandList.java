@@ -382,13 +382,13 @@ public class CommandList {
 
 		private static ParsedTreeNode_Exp createTreeNode(ParsedTreeNode_Exp parent, Element node) {
 			switch (node.getTagName()) {
-			case "Unit_Description": return new UnitDescriptionNode(parent, node);
-			case "Language"        : return new LanguageNode       (parent, node);
-			case "Menu"            : return new MenuNode           (parent, node);
-			case "Cmd_List"        : return new BaseCommandListNode(parent, node);
-			case "Put_1"           : return new SimplePutCommandNode    (parent, node);
-			case "Put_2"           : return new PutCommandNode    (parent, node);
-			case "Get"             : return new GetCommandNode     (parent, node);
+			case "Unit_Description": return new UnitDescriptionNode (parent, node);
+			case "Language"        : return new LanguageNode        (parent, node);
+			case "Menu"            : return new MenuNode            (parent, node);
+			case "Cmd_List"        : return new BaseCommandListNode (parent, node);
+			case "Put_1"           : return new SimplePutCommandNode(parent, node);
+			case "Put_2"           : return PutCommandNode.create(parent, node);
+			case "Get"             : return GetCommandNode.create(parent, node);
 			}
 			unknownTagNames.put(node.getNodeName(), 1+unknownTagNames.getOrDefault(node.getNodeName(),0));
 			return new GenericXMLNode(parent,node);
@@ -439,6 +439,14 @@ public class CommandList {
 		@SuppressWarnings("rawtypes")
 		@Override public Enumeration children()                 { if (children==null) createChildren(); return children.elements(); }
 		///////////////////////////////////////////////
+
+		protected static void createGenericNodes(Node source, ParsedTreeNode_Exp target) {
+			NodeList childNodes = source.getChildNodes();
+			for (int i=0; i<childNodes.getLength(); ++i) {
+				Node child = childNodes.item(i);
+				target.children.add(new GenericXMLNode(target, child));
+			}
+		}
 		
 		private static class GenericXMLNode extends ParsedTreeNode_Exp {
 
@@ -910,14 +918,6 @@ public class CommandList {
 				}
 			}
 
-			protected void createGenericNodes() {
-				NodeList childNodes = node.getChildNodes();
-				for (int i=0; i<childNodes.getLength(); ++i) {
-					Node child = childNodes.item(i);
-					children.add(new GenericXMLNode(this, child));
-				}
-			}
-
 			private Param getParam(String paramID) {
 				switch (paramID) {
 				case "Param_1": return param1;
@@ -1232,20 +1232,33 @@ public class CommandList {
 					this.tagList = null;
 				}
 				@Override public String toString() {
-					return "Values [GET:"+tagList+"]";
+					return "Values [GET["+cmdID+"]:"+tagList+"]";
 				}
 			}
 		}
 
 		private static class PutCommandNode extends ComplexCommandNode {
 		
+			private ParsedTreeNode_Exp nodeReplacement;
+
 			public PutCommandNode(ParsedTreeNode_Exp parent, Element node) {
 				super(parent, node, ParsedTreeIcon.Command);
+				nodeReplacement = null;
 				label = "Put"; // <Put_2>
 				parseAttributes((attrName, attrValue) -> { error=true; return false; });
 				parseChildNodes();// error=true;
 				processParsedData();
-				/*if (error)*/ createGenericNodes();
+				if (error) {
+					createGenericNodes(node,this);
+					if (nodeReplacement!=null)
+						createGenericNodes(node,nodeReplacement);
+				}
+			}
+
+			public static ParsedTreeNode_Exp create(ParsedTreeNode_Exp parent, Element node) {
+				PutCommandNode newNode = new PutCommandNode(parent, node);
+				if (newNode.nodeReplacement!=null) return newNode.nodeReplacement;
+				return newNode;
 			}
 
 			private void processParsedData() {
@@ -1255,14 +1268,15 @@ public class CommandList {
 				
 				if (cmd.params.length==1) {
 					CmdParam cp = cmd.params[0];
-					children.add(new PlainCommandNode(this, "PUT["+cmd.cmdID+"]", cmd.baseTagList, "=", cp.param.mergeValues(""," | ","")));
+					String tagListStr = cp.valueTagList==null?"":(",  "+cp.valueTagList);
+					nodeReplacement = new PlainCommandNode(this, "PUT["+cmd.cmdID+"]", cmd.baseTagList+tagListStr, "=", cp.param.mergeValues(""," | ",""));
 				} else {
-					children.add(new PlainCommandNode(this,"Base PUT["+cmd.cmdID+"]",cmd.baseTagList));
+					PlainCommandNode commandNode = new PlainCommandNode(this,"PUT["+cmd.cmdID+"]",cmd.baseTagList);
+					nodeReplacement = commandNode;
 					for (int i=0; i<cmd.params.length; ++i) {
 						CmdParam cp = cmd.params[i];
-						String labelStr = cmd.params.length==1 ? "Value" : ("Value "+i);
 						String tagListStr = cp.valueTagList==null?"":(cp.valueTagList+" = ");
-						children.add(new TextNode(this, /*icon,*/ "%s:   %s%s", labelStr, tagListStr, cp.param.mergeValues(""," | ","")));
+						commandNode.add(new TextNode(this, /*icon,*/ "Value %d:   %s%s", i, tagListStr, cp.param.mergeValues(""," | ","")));
 					}
 				}
 			}
@@ -1270,15 +1284,27 @@ public class CommandList {
 
 		private static class GetCommandNode extends ComplexCommandNode {
 		
+			private ParsedTreeNode_Exp nodeReplacement;
+
 			public GetCommandNode(ParsedTreeNode_Exp parent, Element node) {
 				super(parent, node, ParsedTreeIcon.Command);
 				label = "Get"; // <Get>
 				parseAttributes((attrName, attrValue) -> { error=true; return false; });
 				parseChildNodes();
 				processParsedData();
-				/*if (error)*/ createGenericNodes();
+				if (error) {
+					createGenericNodes(node,this);
+					if (nodeReplacement!=null)
+						createGenericNodes(node,nodeReplacement);
+				}
 			}
 		
+			public static ParsedTreeNode_Exp create(ParsedTreeNode_Exp parent, Element node) {
+				GetCommandNode newNode = new GetCommandNode(parent, node);
+				if (newNode.nodeReplacement!=null) return newNode.nodeReplacement;
+				return newNode;
+			}
+
 			private void processParsedData() {
 				if (cmd==null) { label += ": No Cmd found"; error=true; return; }
 				if (cmd.baseTagList==null) { label += ": No base GET command found"; error=true; return; }
@@ -1286,14 +1312,15 @@ public class CommandList {
 				
 				if (cmd.params.length==1) {
 					CmdParam cp = cmd.params[0];
-					children.add(new PlainGetCommandNode(this, "GET["+cmd.cmdID+"]", cmd.baseTagList, cp.param.mergeValues(""," | ","")));
+					String tagListStr = cp.valueTagList==null?"":(cp.valueTagList+" -> ");
+					nodeReplacement = new PlainGetCommandNode(this, "GET["+cmd.cmdID+"]", cmd.baseTagList, tagListStr+cp.param.mergeValues(""," | ",""));
 				} else {
-					children.add(new PlainGetCommandNode(this,"Base GET["+cmd.cmdID+"]",cmd.baseTagList));
+					PlainCommandNode commandNode = new PlainGetCommandNode(this,"GET["+cmd.cmdID+"]",cmd.baseTagList);
+					nodeReplacement = commandNode;
 					for (int i=0; i<cmd.params.length; ++i) {
 						CmdParam cp = cmd.params[i];
-						String labelStr = cmd.params.length==1 ? "Result" : ("Value "+i);
 						String tagListStr = cp.valueTagList==null?"":(cp.valueTagList+" -> ");
-						children.add(new TextNode(this, /*icon,*/ "%s:   %s%s", labelStr, tagListStr, cp.param.mergeValues(""," | ","")));
+						commandNode.add(new TextNode(this, /*icon,*/ "Value %d:   %s%s", i, tagListStr, cp.param.mergeValues(""," | ","")));
 					}
 				}
 			}
@@ -1319,6 +1346,7 @@ public class CommandList {
 			public PlainCommandNode(ParsedTreeNode_Exp parent, String label, String tagList                           ) { this(parent, ParsedTreeIcon.Command, label, tagList); }
 			public PlainCommandNode(ParsedTreeNode_Exp parent, String label, String tagList, String conn, String value) { this(parent, ParsedTreeIcon.Command, label, tagList, conn, value); }
 			
+			public void add(ParsedTreeNode_Exp child) { children.add(child); }
 			@Override public String toString() { return label+":    "+tagList+(withValue?("   "+conn+"   "+value):""); }
 			@Override public Node getNode() { return null; }
 			@Override protected void createChildren() { throw new UnsupportedOperationException("Calling "+getClass().getSimpleName()+".createChildren() is not allowed."); }
