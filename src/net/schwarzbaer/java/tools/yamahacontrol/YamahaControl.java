@@ -176,8 +176,8 @@ public class YamahaControl {
 	private void createSmallImages() {
 		for (SmallImages id:SmallImages.values()) {
 			switch (id) {
-			case IconOff: smallImages.put(id, ImageToolbox.createIcon_Circle(16,16,10,Color.BLACK,Color.GREEN.darker())); break;
-			case IconOn : smallImages.put(id, ImageToolbox.createIcon_Circle(16,16,10,Color.BLACK,Color.GREEN)); break;
+			case IconOff: smallImages.put(id, ImageToolbox.createIcon_Circle(16,12,10,Color.BLACK,Color.GREEN.darker())); break;
+			case IconOn : smallImages.put(id, ImageToolbox.createIcon_Circle(16,12,10,Color.BLACK,Color.GREEN)); break;
 			}
 		}
 	}
