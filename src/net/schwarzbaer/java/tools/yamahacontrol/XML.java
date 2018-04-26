@@ -21,12 +21,12 @@ import org.xml.sax.SAXException;
 final class XML {
 	
 	public static class TagList {
-		private final String originalTagList;
+		private final String tagListStr;
 		public final String[] tagList;
 
-		TagList(String tagList) {
-			this.originalTagList = tagList;
-			this.tagList = tagList.split(",");
+		TagList(String tagListStr) {
+			this.tagListStr = tagListStr;
+			this.tagList = tagListStr.split(",");
 		}
 
 		public String toXML(String value) {
@@ -38,9 +38,16 @@ final class XML {
 
 		@Override
 		public String toString() {
-			return originalTagList;
+			return tagListStr;
 		}
-		
+
+		public TagList addBefore(String tagListStr) {
+			return new TagList(tagListStr+','+this.tagListStr);
+		}
+
+		public TagList addAfter(String tagListStr) {
+			return new TagList(this.tagListStr+','+tagListStr);
+		}
 	}
 	
 	public static Document parse(String xmlStr) {
@@ -59,14 +66,16 @@ final class XML {
 	public static void showXMLformated(String xmlStr) {
 		Document document = XML.parse(xmlStr);
 		if (document==null) return;
-		showXMLformated("",document);
+		StringBuilder sb = new StringBuilder();
+		showXMLformated(sb,"",document);
+		System.out.print(sb);
 	}
 
-	public static void showXMLformated(String indent, Node node) {
-		System.out.println(indent+XML.toString(node));
+	public static void showXMLformated(StringBuilder sb, String indent, Node node) {
+		sb.append(indent+XML.toString(node)+"\r\n");
 		NodeList childNodes = node.getChildNodes();
 		for (int i=0; i<childNodes.getLength(); ++i)
-			showXMLformated(indent+"|   ", childNodes.item(i));
+			showXMLformated(sb,indent+"|   ", childNodes.item(i));
 	}
 
 	public static String getPath(Node node) {

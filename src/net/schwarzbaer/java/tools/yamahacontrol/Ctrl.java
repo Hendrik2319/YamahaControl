@@ -52,16 +52,32 @@ final class Ctrl {
 		return lastRC;
 	}
 	
-	public static String sendGetCommand(String address, TagList tagList) {
+	public static String sendGetCommand_String(String address, TagList tagList) {
 		
 		String command = buildSimpleGetCommand(tagList);
 		Document document = sendCommand_controlled(address, command);
 		if (lastRC!=RC_OK) return null;
 		
-		Vector<Node> nodes = XML.getNodes(document, tagList);
+		Vector<Node> nodes = XML.getNodes(document, tagList.addBefore("YAMAHA_AV"));
 		if (nodes.isEmpty()) return null;
 		
 		return XML.getContentOfSingleChildTextNode(nodes.get(0));
+	}
+	
+	public static Node sendGetCommand_Node(String address, TagList tagList) {
+		
+		String command = buildSimpleGetCommand(tagList);
+		Document document = sendCommand_controlled(address, command);
+		if (lastRC!=RC_OK) return null;
+		if (document==null) return null;
+		
+//		StringBuilder sb = new StringBuilder();
+//		XML.showXMLformated(sb,"",document);
+		
+		Vector<Node> nodes = XML.getNodes(document, tagList.addBefore("YAMAHA_AV"));
+		if (nodes.isEmpty()) return null;
+		
+		return nodes.get(0);
 	}
 
 	static String buildSimplePutCommand(TagList tagList, String value) {

@@ -2,8 +2,12 @@ package net.schwarzbaer.java.tools.yamahacontrol;
 
 import java.awt.BorderLayout;
 import java.awt.Color;
+import java.awt.Component;
+import java.awt.Dimension;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
+import java.awt.GridBagConstraints;
+import java.awt.GridBagLayout;
 import java.awt.GridLayout;
 import java.awt.event.ActionListener;
 import java.awt.image.BufferedImage;
@@ -11,17 +15,26 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.Vector;
+import java.util.function.Consumer;
+import java.util.function.Predicate;
 
 import javax.swing.BorderFactory;
+import javax.swing.ButtonGroup;
 import javax.swing.Icon;
 import javax.swing.ImageIcon;
 import javax.swing.JButton;
+import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTabbedPane;
+import javax.swing.JToggleButton;
 import javax.swing.UIManager;
 import javax.swing.UnsupportedLookAndFeelException;
+
+import org.w3c.dom.Node;
+import org.w3c.dom.NodeList;
 
 import net.schwarzbaer.gui.Canvas;
 import net.schwarzbaer.gui.StandardMainWindow;
@@ -113,16 +126,16 @@ public class YamahaControl {
 		devicePanel.add(createButton("Connect",e->connectToReciever(),true));
 		devicePanel.add(mainGui.onoffBtn);
 		
-		mainGui.createScenePanel();
-		JScrollPane scenePanel = new JScrollPane(mainGui.scenePanel);
-		scenePanel.setBorder(BorderFactory.createTitledBorder("Scene/Input"));
+		JTabbedPane scenesInputsPanel = mainGui.createScenesInputsPanel();
+		scenesInputsPanel.setBorder(BorderFactory.createTitledBorder("Scenes/Inputs"));
+		scenesInputsPanel.setPreferredSize(new Dimension(250, 400));
 		
 		mainGui.createVolumeControl(200);
 		mainGui.volumeControl.setBorder(BorderFactory.createTitledBorder("Volume"));
 		
 		JPanel mainControlPanel = new JPanel(new BorderLayout(3,3));
 		mainControlPanel.add(devicePanel,BorderLayout.NORTH);
-		mainControlPanel.add(scenePanel,BorderLayout.CENTER);
+		mainControlPanel.add(scenesInputsPanel,BorderLayout.CENTER);
 		mainControlPanel.add(mainGui.volumeControl,BorderLayout.SOUTH);
 		
 		JTabbedPane subUnitPanel = new JTabbedPane();
@@ -171,7 +184,7 @@ public class YamahaControl {
 		if (addr!=null) {
 			device = new Device(addr);
 			device.updateConfig();
-			guiRegion.forEach(gr->gr.updateGUI());
+			guiRegion.forEach(gr->gr.initGUIafterConnect());
 		}
 	}
 
@@ -181,17 +194,33 @@ public class YamahaControl {
 		if (l!=null) button.addActionListener(l);
 		return button;
 	}
+
+	private JToggleButton createToggleButton(String title, ActionListener l, boolean enabled, ButtonGroup bg) {
+		JToggleButton button = new JToggleButton(title);
+		button.setEnabled(enabled);
+		if (l!=null) button.addActionListener(l);
+		bg.add(button);
+		return button;
+	}
 	
 	public static interface GuiRegion {
 		void setEnabled(boolean enabled);
-		void updateGUI();
+		void initGUIafterConnect();
 	}
 	
 	private class MainGui implements GuiRegion {
 
-		public JPanel scenePanel;
 		public JButton onoffBtn;
 		private VolumeControl volumeControl;
+		private DsiPanel scenesPanel;
+		private DsiPanel inputsPanel;
+		
+		MainGui() {
+			onoffBtn = null;
+			volumeControl = null;
+			scenesPanel = null;
+			inputsPanel = null;
+		}
 
 		@Override
 		public void setEnabled(boolean enabled) {
@@ -200,17 +229,48 @@ public class YamahaControl {
 		}
 
 		@Override
-		public void updateGUI() {
+		public void initGUIafterConnect() {
 			setEnabled(device!=null);
 			setOnOffButton(device==null?false:device.isOn);
 			//volumeControl.setValue(device==null?0:device.volume);
 			
-			// TODO Auto-generated method stub
+			if (device!=null) {
+				scenesPanel.createButtons(device.getScenes(),this::setScene,dsi->dsi!=null && "W".equals(dsi.rw));
+				inputsPanel.createButtons(device.getInputs(),this::setInput,null);
+				selectCurrentScene();
+				selectCurrentInput();
+			}
 		}
 
-		public void createScenePanel() {
-			scenePanel = new JPanel();
-			// TODO Auto-generated method stub
+		private void setScene(Device.DeviceSceneInput dsi) {
+			if (device==null) return;
+			device.setScene(dsi);
+			selectCurrentScene();
+		}
+
+		private void setInput(Device.DeviceSceneInput dsi) {
+			if (device==null) return;
+			device.setInput(dsi);
+			selectCurrentInput();
+		}
+
+		private void selectCurrentScene() {
+			if (scenesPanel!=null) scenesPanel.setSelected(device.getScene());
+		}
+
+		private void selectCurrentInput() {
+			if (inputsPanel!=null) inputsPanel.setSelected(device.getInput());
+		}
+
+		public JTabbedPane createScenesInputsPanel() {
+			scenesPanel = new DsiPanel();
+			inputsPanel = new DsiPanel();
+			
+			JTabbedPane scenesInputsPanel = new JTabbedPane();
+			scenesInputsPanel.add("Scenes", new JScrollPane(scenesPanel));
+			scenesInputsPanel.add("Inputs", new JScrollPane(inputsPanel));
+			
+			return scenesInputsPanel;
 		}
 
 		public void createVolumeControl(int width) {
@@ -232,6 +292,54 @@ public class YamahaControl {
 			setOnOffButton(device==null?false:device.isOn());
 		}
 		
+		private class DsiPanel extends JPanel {
+			private static final long serialVersionUID = -3330564101527546450L;
+			
+			private ButtonGroup bg;
+			private HashMap<Device.DeviceSceneInput,JToggleButton> buttons;
+
+			private GridBagLayout layout;
+			DsiPanel() {
+				super();
+				bg = null;
+				buttons = null;
+			}
+			
+			public void setSelected(Device.DeviceSceneInput dsi) {
+				JToggleButton button = buttons.get(dsi);
+				if (button!=null) bg.setSelected(button.getModel(), true);
+			}
+
+			public void createButtons(Device.DeviceSceneInput[] dsiArr, Consumer<Device.DeviceSceneInput> setFunction, Predicate<Device.DeviceSceneInput> filter) {
+				removeAll();
+				layout = new GridBagLayout();
+				setLayout(layout);
+				GridBagConstraints c = new GridBagConstraints();
+				c.weighty=0;
+				
+				bg = new ButtonGroup();
+				buttons = new HashMap<>();
+				for (Device.DeviceSceneInput dsi:dsiArr) {
+					if (filter!=null && !filter.test(dsi)) continue;
+					String title = dsi.title==null?"<???>":dsi.title.trim();
+					JToggleButton button = createToggleButton(title, e->setFunction.accept(dsi), true, bg);
+					buttons.put(dsi,button);
+					addComp(c,button,0,1,GridBagConstraints.HORIZONTAL);
+					addComp(c,new JLabel("["+dsi.ID+"]",JLabel.CENTER),1,GridBagConstraints.REMAINDER,GridBagConstraints.BOTH);
+					//addComp(c,new JLabel(dsi.rw),0,GridBagConstraints.REMAINDER,GridBagConstraints.BOTH);
+				}
+				c.weighty=1;
+				addComp(c,new JLabel(""),1,GridBagConstraints.REMAINDER,GridBagConstraints.BOTH);
+			}
+			
+			private void addComp(GridBagConstraints c, Component comp, double weightx, int gridwidth, int fill) {
+				c.weightx=weightx;
+				c.gridwidth=gridwidth;
+				c.fill = fill;
+				layout.setConstraints(comp, c);
+				add(comp);
+			}
+		}
 	}
 	
 	private static class VolumeControl extends Canvas {
@@ -252,27 +360,106 @@ public class YamahaControl {
 
 	private static final class Device {
 
-		private boolean isOn;
 		private String address;
+		private boolean isOn;
+		private DeviceSceneInput[] scenes;
+		private DeviceSceneInput[] inputs;
+		private DeviceSceneInput currentScene;
+		private DeviceSceneInput currentInput;
 		
 		Device(String address) {
 			this.address = address;
+			this.isOn = false;
+			this.scenes = null;
+			this.inputs = null;
+			this.currentScene = null;
+			this.currentInput = null;
 		}
 
 		public void updateConfig() {
-			String value = Ctrl.sendGetCommand(address,new TagList("System,Power_Control,Power"));
+			String value = Ctrl.sendGetCommand_String(address,new TagList("System,Power_Control,Power"));
 			isOn = "On".equals(value);
+			
+			scenes = getSceneInput(new TagList("Main_Zone,Scene,Scene_Sel_Item")); // G4: Main_Zone,Scene,Scene_Sel_Item
+			inputs = getSceneInput(new TagList("Main_Zone,Input,Input_Sel_Item")); // G2: Main_Zone,Input,Input_Sel_Item
+			
 			// TODO Auto-generated method stub
 		}
 
 		public boolean isOn() { return isOn; }
+
 		public void setOn(boolean isOn) {
 			// System,Power_Control,Power = On
 			// System,Power_Control,Power = Standby
 			int rc = Ctrl.sendPutCommand(address,new TagList("System,Power_Control,Power"),isOn?"On":"Standby");
 			if (rc==Ctrl.RC_OK) this.isOn = isOn;
 		}
-	
+
+		public DeviceSceneInput getScene() {
+			// GET[G1]:    Main_Zone,Basic_Status   ->   Input,Input_Sel -> Values [GET[G2]:Main_Zone,Input,Input_Sel_Item]
+			return currentScene;
+		}
+
+		public DeviceSceneInput getInput() {
+			// GET[G1]:    Main_Zone,Basic_Status   ->   Input,Input_Sel -> Values [GET[G2]:Main_Zone,Input,Input_Sel_Item]
+			return currentInput;
+		}
+
+		public void setScene(DeviceSceneInput dsi) {
+			// PUT[P6]:    Main_Zone,Scene,Scene_Sel   =   Values [GET[G4]:Main_Zone,Scene,Scene_Sel_Item]
+			int rc = Ctrl.sendPutCommand(address,new TagList("Main_Zone,Scene,Scene_Sel"),dsi.ID);
+			if (rc==Ctrl.RC_OK) currentScene = dsi;
+		}
+
+		public void setInput(DeviceSceneInput dsi) {
+			// PUT[P4]:    Main_Zone,Input,Input_Sel   =   Values [GET[G2]:Main_Zone,Input,Input_Sel_Item]
+			int rc = Ctrl.sendPutCommand(address,new TagList("Main_Zone,Input,Input_Sel"),dsi.ID);
+			if (rc==Ctrl.RC_OK) currentInput = dsi;
+		}
+
+		public DeviceSceneInput[] getInputs() { return inputs; }
+		public DeviceSceneInput[] getScenes() { return scenes; }
+
+		private DeviceSceneInput[] getSceneInput(TagList tagList) {
+			Node node = Ctrl.sendGetCommand_Node(address,tagList);
+			if (node == null) return null;
+			
+			NodeList itemNodes = node.getChildNodes();
+			DeviceSceneInput[] dsi = new DeviceSceneInput[itemNodes.getLength()];
+			for (int i=0; i<itemNodes.getLength(); ++i) {
+				Node item = itemNodes.item(i);
+				dsi[i] = new DeviceSceneInput();
+				NodeList valueNodes = item.getChildNodes();
+				for (int v=0; v<valueNodes.getLength(); ++v) {
+					Node value = valueNodes.item(v);
+					String valueStr = XML.getContentOfSingleChildTextNode(value);
+					switch (value.getNodeName()) {
+					case "Param"     : dsi[i].ID        = valueStr; break;
+					case "RW"        : dsi[i].rw        = valueStr; break;
+					case "Title"     : dsi[i].title     = valueStr; break;
+					case "Src_Name"  : dsi[i].srcName   = valueStr; break;
+					case "Src_Number": dsi[i].srcNumber = valueStr; break;
+					}
+				}
+			}
+			return dsi;
+		}
+		
+		private static class DeviceSceneInput {
+			public String ID;
+			public String rw;
+			public String title;
+			@SuppressWarnings("unused") public String srcName;
+			@SuppressWarnings("unused") public String srcNumber;
+			public DeviceSceneInput() {
+				this.ID = null;
+				this.rw = null;
+				this.title = null;
+				this.srcName = null;
+				this.srcNumber = null;
+			}
+			
+		}
 	}
 
 }

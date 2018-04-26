@@ -81,7 +81,7 @@ public class CommandList {
 		contextMenu = new ContextMenuHandler();
 	}
 	
-	private enum TreeViewType { DOM, Parsed_Experimental } 
+	private enum TreeViewType { DOM, Parsed } 
 	
 	private enum ContextMenuItemType {
 		TreeFunction(node->true),
@@ -160,7 +160,7 @@ public class CommandList {
 		contextMenu.add(ContextMenuItemType.GetCommand, "Test Get Command", e->testCommand(contextMenu.getClickedTreeNode()));
 		contextMenu.add(ContextMenuItemType.PutCommand, "Test Put Command", e->testCommand(contextMenu.getClickedTreeNode()));
 
-		selectedTreeViewType = TreeViewType.DOM;
+		selectedTreeViewType = TreeViewType.Parsed;
 		JComboBox<TreeViewType> treeViewTypeComboBox = createComboBox(TreeViewType.values(),null);
 		treeViewTypeComboBox.setSelectedItem(selectedTreeViewType);
 		treeViewTypeComboBox.addActionListener(e->{
@@ -199,7 +199,7 @@ public class CommandList {
 		for (int row=0; row<tree.getRowCount(); ++row)
 			if (!tree.isExpanded(row))
 				tree.expandRow(row);
-		if (selectedTreeViewType==TreeViewType.Parsed_Experimental)
+		if (selectedTreeViewType==TreeViewType.Parsed)
 			ParsedTreeNode_Exp.showUnknownTagNames();
 	}
 
@@ -216,7 +216,7 @@ public class CommandList {
 					treeModel.setRoot(new DOMTreeNode(document));
 					tree.setCellRenderer(null);
 					break;
-				case Parsed_Experimental:
+				case Parsed:
 					treeModel.setRoot(ParsedTreeNode_Exp.createRootNode(document));
 					tree.setCellRenderer(new ParsedTreeNodeTreeCellRenderer());
 					break;
