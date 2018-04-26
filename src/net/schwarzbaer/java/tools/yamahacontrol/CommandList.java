@@ -17,7 +17,6 @@ import java.util.function.Predicate;
 import javax.activation.DataHandler;
 import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
-import javax.swing.JButton;
 import javax.swing.JComboBox;
 import javax.swing.JFrame;
 import javax.swing.JMenuItem;
@@ -55,6 +54,7 @@ public class CommandList {
 		
 		Config.readConfig();
 		Ctrl.readCommProtocolFromFile();
+		new ResponseDummy().createGUI();
 		
 		openWindow();
 		
@@ -168,7 +168,7 @@ public class CommandList {
 		contextMenu.add(ContextMenuItemType.PutCommand, "Test Put Command", e->testCommand(contextMenu.getClickedTreeNode()));
 
 		selectedTreeViewType = TreeViewType.Parsed;
-		JComboBox<TreeViewType> treeViewTypeComboBox = createComboBox(TreeViewType.values(),null);
+		JComboBox<TreeViewType> treeViewTypeComboBox = YamahaControl.createComboBox(TreeViewType.values(),null);
 		treeViewTypeComboBox.setSelectedItem(selectedTreeViewType);
 		treeViewTypeComboBox.addActionListener(e->{
 			selectedTreeViewType = (TreeViewType)(treeViewTypeComboBox.getSelectedItem());
@@ -177,9 +177,9 @@ public class CommandList {
 		
 		JPanel northPanel = new JPanel();
 		northPanel.setLayout(new BoxLayout(northPanel, BoxLayout.X_AXIS));
-		northPanel.add(createButton("Get Data",e->{readCommandList();showCommandList(tree,treeModel);}));
+		northPanel.add(YamahaControl.createButton("Get Data",e->{readCommandList();showCommandList(tree,treeModel);},true));
 		northPanel.add(treeViewTypeComboBox);
-		northPanel.add(createButton("Write CommProtocol to File",e->Ctrl.writeCommProtocolToFile()));
+		northPanel.add(YamahaControl.createButton("Write CommProtocol to File",e->Ctrl.writeCommProtocolToFile(),true));
 		
 		JPanel contentPane = new JPanel(new BorderLayout(3,3));
 		contentPane.setBorder(BorderFactory.createEmptyBorder(3, 3, 3, 3));
@@ -231,18 +231,6 @@ public class CommandList {
 				}
 	}
 
-	private JButton createButton(String title, ActionListener l) {
-		JButton button = new JButton(title);
-		button.addActionListener(l);
-		return button;
-	}
-
-	private <A> JComboBox<A> createComboBox(A[] values, ActionListener l) {
-		JComboBox<A> comboBox = new JComboBox<A>(values);
-		if (l!=null) comboBox.addActionListener(l);
-		return comboBox;
-	}
-
 	private String getClickedNodePath() {
 		Object pathComp = contextMenu.getClickedTreeNode();
 		if (pathComp instanceof DOMTreeNode       ) return XML.getPath(((DOMTreeNode)pathComp).node);;
@@ -272,7 +260,7 @@ public class CommandList {
 	}
 
 	private void readCommandList(String addr, boolean verbose) {
-		String content = Ctrl.getContentFromURL("http://"+addr+"/YamahaRemoteControl/desc.xml", verbose);
+		String content = Ctrl.http.getContentFromURL("http://"+addr+"/YamahaRemoteControl/desc.xml", verbose);
 		document = content==null?null:XML.parse(content);
 		if (verbose) System.out.println("done");
 	}

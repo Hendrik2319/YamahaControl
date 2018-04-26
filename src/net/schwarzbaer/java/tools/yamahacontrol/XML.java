@@ -63,15 +63,32 @@ final class XML {
 		}
 	}
 
-	public static void showXMLformated(String xmlStr) {
-		Document document = XML.parse(xmlStr);
-		if (document==null) return;
+	public static String getXMLformatedString(String xmlStr) {
 		StringBuilder sb = new StringBuilder();
-		showXMLformated(sb,"",document);
+		showXMLformated(sb,xmlStr);
+		return sb.toString();
+	}
+
+	public static void showXMLformated(String xmlStr) {
+		showXMLformated(XML.parse(xmlStr));
+	}
+
+	public static void showXMLformated(Document document) {
+		StringBuilder sb = new StringBuilder();
+		showXMLformated(sb,document);
 		System.out.print(sb);
 	}
 
-	public static void showXMLformated(StringBuilder sb, String indent, Node node) {
+	public static void showXMLformated(StringBuilder sb, String xmlStr) {
+		showXMLformated(sb, XML.parse(xmlStr));
+	}
+
+	public static void showXMLformated(StringBuilder sb, Document document) {
+		if (document==null) return;
+		showXMLformated(sb,"",document);
+	}
+
+	private static void showXMLformated(StringBuilder sb, String indent, Node node) {
 		sb.append(indent+XML.toString(node)+"\r\n");
 		NodeList childNodes = node.getChildNodes();
 		for (int i=0; i<childNodes.getLength(); ++i)

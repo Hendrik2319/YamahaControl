@@ -25,6 +25,7 @@ import javax.swing.ButtonGroup;
 import javax.swing.Icon;
 import javax.swing.ImageIcon;
 import javax.swing.JButton;
+import javax.swing.JComboBox;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
@@ -62,7 +63,12 @@ public class YamahaControl {
 		
 		Config.readConfig();
 		Ctrl.readCommProtocolFromFile();
-
+		new ResponseDummy().createGUI();
+		
+		YamahaControl yamahaControl = new YamahaControl();
+		yamahaControl.createGUI();
+		
+		
 //		testByteBuffers();
 		
 //		try {
@@ -70,10 +76,6 @@ public class YamahaControl {
 //		} catch (MalformedURLException e) {
 //			e.printStackTrace();
 //		}
-		
-		YamahaControl yamahaControl = new YamahaControl();
-		yamahaControl.createGUI();
-		
 //		Ctrl.testCommand("192.168.2.34","<YAMAHA_AV cmd=\"GET\"><System><Power_Control><Power>GetParam</Power></Power_Control></System></YAMAHA_AV>");
 //		Ctrl.testCommand("192.168.2.34","<YAMAHA_AV cmd=\"PUT\"><System><Power_Control><Power>On</Power></Power_Control></System></YAMAHA_AV>");
 //		Ctrl.testCommand("192.168.2.34","<YAMAHA_AV cmd=\"PUT\"><System><Power_Control><Power>Standby</Power></Power_Control></System></YAMAHA_AV>");
@@ -191,19 +193,25 @@ public class YamahaControl {
 		}
 	}
 
-	private JButton createButton(String title, ActionListener l, boolean enabled) {
+	static JButton createButton(String title, ActionListener l, boolean enabled) {
 		JButton button = new JButton(title);
 		button.setEnabled(enabled);
 		if (l!=null) button.addActionListener(l);
 		return button;
 	}
 
-	private JToggleButton createToggleButton(String title, ActionListener l, boolean enabled, ButtonGroup bg) {
+	static JToggleButton createToggleButton(String title, ActionListener l, boolean enabled, ButtonGroup bg) {
 		JToggleButton button = new JToggleButton(title);
 		button.setEnabled(enabled);
 		if (l!=null) button.addActionListener(l);
 		bg.add(button);
 		return button;
+	}
+
+	static <A> JComboBox<A> createComboBox(A[] values, ActionListener l) {
+		JComboBox<A> comboBox = new JComboBox<A>(values);
+		if (l!=null) comboBox.addActionListener(l);
+		return comboBox;
 	}
 	
 	public static interface GuiRegion {
