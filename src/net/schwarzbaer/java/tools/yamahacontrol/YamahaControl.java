@@ -8,7 +8,6 @@ import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
-import java.awt.GridLayout;
 import java.awt.event.ActionListener;
 import java.awt.image.BufferedImage;
 import java.nio.ByteBuffer;
@@ -21,6 +20,7 @@ import java.util.function.Consumer;
 import java.util.function.Predicate;
 
 import javax.swing.BorderFactory;
+import javax.swing.BoxLayout;
 import javax.swing.ButtonGroup;
 import javax.swing.Icon;
 import javax.swing.ImageIcon;
@@ -61,6 +61,7 @@ public class YamahaControl {
 		catch (ClassNotFoundException | InstantiationException | IllegalAccessException | UnsupportedLookAndFeelException e) {}
 		
 		Config.readConfig();
+		Ctrl.readCommProtocolFromFile();
 
 //		testByteBuffers();
 		
@@ -121,10 +122,12 @@ public class YamahaControl {
 		
 		mainGui.createOnOffBtn();
 		
-		JPanel devicePanel = new JPanel(new GridLayout(1,0,3,3));
+		JPanel devicePanel = new JPanel(/*new GridLayout(1,0,3,3)*/);
+		devicePanel.setLayout(new BoxLayout(devicePanel, BoxLayout.X_AXIS));
 		devicePanel.setBorder(BorderFactory.createTitledBorder("Device"));
 		devicePanel.add(createButton("Connect",e->connectToReciever(),true));
 		devicePanel.add(mainGui.onoffBtn);
+		devicePanel.add(createButton("Open Command List",e->CommandList.openWindow(),true));
 		
 		JTabbedPane scenesInputsPanel = mainGui.createScenesInputsPanel();
 		scenesInputsPanel.setBorder(BorderFactory.createTitledBorder("Scenes/Inputs"));

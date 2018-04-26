@@ -53,20 +53,27 @@ public class CommandList {
 		try { UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName()); }
 		catch (ClassNotFoundException | InstantiationException | IllegalAccessException | UnsupportedLookAndFeelException e) {}
 		
-		IconSource<ParsedTreeIcon> parsedTreeIconsIS = new IconSource<ParsedTreeIcon>(16,16);
-		parsedTreeIconsIS.readIconsFromResource("/ParsedTreeIcons.png");
-		parsedTreeIcons = parsedTreeIconsIS.cacheIcons(ParsedTreeIcon.values());
-		
 		Config.readConfig();
+		Ctrl.readCommProtocolFromFile();
+		
+		openWindow();
 		
 		//  http://rx-v475/YamahaRemoteControl/desc.xml
 		
-		CommandList commandList = new CommandList();
-		commandList.createGUI();
 //		String addr = "192.168.2.34";
 //		String addr = "RX_V475";
 //		commandList.readCommandList(addr,true);
 	}
+	
+	public static void openWindow() {
+		IconSource<ParsedTreeIcon> parsedTreeIconsIS = new IconSource<ParsedTreeIcon>(16,16);
+		parsedTreeIconsIS.readIconsFromResource("/ParsedTreeIcons.png");
+		parsedTreeIcons = parsedTreeIconsIS.cacheIcons(ParsedTreeIcon.values());
+		
+		CommandList commandList = new CommandList();
+		commandList.createGUI();
+	}
+	
 	private TreeViewType selectedTreeViewType;
 	private String selectedAddress;
 
@@ -172,6 +179,7 @@ public class CommandList {
 		northPanel.setLayout(new BoxLayout(northPanel, BoxLayout.X_AXIS));
 		northPanel.add(createButton("Get Data",e->{readCommandList();showCommandList(tree,treeModel);}));
 		northPanel.add(treeViewTypeComboBox);
+		northPanel.add(createButton("Write CommProtocol to File",e->Ctrl.writeCommProtocolToFile()));
 		
 		JPanel contentPane = new JPanel(new BorderLayout(3,3));
 		contentPane.setBorder(BorderFactory.createEmptyBorder(3, 3, 3, 3));

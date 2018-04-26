@@ -1,7 +1,14 @@
 package net.schwarzbaer.java.tools.yamahacontrol;
 
+import java.io.BufferedReader;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStreamWriter;
+import java.io.PrintWriter;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.ProtocolException;
@@ -9,6 +16,9 @@ import java.net.URL;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -21,6 +31,47 @@ import net.schwarzbaer.java.tools.yamahacontrol.XML.TagList;
 
 final class Ctrl {
 
+	private static final String COMMPROTOCOL_FILENAME = "YamahaControl.CommProtocol.ini";
+	static final HashMap<String,HashSet<String>> commprotocol = new HashMap<>();
+	
+	static void writeCommProtocolToFile() {
+		Vector<Entry<String, HashSet<String>>> list = new Vector<>(commprotocol.entrySet());
+		list.sort(Comparator.nullsLast(Comparator.comparing(entry->entry.getKey())));
+		try (PrintWriter out = new PrintWriter( new OutputStreamWriter( new FileOutputStream(COMMPROTOCOL_FILENAME), StandardCharsets.UTF_8) )) {
+			for (Entry<String, HashSet<String>> entry:list) {
+				out.printf("command=%s%n", entry.getKey());
+				for (String response:entry.getValue())
+					out.printf("response=%s%n", response);
+			}
+		}
+		catch (FileNotFoundException e) {}
+	}
+	
+	static void readCommProtocolFromFile() {
+		commprotocol.clear();
+		try (BufferedReader in = new BufferedReader( new InputStreamReader( new FileInputStream(COMMPROTOCOL_FILENAME), StandardCharsets.UTF_8) )) {
+			String line;
+			HashSet<String> responseList = null;
+			while ( (line=in.readLine())!=null ) {
+				if (line.startsWith("command="))
+					commprotocol.put(line.substring("command=".length()),responseList = new HashSet<>());
+				if (line.startsWith("response=") && responseList!=null)
+					responseList.add(line.substring("response=".length()));
+			}
+		}
+		catch (FileNotFoundException e) {}
+		catch (IOException e) {
+			e.printStackTrace();
+		}
+	}
+	
+	static void addToCommProtocol(String command, String response) {
+		HashSet<String> responseList = commprotocol.get(command);
+		if (responseList==null) commprotocol.put(command,responseList = new HashSet<>());
+		responseList.add(response);
+	}
+	
+	
 	static final int RC_OK = 0;
 	static final int RC_NO_RESPONSE = -1;
 	static final int RC_CANT_PARSE_XML = -2;
@@ -32,6 +83,8 @@ final class Ctrl {
 	static Document sendCommand_controlled(String address, String command) {
 		String xmlStr = sendCommand(address, command);
 		if (xmlStr==null) { lastRC = RC_NO_RESPONSE; return null; }
+		
+		addToCommProtocol(command,xmlStr);
 		
 		Document document = XML.parse(xmlStr);
 		if (document==null) { lastRC = RC_CANT_PARSE_XML; return null; }
@@ -98,7 +151,10 @@ final class Ctrl {
 		String response = sendCommand(address, command, verbose);
 		System.out.println("Command : "+command);
 		System.out.println("Response: "+response);
-		if (response!=null) XML.showXMLformated(response);
+		if (response!=null) {
+			addToCommProtocol(command,response);
+			XML.showXMLformated(response);
+		}
 		System.out.println();
 	}
 
