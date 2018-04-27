@@ -3,8 +3,6 @@ package net.schwarzbaer.java.tools.yamahacontrol;
 import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Dimension;
-import java.awt.Toolkit;
-import java.awt.datatransfer.Clipboard;
 import java.awt.event.ActionListener;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
@@ -14,7 +12,6 @@ import java.util.Map.Entry;
 import java.util.Vector;
 import java.util.function.Predicate;
 
-import javax.activation.DataHandler;
 import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
 import javax.swing.JComboBox;
@@ -85,7 +82,7 @@ public class CommandList {
 		document = null;
 		selectedTreeViewType = null;
 		selectedAddress = null;
-		contextMenu = new ContextMenuHandler();
+		contextMenu = null;
 	}
 	
 	private enum TreeViewType { DOM, Parsed } 
@@ -149,18 +146,13 @@ public class CommandList {
 		
 		DefaultTreeModel treeModel = new DefaultTreeModel(null);
 		JTree tree = new JTree(treeModel);
-		tree.addMouseListener(new MouseAdapter() {
-			@Override public void mouseClicked(MouseEvent e) {
-				if (e.getButton()==MouseEvent.BUTTON3)
-					contextMenu.activate(tree, e.getX(), e.getY());
-			}
-		});
 		
 		JScrollPane treeScrollPane = new JScrollPane(tree);
 		treeScrollPane.setPreferredSize(new Dimension(800,800));
 		
-		contextMenu.add(ContextMenuItemType.NodeFunction, "Copy Value to Clipboard", e->copyToClipBoard(getClickedNodeText()));
-		contextMenu.add(ContextMenuItemType.NodeFunction, "Copy Path to Clipboard", e->copyToClipBoard(getClickedNodePath()));
+		contextMenu = new ContextMenuHandler();
+		contextMenu.add(ContextMenuItemType.NodeFunction, "Copy Value to Clipboard", e->YamahaControl.copyToClipBoard(getClickedNodeText()));
+		contextMenu.add(ContextMenuItemType.NodeFunction, "Copy Path to Clipboard", e->YamahaControl.copyToClipBoard(getClickedNodePath()));
 		contextMenu.addSeparator();
 		contextMenu.add(ContextMenuItemType.TreeFunction, "Expand Full Tree", e->expandFullTree(tree));
 		contextMenu.addSeparator();
@@ -170,6 +162,15 @@ public class CommandList {
 		selectedTreeViewType = TreeViewType.Parsed;
 		JComboBox<TreeViewType> treeViewTypeComboBox = YamahaControl.createComboBox(TreeViewType.values(),null);
 		treeViewTypeComboBox.setSelectedItem(selectedTreeViewType);
+		
+		
+		tree.addMouseListener(new MouseAdapter() {
+			@Override public void mouseClicked(MouseEvent e) {
+				if (e.getButton()==MouseEvent.BUTTON3)
+					contextMenu.activate(tree, e.getX(), e.getY());
+			}
+		});
+		
 		treeViewTypeComboBox.addActionListener(e->{
 			selectedTreeViewType = (TreeViewType)(treeViewTypeComboBox.getSelectedItem());
 			showCommandList(tree,treeModel);
@@ -242,15 +243,6 @@ public class CommandList {
 		Object pathComp = contextMenu.getClickedTreeNode();
 		if (pathComp == null) return null;
 		return pathComp.toString();
-	}
-
-	public static void copyToClipBoard(String str) {
-		if (str==null) return;
-		Toolkit toolkit = Toolkit.getDefaultToolkit();
-		Clipboard clipboard = toolkit.getSystemClipboard();
-		DataHandler content = new DataHandler(str,"text/plain");
-		try { clipboard.setContents(content,null); }
-		catch (IllegalStateException e1) { e1.printStackTrace(); }
 	}
 
 	private void readCommandList() {

@@ -61,6 +61,18 @@ final class Ctrl {
 	private static final String COMMPROTOCOL_FILENAME = "YamahaControl.CommProtocol.ini";
 	static final HashMap<String,Command> commprotocol = new HashMap<>();
 	
+	static void addToCommProtocol(String commandStr, String responseStr) {
+		Command command = commprotocol.get(commandStr);
+		if (command==null) commprotocol.put(commandStr,command = new Command(commandStr));
+		command.responses.add(new Response(responseStr));
+	}
+
+	static Vector<Command> getSortedCommProtocol() {
+		Vector<Command> list = new Vector<>(commprotocol.values());
+		list.sort(Comparator.nullsLast(Comparator.comparing(c->c.xml)));
+		return list;
+	}
+
 	static void writeCommProtocolToFile() {
 		Vector<Command> list = getSortedCommProtocol();
 		try (PrintWriter out = new PrintWriter( new OutputStreamWriter( new FileOutputStream(COMMPROTOCOL_FILENAME), StandardCharsets.UTF_8) )) {
@@ -78,12 +90,6 @@ final class Ctrl {
 		catch (FileNotFoundException e) {}
 	}
 
-	static Vector<Command> getSortedCommProtocol() {
-		Vector<Command> list = new Vector<>(commprotocol.values());
-		list.sort(Comparator.nullsLast(Comparator.comparing(c->c.xml)));
-		return list;
-	}
-	
 	static void readCommProtocolFromFile() {
 		commprotocol.clear();
 		try (BufferedReader in = new BufferedReader( new InputStreamReader( new FileInputStream(COMMPROTOCOL_FILENAME), StandardCharsets.UTF_8) )) {
@@ -113,13 +119,6 @@ final class Ctrl {
 		}
 	}
 	
-	static void addToCommProtocol(String commandStr, String responseStr) {
-		Command command = commprotocol.get(commandStr);
-		if (command==null) commprotocol.put(commandStr,command = new Command(commandStr));
-		command.responses.add(new Response(responseStr));
-	}
-	
-	
 	static final int RC_OK = 0;
 	static final int RC_NO_RESPONSE = -1;
 	static final int RC_CANT_PARSE_XML = -2;
@@ -131,8 +130,6 @@ final class Ctrl {
 	static Document sendCommand_controlled(String address, String command) {
 		String xmlStr = http.sendCommand(address, command);
 		if (xmlStr==null) { lastRC = RC_NO_RESPONSE; return null; }
-		
-		addToCommProtocol(command,xmlStr);
 		
 		Document document = XML.parse(xmlStr);
 		if (document==null) { lastRC = RC_CANT_PARSE_XML; return null; }
@@ -199,10 +196,7 @@ final class Ctrl {
 		String response = http.sendCommand(address, command, verbose);
 		System.out.println("Command : "+command);
 		System.out.println("Response: "+response);
-		if (response!=null) {
-			addToCommProtocol(command,response);
-			XML.showXMLformated(response);
-		}
+		if (response!=null) XML.showXMLformated(response);
 		System.out.println();
 	}
 	
@@ -226,7 +220,7 @@ final class Ctrl {
 			int port = 80; // 50100 bei BD-Playern
 			String urlStr = "http://"+address+":"+port+"/YamahaRemoteControl/ctrl";
 			
-			return sendHTTPRequest(
+			String response = sendHTTPRequest(
 					urlStr,
 					connection -> {
 						try { connection.setRequestMethod("POST"); }
@@ -242,6 +236,11 @@ final class Ctrl {
 						catch (IOException e) { e.printStackTrace(); return false; }
 					},
 					verbose);
+			
+			if (response!=null)
+				addToCommProtocol(command,response);
+
+			return response;
 		}
 
 		public String getContentFromURL(String urlStr, boolean verbose) {

@@ -8,17 +8,22 @@ import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
+import java.awt.Toolkit;
+import java.awt.datatransfer.Clipboard;
 import java.awt.event.ActionListener;
 import java.awt.image.BufferedImage;
+import java.io.PrintStream;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.EnumMap;
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Vector;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 
+import javax.activation.DataHandler;
 import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
 import javax.swing.ButtonGroup;
@@ -193,6 +198,10 @@ public class YamahaControl {
 		}
 	}
 
+	// ///////////////////////////////////////////////////////////////////////////////////
+	// 
+	//    Toolbox methods
+	//
 	static JButton createButton(String title, ActionListener l, boolean enabled) {
 		JButton button = new JButton(title);
 		button.setEnabled(enabled);
@@ -213,6 +222,16 @@ public class YamahaControl {
 		if (l!=null) comboBox.addActionListener(l);
 		return comboBox;
 	}
+
+	public static void copyToClipBoard(String str) {
+		if (str==null) return;
+		Toolkit toolkit = Toolkit.getDefaultToolkit();
+		Clipboard clipboard = toolkit.getSystemClipboard();
+		DataHandler content = new DataHandler(str,"text/plain");
+		try { clipboard.setContents(content,null); }
+		catch (IllegalStateException e1) { e1.printStackTrace(); }
+	}
+	// ///////////////////////////////////////////////////////////////////////////////////
 	
 	public static interface GuiRegion {
 		void setEnabled(boolean enabled);
@@ -470,6 +489,20 @@ public class YamahaControl {
 				this.srcNumber = null;
 			}
 			
+		}
+	}
+	
+	static class Log {
+		public static void info   (Class<?> callerClass,                String format, Object... values) { out(System.out, callerClass, "INFO",         format, values); }
+		public static void warning(Class<?> callerClass,                String format, Object... values) { out(System.out, callerClass, "INFO",         format, values); }
+		public static void error  (Class<?> callerClass,                String format, Object... values) { out(System.out, callerClass, "INFO",         format, values); }
+		public static void info   (Class<?> callerClass, Locale locale, String format, Object... values) { out(System.out, callerClass, "INFO", locale, format, values); }
+		public static void warning(Class<?> callerClass, Locale locale, String format, Object... values) { out(System.out, callerClass, "INFO", locale, format, values); }
+		public static void error  (Class<?> callerClass, Locale locale, String format, Object... values) { out(System.out, callerClass, "INFO", locale, format, values); }
+		
+		private static void out(PrintStream out, Class<?> callerClass, String label,                String format, Object... values) { out(out, callerClass, label, Locale.ENGLISH, format, values); }
+		private static void out(PrintStream out, Class<?> callerClass, String label, Locale locale, String format, Object... values) {
+			out.printf(locale, "[%s] %s: %s%n", callerClass==null?"???":callerClass.getSimpleName(), label, String.format(format, values));
 		}
 	}
 
