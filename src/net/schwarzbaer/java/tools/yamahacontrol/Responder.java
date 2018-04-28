@@ -16,6 +16,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Vector;
+import java.util.function.Predicate;
 
 import javax.swing.BorderFactory;
 import javax.swing.JMenuItem;
@@ -32,28 +33,30 @@ import javax.swing.UIManager;
 import javax.swing.UnsupportedLookAndFeelException;
 import javax.swing.table.TableCellRenderer;
 
+import net.schwarzbaer.gui.Disabler;
 import net.schwarzbaer.gui.StandardMainWindow;
 import net.schwarzbaer.gui.Tables;
 import net.schwarzbaer.gui.Tables.CheckBoxRendererComponent;
 import net.schwarzbaer.gui.Tables.LabelRendererComponent;
 import net.schwarzbaer.gui.Tables.SimplifiedColumnConfig;
+import net.schwarzbaer.java.tools.yamahacontrol.Responder.ResponseTableModel.TableEntry;
 import net.schwarzbaer.java.tools.yamahacontrol.YamahaControl.Log;
 
-public class ResponseDummy extends Ctrl.HttpInterface {
+public class Responder extends Ctrl.HttpInterface {
 	
 	public static void main(String[] args) {
 		try { UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName()); }
 		catch (ClassNotFoundException | InstantiationException | IllegalAccessException | UnsupportedLookAndFeelException e) {}
 		
 		Ctrl.readCommProtocolFromFile();
-		new ResponseDummy().createGUI();
+		new Responder().createGUI();
 	}
 
 	private StandardMainWindow mainWindow;
 	private ResponseTableModel tableModel;
 	private ContextMenuHandler contextMenu;
 
-	ResponseDummy() {
+	Responder() {
 		Ctrl.http = this;
 		mainWindow = null;
 		tableModel = null;
@@ -73,9 +76,12 @@ public class ResponseDummy extends Ctrl.HttpInterface {
 		tableModel.setColumnWidths(table);
 		
 		contextMenu = new ContextMenuHandler();
-		contextMenu.add("Copy XML", e->{ if (contextMenu.clickedRow!=null) YamahaControl.copyToClipBoard(contextMenu.clickedRow.protocolEntry.xml); });
-		contextMenu.add("Add New Command", e->{}); // TODO
-		contextMenu.add("Add New Response", e->{}); // TODO
+		contextMenu.add(ContextMenuItemType.GeneralFunction, "Copy XML", e->{ if (contextMenu.clickedRow!=null) YamahaControl.copyToClipBoard(contextMenu.clickedRow.protocolEntry.xml); });
+		contextMenu.add(ContextMenuItemType.GeneralFunction, "Paste here as New Command", e->pasteAsCommand());
+		contextMenu.add(ContextMenuItemType.GeneralFunction, "Paste here as New Response", e->pasteAsResponse());
+		contextMenu.addSeparator();
+		contextMenu.add(ContextMenuItemType.ReponseFunction, "Set as Default Response", e->{});
+		contextMenu.add(ContextMenuItemType.CommandFunction, "Set as Default Response", e->{});
 		
 		JTextArea textArea = new JTextArea();
 		textArea.setEditable(false);
@@ -94,7 +100,7 @@ public class ResponseDummy extends Ctrl.HttpInterface {
 		});
 		table.getSelectionModel().addListSelectionListener(e->{
 			if (e.getValueIsAdjusting()) return;
-			ResponseTableModel.TableEntry row = tableModel.getRow(table.convertRowIndexToModel(table.getSelectedRow()));
+			TableEntry row = tableModel.getRow(table.convertRowIndexToModel(table.getSelectedRow()));
 			float pos = getScrollPos(textScrollPane.getVerticalScrollBar());
 			if (row==null) textArea.setText("");
 			else textArea.setText(XML.getXMLformatedString(row.protocolEntry.xml));
@@ -112,14 +118,53 @@ public class ResponseDummy extends Ctrl.HttpInterface {
 		mainWindow.startGUI(contentPane);
 	}
 	
+	private void pasteAsResponse() {
+		if (contextMenu.clickedRow==null) return;
+		
+		String xml = YamahaControl.pasteFromClipBoard();
+		if (xml==null) return;
+		
+		if (contextMenu.clickedRow.isCommand())
+			contextMenu.clickedRow.asCommand().commandEntry.addResponse(xml);
+		if (contextMenu.clickedRow.isResponse())
+			contextMenu.clickedRow.asResponse().command.commandEntry.addResponse(xml);
+		
+		tableModel.rebuildRows();
+	}
+
+	private void pasteAsCommand() {
+		if (contextMenu.clickedRow==null) return;
+		
+		String xml = YamahaControl.pasteFromClipBoard();
+		if (xml==null) return;
+		
+		Ctrl.commprotocol.put(xml,new Ctrl.Command(xml));
+
+		tableModel.rebuildRows();
+	}
+	
+	private enum ContextMenuItemType {
+		GeneralFunction(row->true),
+		ReponseFunction(row->row.isResponse()),
+		CommandFunction(row->row.isCommand());
+		
+		private Predicate<TableEntry> checkClickedRow;
+		ContextMenuItemType( Predicate<TableEntry> checkClickedRow ) {
+			this.checkClickedRow = checkClickedRow;
+		}
+	}
+
 	private class ContextMenuHandler {
 		
 		private JPopupMenu contextMenu;
-		private ResponseTableModel.TableEntry clickedRow;
+		private TableEntry clickedRow;
+		private Disabler<ContextMenuItemType> disabler;
 
 		ContextMenuHandler() {
 			contextMenu = new JPopupMenu();
 			clickedRow = null;
+			disabler = new Disabler<>();
+			disabler.setCareFor(ContextMenuItemType.values());
 		}
 
 		public void activate(JTable table, Point clickPoint) {
@@ -127,13 +172,18 @@ public class ResponseDummy extends Ctrl.HttpInterface {
 			table.setRowSelectionInterval(viewRowIndex, viewRowIndex);
 			int modelRowIndex = table.convertRowIndexToModel(viewRowIndex);
 			clickedRow = tableModel.getRow(modelRowIndex);
+			
+			for (ContextMenuItemType type:ContextMenuItemType.values())
+				disabler.setEnable(type, type.checkClickedRow.test(clickedRow));
+			
 			contextMenu.show(table,clickPoint.x,clickPoint.y);
 		}
 
-		public void add(String title, ActionListener l) {
+		public void add(ContextMenuItemType type, String title, ActionListener l) {
 			JMenuItem menuItem = new JMenuItem(title);
 			if (l!=null) menuItem.addActionListener(l);
 			contextMenu.add(menuItem);
+			disabler.add(type, menuItem);
 		}
 
 		public void addSeparator() {
@@ -158,7 +208,7 @@ public class ResponseDummy extends Ctrl.HttpInterface {
 
 	@Override
 	public String sendCommand(String address, String commandStr, boolean verbose) {
-		ResponseTableModel.TableEntry.Command command = tableModel.commands.get(commandStr);
+		TableEntry.Command command = tableModel.commands.get(commandStr);
 		if (command==null) {
 			Log.info( getClass(), "Received a command: %s", commandStr);
 			Log.warning( getClass(), "Command is currently not known. This command will be added to CommProtocol.");
@@ -202,7 +252,7 @@ public class ResponseDummy extends Ctrl.HttpInterface {
 		
 		private enum ColumnID implements Tables.SimplifiedColumnIDInterface {
 			Name  ("Name",String .class,-1,-1,200,200),
-			Select("#"   ,Boolean.class,-1,-1, 50, 50),
+			Select("#"   ,Boolean.class,-1,-1, 20, 20),
 			XML   ("XML" ,String .class,-1,-1,630,630);
 			
 			private SimplifiedColumnConfig cfg;
@@ -315,7 +365,7 @@ public class ResponseDummy extends Ctrl.HttpInterface {
 			return comp;
 		}
 
-		private static class TableEntry {
+		public static class TableEntry {
 			
 			Ctrl.ProtocolEntry protocolEntry;
 			public TableEntry(Ctrl.ProtocolEntry protocolEntry) {
@@ -351,10 +401,11 @@ public class ResponseDummy extends Ctrl.HttpInterface {
 			}
 			
 			private static class Command extends TableEntry {
+				private Ctrl.Command commandEntry;
 				private Response selectedResponse;
-		
-				public Command(Ctrl.Command entry) {
-					super(entry);
+				public Command(Ctrl.Command commandEntry) {
+					super(commandEntry);
+					this.commandEntry = commandEntry;
 					selectedResponse = null;
 				}
 		
@@ -370,12 +421,14 @@ public class ResponseDummy extends Ctrl.HttpInterface {
 			}
 			
 			private static class Response extends TableEntry {
+				@SuppressWarnings("unused")
+				private Ctrl.Response responseEntry;
 				private Command command;
 				private boolean isSelected;
-				
-				public Response(Command command, Ctrl.Response response) {
-					super(response);
+				public Response(Command command, Ctrl.Response responseEntry) {
+					super(responseEntry);
 					this.command = command;
+					this.responseEntry = responseEntry;
 					this.isSelected = false;
 				}
 				

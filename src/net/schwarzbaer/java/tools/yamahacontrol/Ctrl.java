@@ -33,7 +33,7 @@ final class Ctrl {
 	
 	static class ProtocolEntry {
 		String name;
-		String xml;
+		final String xml;
 		ProtocolEntry(String xml) {
 			this.name = "";
 			this.xml = xml;
@@ -51,6 +51,11 @@ final class Ctrl {
 			super(xml);
 			responses = new HashSet<>();
 		}
+		public Response addResponse(String responseStr) {
+			Response response = new Response(responseStr);
+			responses.add(response);
+			return response;
+		}
 	}
 	static class Response extends ProtocolEntry {
 		Response(String xml) {
@@ -64,7 +69,7 @@ final class Ctrl {
 	static void addToCommProtocol(String commandStr, String responseStr) {
 		Command command = commprotocol.get(commandStr);
 		if (command==null) commprotocol.put(commandStr,command = new Command(commandStr));
-		command.responses.add(new Response(responseStr));
+		command.addResponse(responseStr);
 	}
 
 	static Vector<Command> getSortedCommProtocol() {
@@ -95,7 +100,6 @@ final class Ctrl {
 		try (BufferedReader in = new BufferedReader( new InputStreamReader( new FileInputStream(COMMPROTOCOL_FILENAME), StandardCharsets.UTF_8) )) {
 			String line;
 			Command command = null;
-			Response response = null;
 			ProtocolEntry lastEntry = null;
 			while ( (line=in.readLine())!=null ) {
 				if (line.startsWith("command=")) {
@@ -104,9 +108,7 @@ final class Ctrl {
 					lastEntry = command;
 				}
 				if (line.startsWith("response=") && command!=null) {
-					response = new Response(line.substring("response=".length()));
-					command.responses.add(response);
-					lastEntry = response;
+					lastEntry = command.addResponse(line.substring("response=".length()));
 				}
 				if (line.startsWith("name=") && lastEntry!=null) {
 					lastEntry.name = line.substring("name=".length());

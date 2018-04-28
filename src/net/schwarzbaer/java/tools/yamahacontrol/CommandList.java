@@ -51,7 +51,7 @@ public class CommandList {
 		
 		Config.readConfig();
 		Ctrl.readCommProtocolFromFile();
-		new ResponseDummy().createGUI();
+		new Responder().createGUI();
 		
 		openWindow();
 		
