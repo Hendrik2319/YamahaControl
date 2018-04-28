@@ -4,14 +4,20 @@ import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Dimension;
+import java.awt.GridLayout;
 import java.awt.Point;
 import java.awt.event.ActionListener;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.BufferedReader;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.OutputStreamWriter;
+import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -49,21 +55,66 @@ public class Responder extends Ctrl.HttpInterface {
 		catch (ClassNotFoundException | InstantiationException | IllegalAccessException | UnsupportedLookAndFeelException e) {}
 		
 		Ctrl.readCommProtocolFromFile();
-		new Responder().createGUI();
+		new Responder().openWindow();
 	}
 
 	private StandardMainWindow mainWindow;
 	private ResponseTableModel tableModel;
 	private ContextMenuHandler contextMenu;
+	private Vector<Behaviour> behaviours;
 
 	Responder() {
 		Ctrl.http = this;
 		mainWindow = null;
 		tableModel = null;
 		contextMenu = null;
+		behaviours = null;
 	}
 	
-	public void createGUI() {
+	@Override
+	public String sendCommand(String address, String commandStr, boolean verbose) {
+		TableEntry.Command command = tableModel.commands.get(commandStr);
+		if (command==null) {
+			Log.info( getClass(), "Received a command: %s", commandStr);
+			Log.warning( getClass(), "Command is currently not known. This command will be added to CommProtocol.");
+			Ctrl.Command protocolEntry = new Ctrl.Command(commandStr);
+			Ctrl.commprotocol.put(commandStr, protocolEntry);
+			tableModel.rebuildRows();
+			return null;
+		}
+		Log.info( getClass(), "Received a command: \"%s\" %s", command.protocolEntry.name, commandStr);
+		if (command.selectedResponse==null) {
+			Log.error( getClass(), "No response selected for this command.");
+			return null;
+		}
+		
+		String response = command.selectedResponse.protocolEntry.xml;
+		Log.info( getClass(), "Response: %s", response);
+		return response;
+	}
+
+	@Override
+	public String getContentFromURL(String urlStr, boolean verbose) {
+		if (urlStr==null) return null;
+		if (urlStr.startsWith("http://") && urlStr.endsWith("/YamahaRemoteControl/desc.xml")) {
+			InputStream inputStream = getClass().getResourceAsStream("/RX-V475 - desc.xml.xml");
+			if (inputStream==null) return null;
+			try (BufferedReader input = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8));) {
+				if (verbose) System.out.println("Read content of \"desc.xml\" from file \"RX-V475 - desc.xml.xml\" ...");
+				char[] chars = new char[100000];
+				int n; StringBuilder sb = new StringBuilder();
+				while ( (n=input.read(chars))!=-1 ) sb.append(chars, 0, n);
+				if (verbose) System.out.println("done");
+				return sb.toString();
+			} catch (IOException e) {
+				if (verbose) System.out.println("error occured");
+			}
+		}
+		return null;
+	}
+
+	public void openWindow() {
+		behaviours = Behaviour.readFromFile();
 		
 		tableModel = new ResponseTableModel();
 		JTable table = new JTable(tableModel);
@@ -77,11 +128,11 @@ public class Responder extends Ctrl.HttpInterface {
 		
 		contextMenu = new ContextMenuHandler();
 		contextMenu.add(ContextMenuItemType.GeneralFunction, "Copy XML", e->{ if (contextMenu.clickedRow!=null) YamahaControl.copyToClipBoard(contextMenu.clickedRow.protocolEntry.xml); });
-		contextMenu.add(ContextMenuItemType.GeneralFunction, "Paste here as New Command", e->pasteAsCommand());
-		contextMenu.add(ContextMenuItemType.GeneralFunction, "Paste here as New Response", e->pasteAsResponse());
+		contextMenu.add(ContextMenuItemType.GeneralFunction, "Paste as New Command", e->pasteAsCommand());
+		contextMenu.add(ContextMenuItemType.GeneralFunction, "Paste as New Response", e->pasteAsResponse());
 		contextMenu.addSeparator();
 		contextMenu.add(ContextMenuItemType.ReponseFunction, "Set as Default Response", e->{});
-		contextMenu.add(ContextMenuItemType.CommandFunction, "Set as Default Response", e->{});
+		contextMenu.add(ContextMenuItemType.ReponseFunction, "Add Action", e->{});
 		
 		JTextArea textArea = new JTextArea();
 		textArea.setEditable(false);
@@ -107,12 +158,16 @@ public class Responder extends Ctrl.HttpInterface {
 			setScrollPos(textScrollPane.getVerticalScrollBar(),pos);
 		});
 		
+		JPanel buttonPanel = new JPanel(new GridLayout(1,0,3,3));
+		buttonPanel.add(YamahaControl.createButton("Write CommProtocol to File",e->Ctrl.writeCommProtocolToFile(),true));
+		buttonPanel.add(YamahaControl.createButton("Write Behaviours to File",e->Behaviour.writeToFile(behaviours),true));
+		
 		JPanel eastPanel = new JPanel(new BorderLayout(3,3));
-		eastPanel.add(YamahaControl.createButton("Write CommProtocol to File",e->Ctrl.writeCommProtocolToFile(),true),BorderLayout.NORTH);
+		eastPanel.add(buttonPanel,BorderLayout.NORTH);
 		eastPanel.add(textScrollPane,BorderLayout.CENTER);
 		
 		JSplitPane contentPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT,true,tableScrollPane,eastPanel);
-		contentPane.setBorder(BorderFactory.createEmptyBorder(3, 3, 3, 3));
+		contentPane.setBorder(BorderFactory.createEmptyBorder(3,3,3,3));
 		
 		mainWindow = new StandardMainWindow("ResponseDummy");
 		mainWindow.startGUI(contentPane);
@@ -147,7 +202,6 @@ public class Responder extends Ctrl.HttpInterface {
 		GeneralFunction(row->true),
 		ReponseFunction(row->row.isResponse()),
 		CommandFunction(row->row.isCommand());
-		
 		private Predicate<TableEntry> checkClickedRow;
 		ContextMenuItemType( Predicate<TableEntry> checkClickedRow ) {
 			this.checkClickedRow = checkClickedRow;
@@ -205,55 +259,83 @@ public class Responder extends Ctrl.HttpInterface {
 		int ext = scrollBar.getVisibleAmount();
 		SwingUtilities.invokeLater(()->scrollBar.setValue(Math.round(pos*(max-ext-min)+min)));
 	}
+	
+	private static class Behaviour {
+		
+		private static final String BEHAVIOURS_FILENAME = "YamahaControl.Behaviours.ini";
 
-	@Override
-	public String sendCommand(String address, String commandStr, boolean verbose) {
-		TableEntry.Command command = tableModel.commands.get(commandStr);
-		if (command==null) {
-			Log.info( getClass(), "Received a command: %s", commandStr);
-			Log.warning( getClass(), "Command is currently not known. This command will be added to CommProtocol.");
-			Ctrl.Command protocolEntry = new Ctrl.Command(commandStr);
-			Ctrl.commprotocol.put(commandStr, protocolEntry);
-			tableModel.rebuildRows();
-			return null;
-		}
-		Log.info( getClass(), "Received a command: \"%s\" %s", command.protocolEntry.name, commandStr);
-		if (command.selectedResponse==null) {
-			Log.error( getClass(), "No response selected for this command.");
-			return null;
+		public static Vector<Behaviour> readFromFile() {
+			Vector<Behaviour> behaviours = new Vector<>();
+			try (BufferedReader in = new BufferedReader( new InputStreamReader( new FileInputStream(BEHAVIOURS_FILENAME), StandardCharsets.UTF_8) )) {
+				String line;
+				while ( (line=in.readLine())!=null ) {
+					if (line.startsWith("command=")) {
+					}
+					if (line.startsWith("response=")) {
+					}
+					if (line.startsWith("name=")) {
+					}
+				}
+			}
+			catch (FileNotFoundException e) {}
+			catch (IOException e) {
+				e.printStackTrace();
+			}
+			return behaviours;
 		}
 		
-		String response = command.selectedResponse.protocolEntry.xml;
-		Log.info( getClass(), "Response: %s", response);
-		return response;
-	}
-
-	@Override
-	public String getContentFromURL(String urlStr, boolean verbose) {
-		if (urlStr==null) return null;
-		if (urlStr.startsWith("http://") && urlStr.endsWith("/YamahaRemoteControl/desc.xml")) {
-			InputStream inputStream = getClass().getResourceAsStream("/RX-V475 - desc.xml.xml");
-			if (inputStream==null) return null;
-			try (BufferedReader input = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8));) {
-				if (verbose) System.out.println("Read content of \"desc.xml\" from file \"RX-V475 - desc.xml.xml\" ...");
-				char[] chars = new char[100000];
-				int n; StringBuilder sb = new StringBuilder();
-				while ( (n=input.read(chars))!=-1 ) sb.append(chars, 0, n);
-				if (verbose) System.out.println("done");
-				return sb.toString();
-			} catch (IOException e) {
-				if (verbose) System.out.println("error occured");
+		public static void writeToFile(Vector<Behaviour> behaviours) {
+			try (PrintWriter out = new PrintWriter( new OutputStreamWriter( new FileOutputStream(BEHAVIOURS_FILENAME), StandardCharsets.UTF_8) )) {
+				for (Behaviour b:behaviours) {
+					
+				}
+			} catch (FileNotFoundException e) {
+				e.printStackTrace();
 			}
 		}
-		return null;
+		
+		public static class CommandResponse {
+			String commandXML;
+			String responseXML;
+			public CommandResponse(String commandXML, String responseXML) {
+				this.commandXML = commandXML;
+				this.responseXML = responseXML;
+			}
+			public CommandResponse(ResponseTableModel.TableEntry.Response response) {
+				this(response.command.protocolEntry.xml,response.protocolEntry.xml);
+			}
+			void set(ResponseTableModel.TableEntry.Response response) {
+				this.commandXML = response.command.protocolEntry.xml;
+				this.responseXML = response.protocolEntry.xml;
+			}
+		}
+		
+		public static class IsDefault extends Behaviour {
+			CommandResponse defaultResponse;
+			IsDefault() {
+				defaultResponse = new CommandResponse(null,null);
+			}
+		}
+		
+		public static class SelectionChangeAction extends Behaviour {
+			CommandResponse wasSelected;
+			CommandResponse willBeSelected;
+			CommandResponse event;
+			SelectionChangeAction() {
+				wasSelected = new CommandResponse(null,null);
+				willBeSelected = new CommandResponse(null,null);
+				event = new CommandResponse(null,null);
+			}
+		}
 	}
-
+	
 	public static class ResponseTableModel extends Tables.SimplifiedTableModel<ResponseTableModel.ColumnID> implements TableCellRenderer {
 		
 		private enum ColumnID implements Tables.SimplifiedColumnIDInterface {
-			Name  ("Name",String .class,-1,-1,200,200),
-			Select("#"   ,Boolean.class,-1,-1, 20, 20),
-			XML   ("XML" ,String .class,-1,-1,630,630);
+			Name     ("Name"     ,String .class,-1,-1,200,200),
+			Select   ("#"        ,Boolean.class,-1,-1, 20, 20),
+			Behaviour("Behaviour",String .class,-1,-1, 50, 50),
+			XML      ("XML"      ,String .class,-1,-1,630,630);
 			
 			private SimplifiedColumnConfig cfg;
 			ColumnID(String name, Class<?> columnClass, int minWidth, int maxWidth, int prefWidth, int currentWidth) {
@@ -274,8 +356,8 @@ public class Responder extends Ctrl.HttpInterface {
 			commands = new HashMap<>();
 			rows = TableEntry.createEntries(commands);
 			rendererLabel = new Tables.LabelRendererComponent();
-			rendererCheckBox = new Tables.CheckBoxRendererComponent();
 			rendererLabel.setOpaque(true);
+			rendererCheckBox = new Tables.CheckBoxRendererComponent();
 			rendererCheckBox.setOpaque(true);
 			rendererCheckBox.setHorizontalAlignment(Tables.CheckBoxRendererComponent.CENTER);
 		}
@@ -299,9 +381,10 @@ public class Responder extends Ctrl.HttpInterface {
 		@Override
 		protected boolean isCellEditable(int rowIndex, int columnIndex, ColumnID columnID) {
 			switch (columnID) {
-			case Name  : return true;
-			case XML   : return false;
-			case Select: return rows.get(rowIndex).isResponse();
+			case Name     : return true;
+			case XML      : return false;
+			case Behaviour: return false;
+			case Select   : return rows.get(rowIndex).isResponse();
 			}
 			return false;
 		}
@@ -310,9 +393,10 @@ public class Responder extends Ctrl.HttpInterface {
 		protected void setValueAt(Object aValue, int rowIndex, int columnIndex, ColumnID columnID) {
 			TableEntry row = rows.get(rowIndex);
 			switch (columnID) {
-			case Name  : row.protocolEntry.name = (String)aValue; break;
-			case XML   : break;
-			case Select: if (row.isResponse()) row.asResponse().select(); fireTableColumnUpdate(columnIndex); table.repaint(); break;
+			case Name     : row.protocolEntry.name = (String)aValue; break;
+			case XML      : break;
+			case Behaviour: break;
+			case Select   : if (row.isResponse()) row.asResponse().select(); fireTableColumnUpdate(columnIndex); table.repaint(); break;
 			}
 		}
 
@@ -320,9 +404,10 @@ public class Responder extends Ctrl.HttpInterface {
 		public Object getValueAt(int rowIndex, int columnIndex, ColumnID columnID) {
 			TableEntry row = rows.get(rowIndex);
 			switch (columnID) {
-			case Name  : return row.protocolEntry.name;
-			case XML   : return (row.isCommand()?"Command: ":"Response: ")+row.protocolEntry.xml;
-			case Select: return row.isResponse()?row.asResponse().isSelected:null;
+			case Name     : return row.protocolEntry.name;
+			case XML      : return (row.isCommand()?"Command: ":"Response: ")+row.protocolEntry.xml;
+			case Behaviour: return ""; // TODO
+			case Select   : return row.isResponse()?row.asResponse().isSelected:null;
 			}
 			return null;
 		}

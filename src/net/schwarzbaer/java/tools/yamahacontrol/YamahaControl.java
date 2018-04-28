@@ -74,7 +74,7 @@ public class YamahaControl {
 		
 		Config.readConfig();
 		Ctrl.readCommProtocolFromFile();
-		new Responder().createGUI();
+		new Responder().openWindow();
 		
 		YamahaControl yamahaControl = new YamahaControl();
 		yamahaControl.createGUI();
