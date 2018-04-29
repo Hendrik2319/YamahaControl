@@ -8,12 +8,15 @@ import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
+import java.awt.RenderingHints;
 import java.awt.Toolkit;
 import java.awt.datatransfer.Clipboard;
 import java.awt.datatransfer.DataFlavor;
 import java.awt.datatransfer.Transferable;
 import java.awt.datatransfer.UnsupportedFlavorException;
 import java.awt.event.ActionListener;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.PrintStream;
@@ -74,7 +77,7 @@ public class YamahaControl {
 		
 		Config.readConfig();
 		Ctrl.readCommProtocolFromFile();
-		new Responder().openWindow();
+//		new Responder().openWindow();
 		
 		YamahaControl yamahaControl = new YamahaControl();
 		yamahaControl.createGUI();
@@ -147,12 +150,14 @@ public class YamahaControl {
 		scenesInputsPanel.setPreferredSize(new Dimension(250, 400));
 		
 		mainGui.createVolumeControl(200);
-		mainGui.volumeControl.setBorder(BorderFactory.createTitledBorder("Volume"));
+		JPanel volumePanel = new JPanel(new BorderLayout());
+		volumePanel.setBorder(BorderFactory.createTitledBorder("Volume"));
+		volumePanel.add( mainGui.volumeControl, BorderLayout.CENTER );
 		
 		JPanel mainControlPanel = new JPanel(new BorderLayout(3,3));
 		mainControlPanel.add(devicePanel,BorderLayout.NORTH);
 		mainControlPanel.add(scenesInputsPanel,BorderLayout.CENTER);
-		mainControlPanel.add(mainGui.volumeControl,BorderLayout.SOUTH);
+		mainControlPanel.add(volumePanel,BorderLayout.SOUTH);
 		
 		JTabbedPane subUnitPanel = new JTabbedPane();
 		
@@ -351,7 +356,7 @@ public class YamahaControl {
 		}
 
 		public void createVolumeControl(int width) {
-			volumeControl = new VolumeControl(width);
+			volumeControl = new VolumeControl(width, 4.0, -90);
 		}
 
 		public void createOnOffBtn() {
@@ -421,16 +426,99 @@ public class YamahaControl {
 	
 	private static class VolumeControl extends Canvas {
 		private static final long serialVersionUID = -5870265710270984615L;
+		private double angle;
+		private int radius;
+		private double mouseAngle;
+		private double zeroAngle;
+		private double value;
+		private double deltaPerFullCircle;
+		protected boolean isAdjusting;
 		
-		VolumeControl(int width) {
+		VolumeControl(int width, double deltaPerFullCircle, double zeroAngle_deg) {
 			super(width, width);
+			this.deltaPerFullCircle = deltaPerFullCircle;
+			zeroAngle = zeroAngle_deg/180*Math.PI;
 			
+			radius = width/2-10;
+			angle = 0.0;
+			mouseAngle = 0.0;
+			
+			MouseAdapter mouseAdapter = new MouseAdapter() {
+
+				private double pickAngle = Double.NaN;
+
+				@Override
+				public void mousePressed(MouseEvent e) {
+					int x = e.getX()-VolumeControl.this.width/2;
+					int y = e.getY()-VolumeControl.this.height/2;
+					mouseAngle = Math.atan2(y,x);
+					pickAngle = mouseAngle-angle;
+					isAdjusting = true;
+//					System.out.printf("pickAngle: %f%n",pickAngle);
+				}
+
+				@Override
+				public void mouseReleased(MouseEvent e) {
+					pickAngle = Double.NaN;
+					isAdjusting = false;
+//					System.out.printf("pickAngle: %f%n",pickAngle);
+				}
+
+				@Override
+				public void mouseDragged(MouseEvent e) {
+					int x = e.getX()-VolumeControl.this.width/2;
+					int y = e.getY()-VolumeControl.this.height/2;
+					mouseAngle = Math.atan2(y,x);
+					double diff = mouseAngle-pickAngle-angle;
+					if      (Math.abs(diff) > Math.abs(diff+2*Math.PI)) pickAngle -= 2*Math.PI;
+					else if (Math.abs(diff) > Math.abs(diff-2*Math.PI)) pickAngle += 2*Math.PI;
+					angle = mouseAngle-pickAngle;
+					value = angle/2/Math.PI*deltaPerFullCircle;
+//					System.out.printf("angle: %f%n",angle);
+					VolumeControl.this.repaint();
+				}
+				
+			};
+			addMouseListener(mouseAdapter);
+			addMouseMotionListener(mouseAdapter);
+		}
+		
+		public void setValue(double value) {
+			this.value = value;
+			this.angle = value*2*Math.PI/deltaPerFullCircle;
 		}
 		
 		@Override
 		protected void paintCanvas(Graphics g, int width, int height) {
-			// TODO Auto-generated method stub
-	
+			if (g instanceof Graphics2D) {
+				Graphics2D g2 = (Graphics2D)g;
+				g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+			}
+			g.setColor(Color.BLACK);
+//			g.drawOval(0, 0, radius*2, radius*2);
+			g.drawOval(width/2-radius, height/2-radius, radius*2, radius*2);
+			
+			drawRadius(g, width, height, 1.0, 0.3, 0.0);
+			double angle01 = 0.1*2*Math.PI/deltaPerFullCircle;
+			int i=1;
+			for (double a=angle01; a<Math.PI*1.05; a+=angle01, ++i) {
+				double r2 = (i%10)==0?0.7:(i%5)==0?0.85:0.95;
+				drawRadius(g, width, height, 1.0, r2, +a);
+				if (a<=Math.PI*0.95) drawRadius(g, width, height, 1.0, r2, -a);
+			}
+			
+			g.drawString(String.format(Locale.ENGLISH, "%1.1f", value), width/2, height/2);
+			//g.drawString(String.format(Locale.ENGLISH, "%6.1f", angle/Math.PI*180), width/2, height/2+15);
+		}
+
+		private void drawRadius(Graphics g, int width, int height, double r1, double r2, double deltaAngle) {
+			double cos = radius*Math.cos(angle+zeroAngle+deltaAngle);
+			double sin = radius*Math.sin(angle+zeroAngle+deltaAngle);
+			int x1 = width /2 + (int)Math.round(cos*r1);
+			int y1 = height/2 + (int)Math.round(sin*r1);
+			int x2 = width /2 + (int)Math.round(cos*r2);
+			int y2 = height/2 + (int)Math.round(sin*r2);
+			g.drawLine(x1, y1, x2, y2);
 		}
 	
 	}

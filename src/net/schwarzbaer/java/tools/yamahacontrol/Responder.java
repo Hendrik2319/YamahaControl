@@ -126,12 +126,12 @@ public class Responder extends Ctrl.HttpInterface {
 		tableModel.setTable(table);
 		tableModel.setColumnWidths(table);
 		
-		contextMenu = new ContextMenuHandler();
+		contextMenu = new ContextMenuHandler(tableModel);
 		contextMenu.add(ContextMenuItemType.GeneralFunction, "Copy XML", e->{ if (contextMenu.clickedRow!=null) YamahaControl.copyToClipBoard(contextMenu.clickedRow.protocolEntry.xml); });
 		contextMenu.add(ContextMenuItemType.GeneralFunction, "Paste as New Command", e->pasteAsCommand());
 		contextMenu.add(ContextMenuItemType.GeneralFunction, "Paste as New Response", e->pasteAsResponse());
 		contextMenu.addSeparator();
-		contextMenu.add(ContextMenuItemType.ReponseFunction, "Set as Default Response", e->{});
+		contextMenu.add(ContextMenuItemType.ReponseFunction, "Set as Default Response", e->setAsDefaultResponse());
 		contextMenu.add(ContextMenuItemType.ReponseFunction, "Add Action", e->{});
 		
 		JTextArea textArea = new JTextArea();
@@ -173,6 +173,21 @@ public class Responder extends Ctrl.HttpInterface {
 		mainWindow.startGUI(contentPane);
 	}
 	
+	private float getScrollPos(JScrollBar scrollBar) {
+		int min = scrollBar.getMinimum();
+		int max = scrollBar.getMaximum();
+		int ext = scrollBar.getVisibleAmount();
+		int val = scrollBar.getValue();
+		return (val-min)/((float)max-ext-min);
+	}
+
+	private void setScrollPos(JScrollBar scrollBar, float pos) {
+		int min = scrollBar.getMinimum();
+		int max = scrollBar.getMaximum();
+		int ext = scrollBar.getVisibleAmount();
+		SwingUtilities.invokeLater(()->scrollBar.setValue(Math.round(pos*(max-ext-min)+min)));
+	}
+
 	private void pasteAsResponse() {
 		if (contextMenu.clickedRow==null) return;
 		
@@ -198,6 +213,18 @@ public class Responder extends Ctrl.HttpInterface {
 		tableModel.rebuildRows();
 	}
 	
+	private void setAsDefaultResponse() {
+//		if (contextMenu.clickedRow==null) return;
+//		if (contextMenu.clickedRow.isCommand()) return;
+//		
+//		TableEntry.Response response = contextMenu.clickedRow.asResponse();
+//		Behaviour behaviour = new Behaviour.IsDefault(response);
+//		response.
+//		behaviours.add(behaviour);
+//		
+//		// TODO Auto-generated method stub
+	}
+
 	private enum ContextMenuItemType {
 		GeneralFunction(row->true),
 		ReponseFunction(row->row.isResponse()),
@@ -208,13 +235,15 @@ public class Responder extends Ctrl.HttpInterface {
 		}
 	}
 
-	private class ContextMenuHandler {
+	private static class ContextMenuHandler {
 		
 		private JPopupMenu contextMenu;
 		private TableEntry clickedRow;
 		private Disabler<ContextMenuItemType> disabler;
+		private ResponseTableModel tableModel;
 
-		ContextMenuHandler() {
+		ContextMenuHandler(ResponseTableModel tableModel) {
+			this.tableModel = tableModel;
 			contextMenu = new JPopupMenu();
 			clickedRow = null;
 			disabler = new Disabler<>();
@@ -245,21 +274,6 @@ public class Responder extends Ctrl.HttpInterface {
 		}
 	}
 
-	private float getScrollPos(JScrollBar scrollBar) {
-		int min = scrollBar.getMinimum();
-		int max = scrollBar.getMaximum();
-		int ext = scrollBar.getVisibleAmount();
-		int val = scrollBar.getValue();
-		return (val-min)/((float)max-ext-min);
-	}
-
-	private void setScrollPos(JScrollBar scrollBar, float pos) {
-		int min = scrollBar.getMinimum();
-		int max = scrollBar.getMaximum();
-		int ext = scrollBar.getVisibleAmount();
-		SwingUtilities.invokeLater(()->scrollBar.setValue(Math.round(pos*(max-ext-min)+min)));
-	}
-	
 	private static class Behaviour {
 		
 		private static final String BEHAVIOURS_FILENAME = "YamahaControl.Behaviours.ini";
@@ -312,8 +326,11 @@ public class Responder extends Ctrl.HttpInterface {
 		
 		public static class IsDefault extends Behaviour {
 			CommandResponse defaultResponse;
-			IsDefault() {
+			public IsDefault() {
 				defaultResponse = new CommandResponse(null,null);
+			}
+			public IsDefault(ResponseTableModel.TableEntry.Response response) {
+				defaultResponse = new CommandResponse(response);
 			}
 		}
 		
@@ -321,7 +338,7 @@ public class Responder extends Ctrl.HttpInterface {
 			CommandResponse wasSelected;
 			CommandResponse willBeSelected;
 			CommandResponse event;
-			SelectionChangeAction() {
+			public SelectionChangeAction() {
 				wasSelected = new CommandResponse(null,null);
 				willBeSelected = new CommandResponse(null,null);
 				event = new CommandResponse(null,null);
@@ -453,8 +470,11 @@ public class Responder extends Ctrl.HttpInterface {
 		public static class TableEntry {
 			
 			Ctrl.ProtocolEntry protocolEntry;
+			Vector<Behaviour> behaviours;
+			
 			public TableEntry(Ctrl.ProtocolEntry protocolEntry) {
 				this.protocolEntry = protocolEntry;
+				this.behaviours = new Vector<>();
 			}
 		
 			public boolean isCommand () { return this instanceof Command; }
