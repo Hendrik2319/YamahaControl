@@ -1,5 +1,6 @@
 package net.schwarzbaer.java.tools.yamahacontrol;
 
+import java.awt.BasicStroke;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
@@ -115,7 +116,7 @@ public class YamahaControl {
 //		Ctrl.testCommand("192.168.2.34","<YAMAHA_AV cmd=\"GET\"><NET_RADIO><Config>GetParam</Config></NET_RADIO></YAMAHA_AV>");
 	}
 
-	private enum SmallImages { IconOn, IconOff }
+	private enum SmallImages { IconOn, IconOff, IconUnknown }
 	private EnumMap<SmallImages,Icon> smallImages;
 	private StandardMainWindow mainWindow;
 	private Device device;
@@ -194,8 +195,9 @@ public class YamahaControl {
 	private void createSmallImages() {
 		for (SmallImages id:SmallImages.values()) {
 			switch (id) {
-			case IconOff: smallImages.put(id, ImageToolbox.createIcon_Circle(16,12,10,Color.BLACK,Color.GREEN.darker())); break;
-			case IconOn : smallImages.put(id, ImageToolbox.createIcon_Circle(16,12,10,Color.BLACK,Color.GREEN)); break;
+			case IconOff    : smallImages.put(id, ImageToolbox.createIcon_Circle(16,12,10,Color.BLACK,Color.GREEN.darker())); break;
+			case IconOn     : smallImages.put(id, ImageToolbox.createIcon_Circle(16,12,10,Color.BLACK,Color.GREEN)); break;
+			case IconUnknown: smallImages.put(id, ImageToolbox.createIcon_Circle(16,12,10,Color.BLACK,Color.GRAY)); break;
 			}
 		}
 	}
@@ -356,7 +358,7 @@ public class YamahaControl {
 		}
 
 		public void createVolumeControl(int width) {
-			volumeControl = new VolumeControl(width, 4.0, -90);
+			volumeControl = new VolumeControl(width, 3.0, -90);
 		}
 
 		public void createOnOffBtn() {
@@ -364,9 +366,9 @@ public class YamahaControl {
 			setOnOffButton(false);
 		}
 
-		private void setOnOffButton(boolean isOn) {
-			onoffBtn.setIcon(smallImages.get(isOn?SmallImages.IconOn:SmallImages.IconOff));
-			onoffBtn.setText(isOn?"On":"Off");
+		private void setOnOffButton(Boolean isOn) {
+			onoffBtn.setIcon(smallImages.get(isOn==null?SmallImages.IconUnknown:isOn?SmallImages.IconOn:SmallImages.IconOff));
+			onoffBtn.setText(isOn==null?"??":isOn?"On":"Off");
 		}
 
 		private void toggleOnOff() {
@@ -439,7 +441,7 @@ public class YamahaControl {
 			this.deltaPerFullCircle = deltaPerFullCircle;
 			zeroAngle = zeroAngle_deg/180*Math.PI;
 			
-			radius = width/2-10;
+			radius = width/2-20;
 			angle = 0.0;
 			mouseAngle = 0.0;
 			
@@ -486,34 +488,49 @@ public class YamahaControl {
 		public void setValue(double value) {
 			this.value = value;
 			this.angle = value*2*Math.PI/deltaPerFullCircle;
+			repaint();
 		}
 		
 		@Override
 		protected void paintCanvas(Graphics g, int width, int height) {
-			if (g instanceof Graphics2D) {
-				Graphics2D g2 = (Graphics2D)g;
-				g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+			Graphics2D g2 = (g instanceof Graphics2D)?(Graphics2D)g:null;
+			if (g2!=null) g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+			
+			double angle01 = 0.1*2*Math.PI/deltaPerFullCircle;
+			
+			double r1 = 0.95; int i=1;
+			drawRadiusLine(g, width, height, r1, 1.3, zeroAngle);
+			for (double a=angle01; a<Math.PI*0.9; a+=angle01, ++i) {
+				double r2 = (i%10)==0?1.3:(i%5)==0?1.15:1.05;
+				drawRadiusLine(g, width, height, r1, r2, zeroAngle+a);
+				drawRadiusLine(g, width, height, r1, r2, zeroAngle-a);
 			}
+			
+			g.setColor(Color.WHITE);
+			g.fillOval(width/2-radius, height/2-radius, radius*2, radius*2);
+			
 			g.setColor(Color.BLACK);
 //			g.drawOval(0, 0, radius*2, radius*2);
 			g.drawOval(width/2-radius, height/2-radius, radius*2, radius*2);
 			
-			drawRadius(g, width, height, 1.0, 0.3, 0.0);
-			double angle01 = 0.1*2*Math.PI/deltaPerFullCircle;
-			int i=1;
+			i=1;
+			if (g2!=null) g2.setStroke( new BasicStroke(5,BasicStroke.CAP_ROUND,BasicStroke.JOIN_ROUND) );
+			drawRadiusLine(g, width, height, 0.96, 0.7, angle+zeroAngle);
+			if (g2!=null) g2.setStroke(new BasicStroke(1));
 			for (double a=angle01; a<Math.PI*1.05; a+=angle01, ++i) {
 				double r2 = (i%10)==0?0.7:(i%5)==0?0.85:0.95;
-				drawRadius(g, width, height, 1.0, r2, +a);
-				if (a<=Math.PI*0.95) drawRadius(g, width, height, 1.0, r2, -a);
+				drawRadiusLine(g, width, height, 1.0, r2, angle+zeroAngle+a);
+				if (a<=Math.PI*0.95) drawRadiusLine(g, width, height, 1.0, r2, angle+zeroAngle-a);
 			}
+			
 			
 			g.drawString(String.format(Locale.ENGLISH, "%1.1f", value), width/2, height/2);
 			//g.drawString(String.format(Locale.ENGLISH, "%6.1f", angle/Math.PI*180), width/2, height/2+15);
 		}
 
-		private void drawRadius(Graphics g, int width, int height, double r1, double r2, double deltaAngle) {
-			double cos = radius*Math.cos(angle+zeroAngle+deltaAngle);
-			double sin = radius*Math.sin(angle+zeroAngle+deltaAngle);
+		private void drawRadiusLine(Graphics g, int width, int height, double r1, double r2, double angle) {
+			double cos = radius*Math.cos(angle);
+			double sin = radius*Math.sin(angle);
 			int x1 = width /2 + (int)Math.round(cos*r1);
 			int y1 = height/2 + (int)Math.round(sin*r1);
 			int x2 = width /2 + (int)Math.round(cos*r2);
@@ -522,11 +539,47 @@ public class YamahaControl {
 		}
 	
 	}
+	
+	enum KnownCommand {
+		GetSceneItems("Main_Zone,Scene,Scene_Sel_Item"),
+		GetInputItems("Main_Zone,Input,Input_Sel_Item"),
+		GetNSetSystemPower("System,Power_Control,Power"),
+		SetCurrentScene("Main_Zone,Scene,Scene_Sel"),
+		SetCurrentInput("Main_Zone,Input,Input_Sel"),
+		GetBasicStatus("Main_Zone,Basic_Status")
+		;
+		
+		final TagList tagList;
+		KnownCommand(String tagListStr) { tagList = new TagList(tagListStr); }
+	}
+	
+	private static interface Value {
+		public String getLabel();
+		
+		public enum OnOff implements Value { On, Off; @Override public String getLabel() { return toString(); }  } 
+		public enum PowerState implements Value { On, Standby; @Override public String getLabel() { return toString(); }  } 
+		public enum SleepState implements Value {
+			_120min("120 min"),_90min("90 min"),_60min("60 min"),_30min("30 min"),Off("Off");
+			private String label;
+			SleepState(String label) { this.label = label; }
+			@Override public String getLabel() { return label; }  } 
+	}
+	
+	private static class NumberWithUnit {
+		float number;
+		String unit;
+		public NumberWithUnit(String val, String exp, String unit) {
+			
+			this.number = number;
+			this.unit = unit;
+		}
+	}
 
 	private static final class Device {
-
+		
 		private String address;
-		private boolean isOn;
+		private BasicStatus basicStatus;
+		private Boolean isOn;
 		private DeviceSceneInput[] scenes;
 		private DeviceSceneInput[] inputs;
 		private DeviceSceneInput currentScene;
@@ -534,7 +587,8 @@ public class YamahaControl {
 		
 		Device(String address) {
 			this.address = address;
-			this.isOn = false;
+			this.basicStatus = null;
+			this.isOn = null;
 			this.scenes = null;
 			this.inputs = null;
 			this.currentScene = null;
@@ -542,22 +596,81 @@ public class YamahaControl {
 		}
 
 		public void updateConfig() {
-			String value = Ctrl.sendGetCommand_String(address,new TagList("System,Power_Control,Power"));
-			isOn = "On".equals(value);
+			isOn = askOn();
+			scenes = getSceneInput(KnownCommand.GetSceneItems); // G4: Main_Zone,Scene,Scene_Sel_Item
+			inputs = getSceneInput(KnownCommand.GetInputItems); // G2: Main_Zone,Input,Input_Sel_Item
+			updateBasicStatus();
+		}
+		
+		public void updateBasicStatus() {
+			Node node = Ctrl.sendGetCommand_Node(address,KnownCommand.GetBasicStatus);
+			this.basicStatus = BasicStatus.parseNode(node);
+		}
+		
+		private static <T extends Value> T getSubValue(Node node, T[] values, String... tagList) {
+			Vector<Node> nodes = XML.getSubNodes(node, tagList);
+			if (nodes.isEmpty()) return null;
 			
-			scenes = getSceneInput(new TagList("Main_Zone,Scene,Scene_Sel_Item")); // G4: Main_Zone,Scene,Scene_Sel_Item
-			inputs = getSceneInput(new TagList("Main_Zone,Input,Input_Sel_Item")); // G2: Main_Zone,Input,Input_Sel_Item
+			String str = XML.getContentOfSingleChildTextNode(nodes.get(0));
+			if (str==null) return null;
 			
-			// TODO Auto-generated method stub
+			for (T val:values)
+				if (str.equals(val.getLabel()))
+					return val;
+			
+			return null;
 		}
 
-		public boolean isOn() { return isOn; }
+		public static Object getNumberWithUnit(Node value, String string) {
+			// TODO Auto-generated method stub
+			return null;
+		}
+
+		private static class BasicStatus {
+
+			private Value.PowerState power;
+			private Value.SleepState sleep;
+
+			public static BasicStatus parseNode(Node node) {
+				BasicStatus status = new BasicStatus();
+				NodeList valueNodes = node.getChildNodes();
+				for (int i=0; i<valueNodes.getLength(); ++i) {
+					Node value = valueNodes.item(i);
+					switch (value.getNodeName()) {
+					case "Power_Control":
+						status.power = getSubValue(value,Value.PowerState.values(),"Power");
+						status.sleep = getSubValue(value,Value.SleepState.values(),"Sleep");
+						break;
+					case "Volume":
+						status.volume = getNumberWithUnit(value,"Lvl");
+						status.volMute = getSubValue(value,Value.OnOff.values(),"Mute");
+						break;
+					}
+					
+				}
+					
+					//dsiArr[i] = parseDeviceSceneInput(itemNodes.item(i));
+				// TODO Auto-generated method stub
+				return null;
+			}
+			
+		}
+
+		public Boolean isOn() { return isOn; }
 
 		public void setOn(boolean isOn) {
 			// System,Power_Control,Power = On
 			// System,Power_Control,Power = Standby
-			int rc = Ctrl.sendPutCommand(address,new TagList("System,Power_Control,Power"),isOn?"On":"Standby");
-			if (rc==Ctrl.RC_OK) this.isOn = isOn;
+			int rc = Ctrl.sendPutCommand(address,KnownCommand.GetNSetSystemPower,isOn?"On":"Standby");
+			if (rc!=Ctrl.RC_OK) return;
+			this.isOn = askOn();
+		}
+
+		private Boolean askOn() {
+			String value = Ctrl.sendGetCommand_String(address,KnownCommand.GetNSetSystemPower);
+			if ("On".equals(value)) return true;
+			if ("Standby".equals(value)) return false;
+			return null;
 		}
 
 		public DeviceSceneInput getScene() {
@@ -572,39 +685,42 @@ public class YamahaControl {
 
 		public void setScene(DeviceSceneInput dsi) {
 			// PUT[P6]:    Main_Zone,Scene,Scene_Sel   =   Values [GET[G4]:Main_Zone,Scene,Scene_Sel_Item]
-			int rc = Ctrl.sendPutCommand(address,new TagList("Main_Zone,Scene,Scene_Sel"),dsi.ID);
+			int rc = Ctrl.sendPutCommand(address,KnownCommand.SetCurrentScene,dsi.ID);
 			if (rc==Ctrl.RC_OK) currentScene = dsi;
 		}
 
 		public void setInput(DeviceSceneInput dsi) {
 			// PUT[P4]:    Main_Zone,Input,Input_Sel   =   Values [GET[G2]:Main_Zone,Input,Input_Sel_Item]
-			int rc = Ctrl.sendPutCommand(address,new TagList("Main_Zone,Input,Input_Sel"),dsi.ID);
+			int rc = Ctrl.sendPutCommand(address,KnownCommand.SetCurrentInput,dsi.ID);
 			if (rc==Ctrl.RC_OK) currentInput = dsi;
 		}
 
 		public DeviceSceneInput[] getInputs() { return inputs; }
 		public DeviceSceneInput[] getScenes() { return scenes; }
 
-		private DeviceSceneInput[] getSceneInput(TagList tagList) {
-			Node node = Ctrl.sendGetCommand_Node(address,tagList);
+		private DeviceSceneInput[] getSceneInput(KnownCommand knownCommand) {
+			Node node = Ctrl.sendGetCommand_Node(address,knownCommand);
 			if (node == null) return null;
 			
 			NodeList itemNodes = node.getChildNodes();
-			DeviceSceneInput[] dsi = new DeviceSceneInput[itemNodes.getLength()];
-			for (int i=0; i<itemNodes.getLength(); ++i) {
-				Node item = itemNodes.item(i);
-				dsi[i] = new DeviceSceneInput();
-				NodeList valueNodes = item.getChildNodes();
-				for (int v=0; v<valueNodes.getLength(); ++v) {
-					Node value = valueNodes.item(v);
-					String valueStr = XML.getContentOfSingleChildTextNode(value);
-					switch (value.getNodeName()) {
-					case "Param"     : dsi[i].ID        = valueStr; break;
-					case "RW"        : dsi[i].rw        = valueStr; break;
-					case "Title"     : dsi[i].title     = valueStr; break;
-					case "Src_Name"  : dsi[i].srcName   = valueStr; break;
-					case "Src_Number": dsi[i].srcNumber = valueStr; break;
-					}
+			DeviceSceneInput[] dsiArr = new DeviceSceneInput[itemNodes.getLength()];
+			for (int i=0; i<itemNodes.getLength(); ++i)
+				dsiArr[i] = parseDeviceSceneInput(itemNodes.item(i));
+			return dsiArr;
+		}
+
+		private DeviceSceneInput parseDeviceSceneInput(Node item) {
+			DeviceSceneInput dsi = new DeviceSceneInput();
+			NodeList valueNodes = item.getChildNodes();
+			for (int v=0; v<valueNodes.getLength(); ++v) {
+				Node value = valueNodes.item(v);
+				String valueStr = XML.getContentOfSingleChildTextNode(value);
+				switch (value.getNodeName()) {
+				case "Param"     : dsi.ID        = valueStr; break;
+				case "RW"        : dsi.rw        = valueStr; break;
+				case "Title"     : dsi.title     = valueStr; break;
+				case "Src_Name"  : dsi.srcName   = valueStr; break;
+				case "Src_Number": dsi.srcNumber = valueStr; break;
 				}
 			}
 			return dsi;

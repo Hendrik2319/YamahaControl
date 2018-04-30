@@ -28,6 +28,7 @@ import org.w3c.dom.Document;
 import org.w3c.dom.Node;
 
 import net.schwarzbaer.java.tools.yamahacontrol.XML.TagList;
+import net.schwarzbaer.java.tools.yamahacontrol.YamahaControl.KnownCommand;
 
 final class Ctrl {
 	
@@ -145,28 +146,28 @@ final class Ctrl {
 		return document;
 	}
 	
-	static int sendPutCommand(String address, TagList tagList, String value) {
+	static int sendPutCommand(String address, KnownCommand knownCommand, String value) {
 		
-		String command = buildSimplePutCommand(tagList, value);
+		String command = buildSimplePutCommand(knownCommand.tagList, value);
 		sendCommand_controlled(address, command);
 		return lastRC;
 	}
 	
-	public static String sendGetCommand_String(String address, TagList tagList) {
+	public static String sendGetCommand_String(String address, KnownCommand knownCommand) {
 		
-		String command = buildSimpleGetCommand(tagList);
+		String command = buildSimpleGetCommand(knownCommand.tagList);
 		Document document = sendCommand_controlled(address, command);
 		if (lastRC!=RC_OK) return null;
 		
-		Vector<Node> nodes = XML.getNodes(document, tagList.addBefore("YAMAHA_AV"));
+		Vector<Node> nodes = XML.getNodes(document, knownCommand.tagList.addBefore("YAMAHA_AV"));
 		if (nodes.isEmpty()) return null;
 		
 		return XML.getContentOfSingleChildTextNode(nodes.get(0));
 	}
 	
-	public static Node sendGetCommand_Node(String address, TagList tagList) {
+	public static Node sendGetCommand_Node(String address, KnownCommand knownCommand) {
 		
-		String command = buildSimpleGetCommand(tagList);
+		String command = buildSimpleGetCommand(knownCommand.tagList);
 		Document document = sendCommand_controlled(address, command);
 		if (lastRC!=RC_OK) return null;
 		if (document==null) return null;
@@ -174,7 +175,7 @@ final class Ctrl {
 //		StringBuilder sb = new StringBuilder();
 //		XML.showXMLformated(sb,"",document);
 		
-		Vector<Node> nodes = XML.getNodes(document, tagList.addBefore("YAMAHA_AV"));
+		Vector<Node> nodes = XML.getNodes(document, knownCommand.tagList.addBefore("YAMAHA_AV"));
 		if (nodes.isEmpty()) return null;
 		
 		return nodes.get(0);
@@ -214,6 +215,7 @@ final class Ctrl {
 
 	private static final class HttpInterfaceImplementation extends HttpInterface {
 
+		@Override
 		public String sendCommand(String address, String command, boolean verbose) {
 			ByteBuffer byteBuf = StandardCharsets.UTF_8.encode(command);
 			byte[] bytes = new byte[byteBuf.limit()];
@@ -245,6 +247,7 @@ final class Ctrl {
 			return response;
 		}
 
+		@Override
 		public String getContentFromURL(String urlStr, boolean verbose) {
 			return sendHTTPRequest(
 					urlStr,

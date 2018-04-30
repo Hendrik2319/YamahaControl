@@ -125,16 +125,20 @@ final class XML {
 		}
 	}
 
-	public static Vector<Node> getNodes(Document document, TagList tagList) {
+	public static Vector<Node> getSubNodes(Node node_, String... tagList) {
 		Vector<Node> nodes=new Vector<>(), subNodes;
-		nodes.add(document);
-		for (String part:tagList.tagList) {
+		nodes.add(node_);
+		for (String part:tagList) {
 			subNodes = new Vector<>();
 			for (Node node:nodes)
 				getChildNodesByNodeName(node, part, subNodes);
 			nodes = subNodes;
 		}
 		return nodes;
+	}
+
+	public static Vector<Node> getNodes(Document document, TagList tagList) {
+		return getSubNodes(document, tagList.tagList);
 	}
 
 	public static String getNodeAttribute(Document document, TagList tagList, String attrName) {
@@ -159,7 +163,7 @@ final class XML {
 		
 		return child.getNodeValue();
 	}
-
+	
 	public static String getShortName(short nodeType) {
 		switch (nodeType) {
 		case Node.DOCUMENT_NODE     : return "Doc";
