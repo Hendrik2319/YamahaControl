@@ -566,12 +566,22 @@ public class YamahaControl {
 	}
 	
 	private static class NumberWithUnit {
-		float number;
-		String unit;
+		final Float number;
+		final String unit;
+		
 		public NumberWithUnit(String val, String exp, String unit) {
-			
-			this.number = number;
 			this.unit = unit;
+			float value;
+			int exponent;
+			try {
+				value = Integer.parseInt(val);
+				exponent = Integer.parseInt(exp);
+			} catch (NumberFormatException e) {
+				this.number = null;
+				return;
+			}
+			for (int i=0; i<exponent; ++i) value/=10;
+			this.number = value;
 		}
 	}
 
@@ -607,6 +617,14 @@ public class YamahaControl {
 			this.basicStatus = BasicStatus.parseNode(node);
 		}
 		
+		private static String getSubValue(Node node, String... tagList) {
+			Vector<Node> nodes = XML.getSubNodes(node, tagList);
+			if (nodes.isEmpty()) return null;
+			if (nodes.size()>1) Log.warning(Device.class, "getSubValue found more than one value node: Node=%s TagList=%s", XML.getPath(node), Arrays.toString(tagList));
+			
+			return XML.getContentOfSingleChildTextNode(nodes.get(0));
+		}
+		
 		private static <T extends Value> T getSubValue(Node node, T[] values, String... tagList) {
 			Vector<Node> nodes = XML.getSubNodes(node, tagList);
 			if (nodes.isEmpty()) return null;
@@ -621,15 +639,31 @@ public class YamahaControl {
 			return null;
 		}
 
-		public static Object getNumberWithUnit(Node value, String string) {
-			// TODO Auto-generated method stub
-			return null;
+		public static NumberWithUnit getNumberWithUnit(Node value, String string) {
+			return new NumberWithUnit(
+					getSubValue(value,"Val"),
+					getSubValue(value,"Exp"),
+					getSubValue(value,"Unit")
+				);
 		}
 
 		private static class BasicStatus {
 
 			private Value.PowerState power;
 			private Value.SleepState sleep;
+			private NumberWithUnit volume;
+			private Value.OnOff volMute;
+			private String currentInput;
+			private DeviceSceneInput inputInfo;
+
+			public BasicStatus() {
+				this.power = null;
+				this.sleep = null;
+				this.volume = null;
+				this.volMute = null;
+				this.currentInput = null;
+				this.inputInfo = null;
+			}
 
 			public static BasicStatus parseNode(Node node) {
 				BasicStatus status = new BasicStatus();
@@ -645,6 +679,15 @@ public class YamahaControl {
 						status.volume = getNumberWithUnit(value,"Lvl");
 						status.volMute = getSubValue(value,Value.OnOff.values(),"Mute");
 						break;
+					case "Input":
+						status.currentInput = getSubValue(value,"Input_Sel");
+						Vector<Node> nodes = XML.getChildNodesByNodeName(value, "Input_Sel_Item_Info");
+						if (nodes.isEmpty()) Log.error(Device.class, "Can't find value node: Node=%s TagName=[%s]", XML.getPath(value), "Input_Sel_Item_Info");
+						else {
+							if (nodes.size()>1) Log.warning(Device.class, "Found more than one value node: Node=%s TagName=[%s]", XML.getPath(value), "Input_Sel_Item_Info");
+							status.inputInfo = parseDeviceSceneInput(nodes.get(0));
+						}
+						break;
 					}
 					
 				}
@@ -653,7 +696,6 @@ public class YamahaControl {
 				// TODO Auto-generated method stub
 				return null;
 			}
-			
 		}
 
 		public Boolean isOn() { return isOn; }
@@ -709,18 +751,17 @@ public class YamahaControl {
 			return dsiArr;
 		}
 
-		private DeviceSceneInput parseDeviceSceneInput(Node item) {
+		private static DeviceSceneInput parseDeviceSceneInput(Node item) {
 			DeviceSceneInput dsi = new DeviceSceneInput();
 			NodeList valueNodes = item.getChildNodes();
 			for (int v=0; v<valueNodes.getLength(); ++v) {
 				Node value = valueNodes.item(v);
-				String valueStr = XML.getContentOfSingleChildTextNode(value);
 				switch (value.getNodeName()) {
-				case "Param"     : dsi.ID        = valueStr; break;
-				case "RW"        : dsi.rw        = valueStr; break;
-				case "Title"     : dsi.title     = valueStr; break;
-				case "Src_Name"  : dsi.srcName   = valueStr; break;
-				case "Src_Number": dsi.srcNumber = valueStr; break;
+				case "Param"     : dsi.ID        = XML.getContentOfSingleChildTextNode(value); break;
+				case "RW"        : dsi.rw        = XML.getContentOfSingleChildTextNode(value); break;
+				case "Title"     : dsi.title     = XML.getContentOfSingleChildTextNode(value); break;
+				case "Src_Name"  : dsi.srcName   = XML.getContentOfSingleChildTextNode(value); break;
+				case "Src_Number": dsi.srcNumber = XML.getContentOfSingleChildTextNode(value); break;
 				}
 			}
 			return dsi;

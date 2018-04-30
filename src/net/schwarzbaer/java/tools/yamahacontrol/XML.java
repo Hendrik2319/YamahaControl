@@ -125,13 +125,13 @@ final class XML {
 		}
 	}
 
-	public static Vector<Node> getSubNodes(Node node_, String... tagList) {
+	public static Vector<Node> getSubNodes(Node node, String... tagList) {
 		Vector<Node> nodes=new Vector<>(), subNodes;
-		nodes.add(node_);
+		nodes.add(node);
 		for (String part:tagList) {
 			subNodes = new Vector<>();
-			for (Node node:nodes)
-				getChildNodesByNodeName(node, part, subNodes);
+			for (Node node__:nodes)
+				getChildNodesByNodeName(node__, part, subNodes);
 			nodes = subNodes;
 		}
 		return nodes;
