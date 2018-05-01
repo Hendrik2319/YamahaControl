@@ -51,7 +51,7 @@ public class CommandList {
 		
 		Config.readConfig();
 		Ctrl.readCommProtocolFromFile();
-		new Responder().openWindow();
+//		new Responder().openWindow();
 		
 		openWindow();
 		
@@ -736,7 +736,7 @@ public class CommandList {
 			@Override
 			public String buildXmlCommand() {
 				if (tagList==null) return null;
-				return Ctrl.buildSimpleGetCommand(tagList);
+				return Ctrl.buildGetCommand(tagList);
 			}
 		}
 
@@ -804,7 +804,7 @@ public class CommandList {
 			@Override
 			public String buildXmlCommand() {
 				if (tagList==null || commandValue==null) return null;
-				return Ctrl.buildSimplePutCommand(tagList, commandValue);
+				return Ctrl.buildPutCommand(tagList, commandValue);
 			}
 			
 			private String getTags() {
@@ -1364,7 +1364,7 @@ public class CommandList {
 				super(parent, ParsedTreeIcon.Command_GET, label, tagList.toString(), "->", value);
 				this.tagList = tagList;
 			}
-			@Override public String buildXmlCommand() { return Ctrl.buildSimpleGetCommand(tagList); }
+			@Override public String buildXmlCommand() { return Ctrl.buildGetCommand(tagList); }
 		}
 		
 		@SuppressWarnings("unused")
@@ -1374,7 +1374,7 @@ public class CommandList {
 				super(parent, ParsedTreeIcon.Command_PUT, label, tagList.toString(), "=", value);
 				this.tagList = tagList;
 			}
-			@Override public String buildXmlCommand() { return Ctrl.buildSimplePutCommand(tagList, value); }
+			@Override public String buildXmlCommand() { return Ctrl.buildPutCommand(tagList, value); }
 		}
 		
 	}

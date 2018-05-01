@@ -300,7 +300,7 @@ public class Responder extends Ctrl.HttpInterface {
 		
 		public static void writeToFile(Vector<Behaviour> behaviours) {
 			try (PrintWriter out = new PrintWriter( new OutputStreamWriter( new FileOutputStream(BEHAVIOURS_FILENAME), StandardCharsets.UTF_8) )) {
-				for (Behaviour b:behaviours) {
+				for (@SuppressWarnings("unused") Behaviour b:behaviours) {
 					
 				}
 			} catch (FileNotFoundException e) {
@@ -309,7 +309,9 @@ public class Responder extends Ctrl.HttpInterface {
 		}
 		
 		public static class CommandResponse {
+			@SuppressWarnings("unused")
 			String commandXML;
+			@SuppressWarnings("unused")
 			String responseXML;
 			public CommandResponse(String commandXML, String responseXML) {
 				this.commandXML = commandXML;
@@ -318,6 +320,7 @@ public class Responder extends Ctrl.HttpInterface {
 			public CommandResponse(ResponseTableModel.TableEntry.Response response) {
 				this(response.command.protocolEntry.xml,response.protocolEntry.xml);
 			}
+			@SuppressWarnings("unused")
 			void set(ResponseTableModel.TableEntry.Response response) {
 				this.commandXML = response.command.protocolEntry.xml;
 				this.responseXML = response.protocolEntry.xml;
@@ -325,19 +328,26 @@ public class Responder extends Ctrl.HttpInterface {
 		}
 		
 		public static class IsDefault extends Behaviour {
+			@SuppressWarnings("unused")
 			CommandResponse defaultResponse;
+			@SuppressWarnings("unused")
 			public IsDefault() {
 				defaultResponse = new CommandResponse(null,null);
 			}
+			@SuppressWarnings("unused")
 			public IsDefault(ResponseTableModel.TableEntry.Response response) {
 				defaultResponse = new CommandResponse(response);
 			}
 		}
 		
 		public static class SelectionChangeAction extends Behaviour {
+			@SuppressWarnings("unused")
 			CommandResponse wasSelected;
+			@SuppressWarnings("unused")
 			CommandResponse willBeSelected;
+			@SuppressWarnings("unused")
 			CommandResponse event;
+			@SuppressWarnings("unused")
 			public SelectionChangeAction() {
 				wasSelected = new CommandResponse(null,null);
 				willBeSelected = new CommandResponse(null,null);

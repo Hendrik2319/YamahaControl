@@ -27,6 +27,7 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.EnumMap;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Vector;
@@ -46,15 +47,14 @@ import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTabbedPane;
 import javax.swing.JToggleButton;
+import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
 import javax.swing.UnsupportedLookAndFeelException;
 
-import org.w3c.dom.Node;
-import org.w3c.dom.NodeList;
-
 import net.schwarzbaer.gui.Canvas;
 import net.schwarzbaer.gui.StandardMainWindow;
-import net.schwarzbaer.java.tools.yamahacontrol.XML.TagList;
+import net.schwarzbaer.java.tools.yamahacontrol.Device.NumberWithUnit;
+import net.schwarzbaer.java.tools.yamahacontrol.Device.UpdateWish;
 
 public class YamahaControl {
 
@@ -121,21 +121,23 @@ public class YamahaControl {
 	private StandardMainWindow mainWindow;
 	private Device device;
 	private MainGui mainGui;
-	private Vector<GuiRegion> guiRegion;
+	private Vector<GuiRegion> guiRegions;
+	private FrequentlyUpdater frequentlyUpdater;
 	
 	YamahaControl() {
 		smallImages = new EnumMap<>(SmallImages.class);
 		mainWindow = null;
 		device = null;
 		mainGui = null;
-		guiRegion = new Vector<>();
+		guiRegions = new Vector<>();
+		frequentlyUpdater = new FrequentlyUpdater(2000);
 	}
 	
 	private void createGUI() {
 		createSmallImages();
 		
 		mainGui = new MainGui();
-		guiRegion.add(mainGui);
+		guiRegions.add(mainGui);
 		
 		mainGui.createOnOffBtn();
 		
@@ -172,7 +174,7 @@ public class YamahaControl {
 		mainWindow = new StandardMainWindow("YamahaControl");
 		mainWindow.startGUI(contentPane);
 		
-		guiRegion.forEach(gr->gr.setEnabled(false));
+		guiRegions.forEach(gr->gr.setEnabled(false));
 	}
 	
 	private static class ImageToolbox {
@@ -202,13 +204,57 @@ public class YamahaControl {
 		}
 	}
 
+	private void updateDevice(UpdateReason reason) {
+		EnumSet<UpdateWish> updateWishes = EnumSet.noneOf(UpdateWish.class);
+		guiRegions.forEach((GuiRegion gr)->updateWishes.addAll(Arrays.asList(gr.getUpdateWishes(reason))));
+		device.update(updateWishes);
+	}
+
 	private void connectToReciever() {
 		String addr = Config.selectAddress(mainWindow);
 		if (addr!=null) {
 			device = new Device(addr);
-			device.updateConfig();
-			guiRegion.forEach(gr->gr.initGUIafterConnect());
+			updateDevice(UpdateReason.Initial);
+			guiRegions.forEach(gr->gr.initGUIafterConnect());
+			frequentlyUpdater.start();
 		}
+	}
+
+	public class FrequentlyUpdater implements Runnable {
+
+		private int interval_ms;
+		private boolean stop;
+
+		public FrequentlyUpdater(int interval_ms) {
+			this.interval_ms = interval_ms;
+			this.stop = false;
+		}
+
+		public void start() {
+			stop = false;
+			new Thread(this).start();
+		}
+
+		public void stop() {
+			stop = true;
+			notify();
+		}
+
+		@Override
+		public void run() {
+			synchronized (this) {
+				while (!stop) {
+					long startTime = System.currentTimeMillis();
+					while (!stop && System.currentTimeMillis()-startTime<interval_ms)
+						try { wait(interval_ms-(System.currentTimeMillis()-startTime)); }
+						catch (InterruptedException e) {}
+					
+					updateDevice(UpdateReason.Frequently);
+					SwingUtilities.invokeLater(()->guiRegions.forEach(gr->gr.frequentlyUpdate()));
+				}
+			}
+		}
+	
 	}
 
 	// ///////////////////////////////////////////////////////////////////////////////////
@@ -236,7 +282,7 @@ public class YamahaControl {
 		return comboBox;
 	}
 
-	public static void copyToClipBoard(String str) {
+	static void copyToClipBoard(String str) {
 		if (str==null) return;
 		Toolkit toolkit = Toolkit.getDefaultToolkit();
 		Clipboard clipboard = toolkit.getSystemClipboard();
@@ -245,7 +291,7 @@ public class YamahaControl {
 		catch (IllegalStateException e1) { e1.printStackTrace(); }
 	}
 
-	public static String pasteFromClipBoard() {
+	static String pasteFromClipBoard() {
 		Toolkit toolkit = Toolkit.getDefaultToolkit();
 		Clipboard clipboard = toolkit.getSystemClipboard();
 		Transferable transferable = clipboard.getContents(null);
@@ -287,9 +333,13 @@ public class YamahaControl {
 	}
 	// ///////////////////////////////////////////////////////////////////////////////////
 	
+	enum UpdateReason { Initial, Frequently }
+
 	public static interface GuiRegion {
 		void setEnabled(boolean enabled);
 		void initGUIafterConnect();
+		void frequentlyUpdate();
+		Device.UpdateWish[] getUpdateWishes(UpdateReason reason);
 	}
 	
 	private class MainGui implements GuiRegion {
@@ -310,13 +360,22 @@ public class YamahaControl {
 		public void setEnabled(boolean enabled) {
 			onoffBtn.setEnabled(enabled);
 			volumeControl.setEnabled(enabled);
+			scenesPanel.setEnabled(enabled);
+			inputsPanel.setEnabled(enabled);
+		}
+
+		@Override
+		public UpdateWish[] getUpdateWishes(UpdateReason reason) {
+			switch (reason) {
+			case Initial   : return new UpdateWish[] { UpdateWish.Power, UpdateWish.BasicStatus, UpdateWish.Scenes, UpdateWish.Inputs };
+			case Frequently: return new UpdateWish[] { UpdateWish.Power, UpdateWish.BasicStatus };
+			}
+			return null;
 		}
 
 		@Override
 		public void initGUIafterConnect() {
 			setEnabled(device!=null);
-			setOnOffButton(device==null?false:device.isOn);
-			//volumeControl.setValue(device==null?0:device.volume);
 			
 			if (device!=null) {
 				scenesPanel.createButtons(device.getScenes(),this::setScene,dsi->dsi!=null && "W".equals(dsi.rw));
@@ -324,6 +383,14 @@ public class YamahaControl {
 				selectCurrentScene();
 				selectCurrentInput();
 			}
+			
+			frequentlyUpdate();
+		}
+
+		@Override
+		public void frequentlyUpdate() {
+			setOnOffButton(device==null?false:device.isOn());
+			volumeControl.setValue(device==null?null:device.getVolume());
 		}
 
 		private void setScene(Device.DeviceSceneInput dsi) {
@@ -358,7 +425,12 @@ public class YamahaControl {
 		}
 
 		public void createVolumeControl(int width) {
-			volumeControl = new VolumeControl(width, 3.0, -90);
+			volumeControl = new VolumeControl(width, 3.0, -90, (value, isAdjusting) -> {
+				if (device==null) return;
+				device.setVolume(value);
+				if (!isAdjusting) 
+					volumeControl.setValue(device.getVolume());
+			});
 		}
 
 		public void createOnOffBtn() {
@@ -430,63 +502,92 @@ public class YamahaControl {
 		private static final long serialVersionUID = -5870265710270984615L;
 		private double angle;
 		private int radius;
-		private double mouseAngle;
 		private double zeroAngle;
 		private double value;
 		private double deltaPerFullCircle;
 		protected boolean isAdjusting;
+		private String unit;
+		private ValueListener valueListener;
 		
-		VolumeControl(int width, double deltaPerFullCircle, double zeroAngle_deg) {
+		public interface ValueListener {
+			public void valueChanged(double value, boolean isAdjusting);
+		}
+		
+		VolumeControl(int width, double deltaPerFullCircle, double zeroAngle_deg, ValueListener valueListener) {
 			super(width, width);
 			this.deltaPerFullCircle = deltaPerFullCircle;
-			zeroAngle = zeroAngle_deg/180*Math.PI;
+			this.valueListener = valueListener;
 			
+			zeroAngle = zeroAngle_deg/180*Math.PI;
 			radius = width/2-20;
 			angle = 0.0;
-			mouseAngle = 0.0;
+			value = 0.0;
+			isAdjusting = false;
+			unit = "##";
 			
+			setMouseAdapter();
+		}
+		
+		private void setMouseAdapter() {
 			MouseAdapter mouseAdapter = new MouseAdapter() {
-
+				
+				private VolumeControl control = VolumeControl.this;
 				private double pickAngle = Double.NaN;
 
 				@Override
 				public void mousePressed(MouseEvent e) {
-					int x = e.getX()-VolumeControl.this.width/2;
-					int y = e.getY()-VolumeControl.this.height/2;
-					mouseAngle = Math.atan2(y,x);
-					pickAngle = mouseAngle-angle;
+					pickAngle = getMouseAngle(e.getX(), e.getY())-angle;
 					isAdjusting = true;
 //					System.out.printf("pickAngle: %f%n",pickAngle);
 				}
 
 				@Override
 				public void mouseReleased(MouseEvent e) {
-					pickAngle = Double.NaN;
 					isAdjusting = false;
+					changeValue(e.getX(), e.getY());
+					pickAngle = Double.NaN;
 //					System.out.printf("pickAngle: %f%n",pickAngle);
 				}
 
 				@Override
 				public void mouseDragged(MouseEvent e) {
-					int x = e.getX()-VolumeControl.this.width/2;
-					int y = e.getY()-VolumeControl.this.height/2;
-					mouseAngle = Math.atan2(y,x);
+					changeValue(e.getX(), e.getY());
+//					System.out.printf("angle: %f%n",angle);
+				}
+				
+
+				private void changeValue(int mouseX, int mouseY) {
+					double mouseAngle = getMouseAngle(mouseX, mouseY);
 					double diff = mouseAngle-pickAngle-angle;
 					if      (Math.abs(diff) > Math.abs(diff+2*Math.PI)) pickAngle -= 2*Math.PI;
 					else if (Math.abs(diff) > Math.abs(diff-2*Math.PI)) pickAngle += 2*Math.PI;
 					angle = mouseAngle-pickAngle;
 					value = angle/2/Math.PI*deltaPerFullCircle;
-//					System.out.printf("angle: %f%n",angle);
-					VolumeControl.this.repaint();
+					
+					valueListener.valueChanged(value,isAdjusting);
+					control.repaint();
 				}
-				
+
+				private double getMouseAngle(int mouseX, int mouseY) {
+					int x = mouseX-control.width/2;
+					int y = mouseY-control.height/2;
+					double mouseAngle = Math.atan2(y,x);
+					return mouseAngle;
+				}
 			};
 			addMouseListener(mouseAdapter);
 			addMouseMotionListener(mouseAdapter);
 		}
 		
-		public void setValue(double value) {
-			this.value = value;
+		public void setValue(NumberWithUnit numberWithUnit) {
+			if (isAdjusting) return;
+			if (numberWithUnit==null) {
+				this.value = 0;
+				this.unit = "##";
+			} else {
+				this.value = numberWithUnit.number;
+				this.unit = numberWithUnit.unit;
+			}
 			this.angle = value*2*Math.PI/deltaPerFullCircle;
 			repaint();
 		}
@@ -524,7 +625,7 @@ public class YamahaControl {
 			}
 			
 			
-			g.drawString(String.format(Locale.ENGLISH, "%1.1f", value), width/2, height/2);
+			g.drawString(String.format(Locale.ENGLISH, "%1.1f %s", value, unit), width/2, height/2);
 			//g.drawString(String.format(Locale.ENGLISH, "%6.1f", angle/Math.PI*180), width/2, height/2+15);
 		}
 
@@ -540,257 +641,13 @@ public class YamahaControl {
 	
 	}
 	
-	enum KnownCommand {
-		GetSceneItems("Main_Zone,Scene,Scene_Sel_Item"),
-		GetInputItems("Main_Zone,Input,Input_Sel_Item"),
-		GetNSetSystemPower("System,Power_Control,Power"),
-		SetCurrentScene("Main_Zone,Scene,Scene_Sel"),
-		SetCurrentInput("Main_Zone,Input,Input_Sel"),
-		GetBasicStatus("Main_Zone,Basic_Status")
-		;
-		
-		final TagList tagList;
-		KnownCommand(String tagListStr) { tagList = new TagList(tagListStr); }
-	}
-	
-	private static interface Value {
-		public String getLabel();
-		
-		public enum OnOff implements Value { On, Off; @Override public String getLabel() { return toString(); }  } 
-		public enum PowerState implements Value { On, Standby; @Override public String getLabel() { return toString(); }  } 
-		public enum SleepState implements Value {
-			_120min("120 min"),_90min("90 min"),_60min("60 min"),_30min("30 min"),Off("Off");
-			private String label;
-			SleepState(String label) { this.label = label; }
-			@Override public String getLabel() { return label; }  } 
-	}
-	
-	private static class NumberWithUnit {
-		final Float number;
-		final String unit;
-		
-		public NumberWithUnit(String val, String exp, String unit) {
-			this.unit = unit;
-			float value;
-			int exponent;
-			try {
-				value = Integer.parseInt(val);
-				exponent = Integer.parseInt(exp);
-			} catch (NumberFormatException e) {
-				this.number = null;
-				return;
-			}
-			for (int i=0; i<exponent; ++i) value/=10;
-			this.number = value;
-		}
-	}
-
-	private static final class Device {
-		
-		private String address;
-		private BasicStatus basicStatus;
-		private Boolean isOn;
-		private DeviceSceneInput[] scenes;
-		private DeviceSceneInput[] inputs;
-		private DeviceSceneInput currentScene;
-		private DeviceSceneInput currentInput;
-		
-		Device(String address) {
-			this.address = address;
-			this.basicStatus = null;
-			this.isOn = null;
-			this.scenes = null;
-			this.inputs = null;
-			this.currentScene = null;
-			this.currentInput = null;
-		}
-
-		public void updateConfig() {
-			isOn = askOn();
-			scenes = getSceneInput(KnownCommand.GetSceneItems); // G4: Main_Zone,Scene,Scene_Sel_Item
-			inputs = getSceneInput(KnownCommand.GetInputItems); // G2: Main_Zone,Input,Input_Sel_Item
-			updateBasicStatus();
-		}
-		
-		public void updateBasicStatus() {
-			Node node = Ctrl.sendGetCommand_Node(address,KnownCommand.GetBasicStatus);
-			this.basicStatus = BasicStatus.parseNode(node);
-		}
-		
-		private static String getSubValue(Node node, String... tagList) {
-			Vector<Node> nodes = XML.getSubNodes(node, tagList);
-			if (nodes.isEmpty()) return null;
-			if (nodes.size()>1) Log.warning(Device.class, "getSubValue found more than one value node: Node=%s TagList=%s", XML.getPath(node), Arrays.toString(tagList));
-			
-			return XML.getContentOfSingleChildTextNode(nodes.get(0));
-		}
-		
-		private static <T extends Value> T getSubValue(Node node, T[] values, String... tagList) {
-			Vector<Node> nodes = XML.getSubNodes(node, tagList);
-			if (nodes.isEmpty()) return null;
-			
-			String str = XML.getContentOfSingleChildTextNode(nodes.get(0));
-			if (str==null) return null;
-			
-			for (T val:values)
-				if (str.equals(val.getLabel()))
-					return val;
-			
-			return null;
-		}
-
-		public static NumberWithUnit getNumberWithUnit(Node value, String string) {
-			return new NumberWithUnit(
-					getSubValue(value,"Val"),
-					getSubValue(value,"Exp"),
-					getSubValue(value,"Unit")
-				);
-		}
-
-		private static class BasicStatus {
-
-			private Value.PowerState power;
-			private Value.SleepState sleep;
-			private NumberWithUnit volume;
-			private Value.OnOff volMute;
-			private String currentInput;
-			private DeviceSceneInput inputInfo;
-
-			public BasicStatus() {
-				this.power = null;
-				this.sleep = null;
-				this.volume = null;
-				this.volMute = null;
-				this.currentInput = null;
-				this.inputInfo = null;
-			}
-
-			public static BasicStatus parseNode(Node node) {
-				BasicStatus status = new BasicStatus();
-				NodeList valueNodes = node.getChildNodes();
-				for (int i=0; i<valueNodes.getLength(); ++i) {
-					Node value = valueNodes.item(i);
-					switch (value.getNodeName()) {
-					case "Power_Control":
-						status.power = getSubValue(value,Value.PowerState.values(),"Power");
-						status.sleep = getSubValue(value,Value.SleepState.values(),"Sleep");
-						break;
-					case "Volume":
-						status.volume = getNumberWithUnit(value,"Lvl");
-						status.volMute = getSubValue(value,Value.OnOff.values(),"Mute");
-						break;
-					case "Input":
-						status.currentInput = getSubValue(value,"Input_Sel");
-						Vector<Node> nodes = XML.getChildNodesByNodeName(value, "Input_Sel_Item_Info");
-						if (nodes.isEmpty()) Log.error(Device.class, "Can't find value node: Node=%s TagName=[%s]", XML.getPath(value), "Input_Sel_Item_Info");
-						else {
-							if (nodes.size()>1) Log.warning(Device.class, "Found more than one value node: Node=%s TagName=[%s]", XML.getPath(value), "Input_Sel_Item_Info");
-							status.inputInfo = parseDeviceSceneInput(nodes.get(0));
-						}
-						break;
-					}
-					
-				}
-					
-					//dsiArr[i] = parseDeviceSceneInput(itemNodes.item(i));
-				// TODO Auto-generated method stub
-				return null;
-			}
-		}
-
-		public Boolean isOn() { return isOn; }
-
-		public void setOn(boolean isOn) {
-			// System,Power_Control,Power = On
-			// System,Power_Control,Power = Standby
-			int rc = Ctrl.sendPutCommand(address,KnownCommand.GetNSetSystemPower,isOn?"On":"Standby");
-			if (rc!=Ctrl.RC_OK) return;
-			this.isOn = askOn();
-		}
-
-		private Boolean askOn() {
-			String value = Ctrl.sendGetCommand_String(address,KnownCommand.GetNSetSystemPower);
-			if ("On".equals(value)) return true;
-			if ("Standby".equals(value)) return false;
-			return null;
-		}
-
-		public DeviceSceneInput getScene() {
-			// GET[G1]:    Main_Zone,Basic_Status   ->   Input,Input_Sel -> Values [GET[G2]:Main_Zone,Input,Input_Sel_Item]
-			return currentScene;
-		}
-
-		public DeviceSceneInput getInput() {
-			// GET[G1]:    Main_Zone,Basic_Status   ->   Input,Input_Sel -> Values [GET[G2]:Main_Zone,Input,Input_Sel_Item]
-			return currentInput;
-		}
-
-		public void setScene(DeviceSceneInput dsi) {
-			// PUT[P6]:    Main_Zone,Scene,Scene_Sel   =   Values [GET[G4]:Main_Zone,Scene,Scene_Sel_Item]
-			int rc = Ctrl.sendPutCommand(address,KnownCommand.SetCurrentScene,dsi.ID);
-			if (rc==Ctrl.RC_OK) currentScene = dsi;
-		}
-
-		public void setInput(DeviceSceneInput dsi) {
-			// PUT[P4]:    Main_Zone,Input,Input_Sel   =   Values [GET[G2]:Main_Zone,Input,Input_Sel_Item]
-			int rc = Ctrl.sendPutCommand(address,KnownCommand.SetCurrentInput,dsi.ID);
-			if (rc==Ctrl.RC_OK) currentInput = dsi;
-		}
-
-		public DeviceSceneInput[] getInputs() { return inputs; }
-		public DeviceSceneInput[] getScenes() { return scenes; }
-
-		private DeviceSceneInput[] getSceneInput(KnownCommand knownCommand) {
-			Node node = Ctrl.sendGetCommand_Node(address,knownCommand);
-			if (node == null) return null;
-			
-			NodeList itemNodes = node.getChildNodes();
-			DeviceSceneInput[] dsiArr = new DeviceSceneInput[itemNodes.getLength()];
-			for (int i=0; i<itemNodes.getLength(); ++i)
-				dsiArr[i] = parseDeviceSceneInput(itemNodes.item(i));
-			return dsiArr;
-		}
-
-		private static DeviceSceneInput parseDeviceSceneInput(Node item) {
-			DeviceSceneInput dsi = new DeviceSceneInput();
-			NodeList valueNodes = item.getChildNodes();
-			for (int v=0; v<valueNodes.getLength(); ++v) {
-				Node value = valueNodes.item(v);
-				switch (value.getNodeName()) {
-				case "Param"     : dsi.ID        = XML.getContentOfSingleChildTextNode(value); break;
-				case "RW"        : dsi.rw        = XML.getContentOfSingleChildTextNode(value); break;
-				case "Title"     : dsi.title     = XML.getContentOfSingleChildTextNode(value); break;
-				case "Src_Name"  : dsi.srcName   = XML.getContentOfSingleChildTextNode(value); break;
-				case "Src_Number": dsi.srcNumber = XML.getContentOfSingleChildTextNode(value); break;
-				}
-			}
-			return dsi;
-		}
-		
-		private static class DeviceSceneInput {
-			public String ID;
-			public String rw;
-			public String title;
-			@SuppressWarnings("unused") public String srcName;
-			@SuppressWarnings("unused") public String srcNumber;
-			public DeviceSceneInput() {
-				this.ID = null;
-				this.rw = null;
-				this.title = null;
-				this.srcName = null;
-				this.srcNumber = null;
-			}
-			
-		}
-	}
-	
 	static class Log {
-		public static void info   (Class<?> callerClass,                String format, Object... values) { out(System.out, callerClass, "INFO",         format, values); }
-		public static void warning(Class<?> callerClass,                String format, Object... values) { out(System.out, callerClass, "INFO",         format, values); }
-		public static void error  (Class<?> callerClass,                String format, Object... values) { out(System.out, callerClass, "INFO",         format, values); }
-		public static void info   (Class<?> callerClass, Locale locale, String format, Object... values) { out(System.out, callerClass, "INFO", locale, format, values); }
-		public static void warning(Class<?> callerClass, Locale locale, String format, Object... values) { out(System.out, callerClass, "INFO", locale, format, values); }
-		public static void error  (Class<?> callerClass, Locale locale, String format, Object... values) { out(System.out, callerClass, "INFO", locale, format, values); }
+		public static void info   (Class<?> callerClass,                String format, Object... values) { out(System.out, callerClass, "INFO"   ,         format, values); }
+		public static void warning(Class<?> callerClass,                String format, Object... values) { out(System.err, callerClass, "WARNING",         format, values); }
+		public static void error  (Class<?> callerClass,                String format, Object... values) { out(System.err, callerClass, "ERROR"  ,         format, values); }
+		public static void info   (Class<?> callerClass, Locale locale, String format, Object... values) { out(System.out, callerClass, "INFO"   , locale, format, values); }
+		public static void warning(Class<?> callerClass, Locale locale, String format, Object... values) { out(System.err, callerClass, "WARNING", locale, format, values); }
+		public static void error  (Class<?> callerClass, Locale locale, String format, Object... values) { out(System.err, callerClass, "ERROR"  , locale, format, values); }
 		
 		private static void out(PrintStream out, Class<?> callerClass, String label,                String format, Object... values) { out(out, callerClass, label, Locale.ENGLISH, format, values); }
 		private static void out(PrintStream out, Class<?> callerClass, String label, Locale locale, String format, Object... values) {

@@ -28,7 +28,6 @@ import org.w3c.dom.Document;
 import org.w3c.dom.Node;
 
 import net.schwarzbaer.java.tools.yamahacontrol.XML.TagList;
-import net.schwarzbaer.java.tools.yamahacontrol.YamahaControl.KnownCommand;
 
 final class Ctrl {
 	
@@ -146,16 +145,16 @@ final class Ctrl {
 		return document;
 	}
 	
-	static int sendPutCommand(String address, KnownCommand knownCommand, String value) {
+	static int sendPutCommand(String address, Device.KnownCommand knownCommand, String value) {
 		
-		String command = buildSimplePutCommand(knownCommand.tagList, value);
+		String command = buildPutCommand(knownCommand.tagList, value);
 		sendCommand_controlled(address, command);
 		return lastRC;
 	}
 	
-	public static String sendGetCommand_String(String address, KnownCommand knownCommand) {
+	public static String sendGetCommand_String(String address, Device.KnownCommand knownCommand) {
 		
-		String command = buildSimpleGetCommand(knownCommand.tagList);
+		String command = buildGetCommand(knownCommand.tagList);
 		Document document = sendCommand_controlled(address, command);
 		if (lastRC!=RC_OK) return null;
 		
@@ -165,9 +164,9 @@ final class Ctrl {
 		return XML.getContentOfSingleChildTextNode(nodes.get(0));
 	}
 	
-	public static Node sendGetCommand_Node(String address, KnownCommand knownCommand) {
+	public static Node sendGetCommand_Node(String address, Device.KnownCommand knownCommand) {
 		
-		String command = buildSimpleGetCommand(knownCommand.tagList);
+		String command = buildGetCommand(knownCommand.tagList);
 		Document document = sendCommand_controlled(address, command);
 		if (lastRC!=RC_OK) return null;
 		if (document==null) return null;
@@ -181,15 +180,15 @@ final class Ctrl {
 		return nodes.get(0);
 	}
 
-	static String buildSimplePutCommand(TagList tagList, String value) {
+	static String buildPutCommand(TagList tagList, String value) {
 		// <YAMAHA_AV cmd="PUT"><System><Power_Control><Power>On</Power></Power_Control></System></YAMAHA_AV>
-		return buildSimpleCommand("PUT", tagList, value);
+		return buildCommand("PUT", tagList, value);
 	}
-	static String buildSimpleGetCommand(TagList tagList) {
+	static String buildGetCommand(TagList tagList) {
 		// <YAMAHA_AV cmd="GET"><System><Power_Control><Power>GetParam</Power></Power_Control></System></YAMAHA_AV>
-		return buildSimpleCommand("GET", tagList, "GetParam");
+		return buildCommand("GET", tagList, "GetParam");
 	}
-	static String buildSimpleCommand(String cmd, TagList tagList, String value) {
+	static String buildCommand(String cmd, TagList tagList, String value) {
 		return "<YAMAHA_AV cmd=\""+cmd+"\">"+tagList.toXML(value)+"</YAMAHA_AV>";
 	}
 	static void testCommand(String address, String command) {

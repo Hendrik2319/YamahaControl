@@ -2,6 +2,7 @@ package net.schwarzbaer.java.tools.yamahacontrol;
 
 import java.io.IOException;
 import java.io.StringReader;
+import java.util.Arrays;
 import java.util.Vector;
 
 import javax.xml.parsers.DocumentBuilderFactory;
@@ -17,6 +18,8 @@ import org.w3c.dom.NodeList;
 import org.w3c.dom.Text;
 import org.xml.sax.InputSource;
 import org.xml.sax.SAXException;
+
+import net.schwarzbaer.java.tools.yamahacontrol.YamahaControl.Log;
 
 final class XML {
 	
@@ -123,6 +126,13 @@ final class XML {
 			if (nodeName.equalsIgnoreCase(child.getNodeName()))
 				nodes.add(child);
 		}
+	}
+
+	public static Node getSubNode(Node node, String... tagList) {
+		Vector<Node> nodes = XML.getSubNodes(node, tagList);
+		if (nodes.isEmpty()) { Log.warning(XML.class, "Can't find subnode: Node=%s TagList=%s", XML.getPath(node), Arrays.toString(tagList)); return null; }
+		if (nodes.size()>1) Log.warning(XML.class, "Found more than one subnode: Node=%s TagList=%s", XML.getPath(node), Arrays.toString(tagList));
+		return nodes.get(0);
 	}
 
 	public static Vector<Node> getSubNodes(Node node, String... tagList) {
