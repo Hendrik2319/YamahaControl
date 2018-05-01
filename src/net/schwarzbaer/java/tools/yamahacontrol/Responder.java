@@ -28,13 +28,11 @@ import javax.swing.BorderFactory;
 import javax.swing.JMenuItem;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
-import javax.swing.JScrollBar;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
 import javax.swing.JTable;
 import javax.swing.JTextArea;
 import javax.swing.ListSelectionModel;
-import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
 import javax.swing.UnsupportedLookAndFeelException;
 import javax.swing.table.TableCellRenderer;
@@ -152,10 +150,10 @@ public class Responder extends Ctrl.HttpInterface {
 		table.getSelectionModel().addListSelectionListener(e->{
 			if (e.getValueIsAdjusting()) return;
 			TableEntry row = tableModel.getRow(table.convertRowIndexToModel(table.getSelectedRow()));
-			float pos = getScrollPos(textScrollPane.getVerticalScrollBar());
+			float pos = YamahaControl.getScrollPos(textScrollPane.getVerticalScrollBar());
 			if (row==null) textArea.setText("");
 			else textArea.setText(XML.getXMLformatedString(row.protocolEntry.xml));
-			setScrollPos(textScrollPane.getVerticalScrollBar(),pos);
+			YamahaControl.setScrollPos(textScrollPane.getVerticalScrollBar(),pos);
 		});
 		
 		JPanel buttonPanel = new JPanel(new GridLayout(1,0,3,3));
@@ -171,21 +169,6 @@ public class Responder extends Ctrl.HttpInterface {
 		
 		mainWindow = new StandardMainWindow("ResponseDummy");
 		mainWindow.startGUI(contentPane);
-	}
-	
-	private float getScrollPos(JScrollBar scrollBar) {
-		int min = scrollBar.getMinimum();
-		int max = scrollBar.getMaximum();
-		int ext = scrollBar.getVisibleAmount();
-		int val = scrollBar.getValue();
-		return (val-min)/((float)max-ext-min);
-	}
-
-	private void setScrollPos(JScrollBar scrollBar, float pos) {
-		int min = scrollBar.getMinimum();
-		int max = scrollBar.getMaximum();
-		int ext = scrollBar.getVisibleAmount();
-		SwingUtilities.invokeLater(()->scrollBar.setValue(Math.round(pos*(max-ext-min)+min)));
 	}
 
 	private void pasteAsResponse() {

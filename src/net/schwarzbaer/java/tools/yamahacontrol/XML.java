@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.io.StringReader;
 import java.util.Arrays;
 import java.util.Vector;
+import java.util.function.Consumer;
 
 import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.ParserConfigurationException;
@@ -164,7 +165,30 @@ final class XML {
 		return attr.getNodeValue();
 	}
 	
-	public static String getContentOfSingleChildTextNode(Node node) {
+	public static Integer getSubValue_Int(Node node, String... tagList) {
+		String valueStr = getSubValue(node, tagList);
+		if (valueStr==null) return null;
+		try { return Integer.parseInt(valueStr); }
+		catch (NumberFormatException e) { return null; }
+	}
+	
+	public static String getSubValue(Node node, String... tagList) {
+		if (tagList.length==0) return getContentOfSingleChildTextNode(node);
+		Node value = getSubNode(node, tagList);
+		if (value==null) return null;
+		return getContentOfSingleChildTextNode(value);
+	}
+
+	public static <T extends Device.Value> T getSubValue(Node node, T[] values, String... tagList) {
+		String str = getSubValue(node,tagList);
+		if (str!=null)
+			for (T val:values)
+				if (str.equals(val.getLabel()))
+					return val;
+		return null;
+	}
+
+	private static String getContentOfSingleChildTextNode(Node node) {
 		NodeList childNodes = node.getChildNodes();
 		if (childNodes.getLength()!=1) return null;
 		
@@ -172,6 +196,12 @@ final class XML {
 		if (child.getNodeType()!=Node.TEXT_NODE || !(child instanceof Text)) return null;
 		
 		return child.getNodeValue();
+	}
+	
+	public static void forEachChild(Node node, Consumer<Node> consumer) {
+		NodeList childNodes = node.getChildNodes();
+		for (int i=0; i<childNodes.getLength(); ++i)
+			consumer.accept(childNodes.item(i));
 	}
 	
 	public static String getShortName(short nodeType) {

@@ -161,7 +161,7 @@ final class Ctrl {
 		Vector<Node> nodes = XML.getNodes(document, knownCommand.tagList.addBefore("YAMAHA_AV"));
 		if (nodes.isEmpty()) return null;
 		
-		return XML.getContentOfSingleChildTextNode(nodes.get(0));
+		return XML.getSubValue(nodes.get(0));
 	}
 	
 	public static Node sendGetCommand_Node(String address, Device.KnownCommand knownCommand) {

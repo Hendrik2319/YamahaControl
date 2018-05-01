@@ -1,23 +1,19 @@
 package net.schwarzbaer.java.tools.yamahacontrol;
 
-import java.awt.BasicStroke;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Dimension;
-import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
-import java.awt.RenderingHints;
+import java.awt.Insets;
 import java.awt.Toolkit;
 import java.awt.datatransfer.Clipboard;
 import java.awt.datatransfer.DataFlavor;
 import java.awt.datatransfer.Transferable;
 import java.awt.datatransfer.UnsupportedFlavorException;
 import java.awt.event.ActionListener;
-import java.awt.event.MouseAdapter;
-import java.awt.event.MouseEvent;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.PrintStream;
@@ -26,6 +22,7 @@ import java.io.StringWriter;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.HashMap;
@@ -43,18 +40,27 @@ import javax.swing.ImageIcon;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
 import javax.swing.JLabel;
+import javax.swing.JList;
 import javax.swing.JPanel;
+import javax.swing.JScrollBar;
 import javax.swing.JScrollPane;
 import javax.swing.JTabbedPane;
+import javax.swing.JTextArea;
+import javax.swing.JTextField;
 import javax.swing.JToggleButton;
+import javax.swing.ListSelectionModel;
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
 import javax.swing.UnsupportedLookAndFeelException;
 
-import net.schwarzbaer.gui.Canvas;
 import net.schwarzbaer.gui.StandardMainWindow;
-import net.schwarzbaer.java.tools.yamahacontrol.Device.NumberWithUnit;
+import net.schwarzbaer.java.tools.yamahacontrol.Device.NetRadio.ListInfo;
 import net.schwarzbaer.java.tools.yamahacontrol.Device.UpdateWish;
+import net.schwarzbaer.java.tools.yamahacontrol.Device.Value.CursorSelect;
+import net.schwarzbaer.java.tools.yamahacontrol.Device.Value.PageSelect;
+import net.schwarzbaer.java.tools.yamahacontrol.Device.Value.PlayState;
+import net.schwarzbaer.java.tools.yamahacontrol.Device.Value.ReadyOrNot;
+import net.schwarzbaer.java.tools.yamahacontrol.gui.VolumeControl;
 
 public class YamahaControl {
 
@@ -79,6 +85,8 @@ public class YamahaControl {
 		Config.readConfig();
 		Ctrl.readCommProtocolFromFile();
 //		new Responder().openWindow();
+		
+		createSmallImages();
 		
 		YamahaControl yamahaControl = new YamahaControl();
 		yamahaControl.createGUI();
@@ -116,8 +124,19 @@ public class YamahaControl {
 //		Ctrl.testCommand("192.168.2.34","<YAMAHA_AV cmd=\"GET\"><NET_RADIO><Config>GetParam</Config></NET_RADIO></YAMAHA_AV>");
 	}
 
-	private enum SmallImages { IconOn, IconOff, IconUnknown }
-	private EnumMap<SmallImages,Icon> smallImages;
+	public enum SmallImages { IconOn, IconOff, IconUnknown }
+	public static EnumMap<SmallImages,Icon> smallImages = null;
+	private static void createSmallImages() {
+		smallImages = new EnumMap<>(SmallImages.class);
+		for (SmallImages id:SmallImages.values()) {
+			switch (id) {
+			case IconOff    : smallImages.put(id, ImageToolbox.createIcon_Circle(16,12,10,Color.BLACK,Color.GREEN.darker())); break;
+			case IconOn     : smallImages.put(id, ImageToolbox.createIcon_Circle(16,12,10,Color.BLACK,Color.GREEN)); break;
+			case IconUnknown: smallImages.put(id, ImageToolbox.createIcon_Circle(16,12,10,Color.BLACK,Color.GRAY)); break;
+			}
+		}
+	}
+
 	private StandardMainWindow mainWindow;
 	private Device device;
 	private MainGui mainGui;
@@ -125,7 +144,6 @@ public class YamahaControl {
 	private FrequentlyUpdater frequentlyUpdater;
 	
 	YamahaControl() {
-		smallImages = new EnumMap<>(SmallImages.class);
 		mainWindow = null;
 		device = null;
 		mainGui = null;
@@ -134,7 +152,6 @@ public class YamahaControl {
 	}
 	
 	private void createGUI() {
-		createSmallImages();
 		
 		mainGui = new MainGui();
 		guiRegions.add(mainGui);
@@ -164,12 +181,13 @@ public class YamahaControl {
 		
 		JTabbedPane subUnitPanel = new JTabbedPane();
 		
+		new SubUnitNetRadio().addTo(guiRegions,subUnitPanel);
+		new SubUnitTuner   ().addTo(guiRegions,subUnitPanel);
+		
 		JPanel contentPane = new JPanel(new BorderLayout(3,3));
 		contentPane.setBorder(BorderFactory.createEmptyBorder(3,3,3,3));
 		contentPane.add(mainControlPanel,BorderLayout.WEST);
 		contentPane.add(subUnitPanel,BorderLayout.CENTER);
-		
-		// TODO YamahaControl.createGUI
 		
 		mainWindow = new StandardMainWindow("YamahaControl");
 		mainWindow.startGUI(contentPane);
@@ -194,19 +212,9 @@ public class YamahaControl {
 		
 	}
 
-	private void createSmallImages() {
-		for (SmallImages id:SmallImages.values()) {
-			switch (id) {
-			case IconOff    : smallImages.put(id, ImageToolbox.createIcon_Circle(16,12,10,Color.BLACK,Color.GREEN.darker())); break;
-			case IconOn     : smallImages.put(id, ImageToolbox.createIcon_Circle(16,12,10,Color.BLACK,Color.GREEN)); break;
-			case IconUnknown: smallImages.put(id, ImageToolbox.createIcon_Circle(16,12,10,Color.BLACK,Color.GRAY)); break;
-			}
-		}
-	}
-
 	private void updateDevice(UpdateReason reason) {
 		EnumSet<UpdateWish> updateWishes = EnumSet.noneOf(UpdateWish.class);
-		guiRegions.forEach((GuiRegion gr)->updateWishes.addAll(Arrays.asList(gr.getUpdateWishes(reason))));
+		guiRegions.forEach((GuiRegion gr)->updateWishes.addAll(gr.getUpdateWishes(reason)));
 		device.update(updateWishes);
 	}
 
@@ -215,7 +223,7 @@ public class YamahaControl {
 		if (addr!=null) {
 			device = new Device(addr);
 			updateDevice(UpdateReason.Initial);
-			guiRegions.forEach(gr->gr.initGUIafterConnect());
+			guiRegions.forEach(gr->gr.initGUIafterConnect(device));
 			frequentlyUpdater.start();
 		}
 	}
@@ -281,6 +289,21 @@ public class YamahaControl {
 		if (l!=null) comboBox.addActionListener(l);
 		return comboBox;
 	}
+	
+	static float getScrollPos(JScrollBar scrollBar) {
+		int min = scrollBar.getMinimum();
+		int max = scrollBar.getMaximum();
+		int ext = scrollBar.getVisibleAmount();
+		int val = scrollBar.getValue();
+		return (val-min)/((float)max-ext-min);
+	}
+
+	static void setScrollPos(JScrollBar scrollBar, float pos) {
+		int min = scrollBar.getMinimum();
+		int max = scrollBar.getMaximum();
+		int ext = scrollBar.getVisibleAmount();
+		SwingUtilities.invokeLater(()->scrollBar.setValue(Math.round(pos*(max-ext-min)+min)));
+	}
 
 	static void copyToClipBoard(String str) {
 		if (str==null) return;
@@ -337,9 +360,9 @@ public class YamahaControl {
 
 	public static interface GuiRegion {
 		void setEnabled(boolean enabled);
-		void initGUIafterConnect();
+		void initGUIafterConnect(Device device);
 		void frequentlyUpdate();
-		Device.UpdateWish[] getUpdateWishes(UpdateReason reason);
+		Collection<Device.UpdateWish> getUpdateWishes(UpdateReason reason);
 	}
 	
 	private class MainGui implements GuiRegion {
@@ -356,8 +379,7 @@ public class YamahaControl {
 			inputsPanel = null;
 		}
 
-		@Override
-		public void setEnabled(boolean enabled) {
+		@Override public void setEnabled(boolean enabled) {
 			onoffBtn.setEnabled(enabled);
 			volumeControl.setEnabled(enabled);
 			scenesPanel.setEnabled(enabled);
@@ -365,16 +387,16 @@ public class YamahaControl {
 		}
 
 		@Override
-		public UpdateWish[] getUpdateWishes(UpdateReason reason) {
+		public Collection<UpdateWish> getUpdateWishes(UpdateReason reason) {
 			switch (reason) {
-			case Initial   : return new UpdateWish[] { UpdateWish.Power, UpdateWish.BasicStatus, UpdateWish.Scenes, UpdateWish.Inputs };
-			case Frequently: return new UpdateWish[] { UpdateWish.Power, UpdateWish.BasicStatus };
+			case Initial   : return Arrays.asList( new UpdateWish[] { UpdateWish.Power, UpdateWish.BasicStatus, UpdateWish.Scenes, UpdateWish.Inputs } );
+			case Frequently: return Arrays.asList( new UpdateWish[] { UpdateWish.Power, UpdateWish.BasicStatus } );
 			}
 			return null;
 		}
 
 		@Override
-		public void initGUIafterConnect() {
+		public void initGUIafterConnect(Device _device) {
 			setEnabled(device!=null);
 			
 			if (device!=null) {
@@ -498,148 +520,302 @@ public class YamahaControl {
 		}
 	}
 	
-	private static class VolumeControl extends Canvas {
-		private static final long serialVersionUID = -5870265710270984615L;
-		private double angle;
-		private int radius;
-		private double zeroAngle;
-		private double value;
-		private double deltaPerFullCircle;
-		protected boolean isAdjusting;
-		private String unit;
-		private ValueListener valueListener;
+	private static abstract class SubUnit extends JPanel implements GuiRegion {
+		private static final long serialVersionUID = 7368584160348326790L;
 		
-		public interface ValueListener {
-			public void valueChanged(double value, boolean isAdjusting);
+		protected Device device;
+		private JLabel readyStateLabel;
+		private JLabel tabHeaderComp;
+
+		protected SubUnit(String tabTitle) {
+			super(new BorderLayout(3,3));
+			tabHeaderComp = new JLabel(tabTitle);
+			readyStateLabel = new JLabel("???",smallImages.get(SmallImages.IconUnknown),JLabel.LEFT);
+			add(readyStateLabel,BorderLayout.NORTH);
+			add(createContentPanel(),BorderLayout.CENTER);
 		}
+
+		public void addTo(Vector<GuiRegion> guiRegions, JTabbedPane subUnitPanel) {
+			guiRegions.add(this);
+			int index = subUnitPanel.getTabCount();
+			subUnitPanel.insertTab("tabTitle",null,this,null, index);
+			subUnitPanel.setTabComponentAt(index, tabHeaderComp);
+		}
+
+		@Override
+		public void initGUIafterConnect(Device device) {
+			this.device = device;
+			frequentlyUpdate();
+		}
+
+		@Override
+		public void frequentlyUpdate() {
+			boolean isReady = getReadyState();
+			tabHeaderComp.setOpaque(isReady);
+			tabHeaderComp.setBackground(isReady?Color.GREEN:null);
+			readyStateLabel.setText(isReady?"Ready":"Not Ready");
+			readyStateLabel.setIcon(isReady?smallImages.get(SmallImages.IconOn):smallImages.get(SmallImages.IconOff));
+		}
+
+		@Override
+		public Collection<UpdateWish> getUpdateWishes(UpdateReason reason) {
+			return new Vector<UpdateWish>();
+		}
+
+		protected abstract JPanel createContentPanel();
+		protected abstract boolean getReadyState();
 		
-		VolumeControl(int width, double deltaPerFullCircle, double zeroAngle_deg, ValueListener valueListener) {
-			super(width, width);
-			this.deltaPerFullCircle = deltaPerFullCircle;
-			this.valueListener = valueListener;
+	}
+	
+	private static class SubUnitNetRadio extends SubUnit {
+		private static final long serialVersionUID = -8583320100311806933L;
+		private JTextArea playinfoOutput;
+		private JList<Line> lineList;
+		private JTextField lineListLabel;
+		private boolean ignoreListSelection;
+		private ListInfo listInfo;
+		private Vector<JButton> buttons;
+		private JScrollPane playinfoScrollPane;
+
+		public SubUnitNetRadio() {
+			super("Net Radio");
+			listInfo = null;
+		}
+
+		@Override
+		public void setEnabled(boolean enabled) {
+			lineList.setEnabled(enabled);
+			buttons.forEach(b->b.setEnabled(enabled));
+		}
+
+		@Override
+		protected JPanel createContentPanel() {
+			GridBagLayout layout;
+			GridBagConstraints c = new GridBagConstraints();
+			c.insets = new Insets(3, 3, 3, 3);
 			
-			zeroAngle = zeroAngle_deg/180*Math.PI;
-			radius = width/2-20;
-			angle = 0.0;
-			value = 0.0;
-			isAdjusting = false;
-			unit = "##";
+			lineListLabel = new JTextField("???");
+			lineListLabel.setEditable(false);
 			
-			setMouseAdapter();
+			ignoreListSelection = false;
+			lineList = new JList<Line>();
+			lineList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+			lineList.addListSelectionListener(e -> {
+				if (e.getValueIsAdjusting()) return;
+				if (ignoreListSelection) return;
+				if (listInfo.menuStatus==Device.Value.ReadyOrBusy.Busy) return;
+				
+				Line line = lineList.getSelectedValue();
+				if (line==null) return;
+				if (line.line.attr==Device.Value.LineAttribute.Unselectable) return;
+				
+				device.netRadio.sendDirectSelect(line.line);
+				device.update(EnumSet.of(UpdateWish.NetRadioListInfo,UpdateWish.NetRadioPlayInfo));
+				updateLineList();
+				updatePlayInfo();
+			});
+			
+			playinfoOutput = new JTextArea("Play Info");
+			
+			JScrollPane lineListScrollPane = new JScrollPane(lineList);
+			playinfoScrollPane = new JScrollPane(playinfoOutput);
+			lineListScrollPane.setPreferredSize(new Dimension(400, 200));
+			playinfoScrollPane.setPreferredSize(new Dimension(400, 400));
+			
+			buttons = new Vector<>();
+			JPanel buttonsPanel = new JPanel();
+			buttonsPanel.setLayout(layout = new GridBagLayout());
+//			addComp(buttonsPanel,layout,c,new   JLabel(                 ), 0,0, 1,1, 1,1, GridBagConstraints.BOTH);
+			addComp(buttonsPanel,layout,c,createButton(ButtonID.Up      ), 1,0, 1,1, 1,1, GridBagConstraints.BOTH);
+//			addComp(buttonsPanel,layout,c,new   JLabel(                 ), 2,0, 1,1, 1,1, GridBagConstraints.BOTH);
+			addComp(buttonsPanel,layout,c,createButton(ButtonID.Home    ), 3,0, 1,1, GridBagConstraints.REMAINDER,1, GridBagConstraints.BOTH);
+			addComp(buttonsPanel,layout,c,createButton(ButtonID.Return  ), 0,1, 1,1, 1,1, GridBagConstraints.BOTH);
+//			addComp(buttonsPanel,layout,c,new   JLabel(                 ), 1,1, 1,1, 1,1, GridBagConstraints.BOTH);
+			addComp(buttonsPanel,layout,c,createButton(ButtonID.Select  ), 2,1, 1,1, 1,1, GridBagConstraints.BOTH);
+			addComp(buttonsPanel,layout,c,createButton(ButtonID.PageUp  ), 3,1, 1,1, GridBagConstraints.REMAINDER,1, GridBagConstraints.BOTH);
+//			addComp(buttonsPanel,layout,c,new   JLabel(                 ), 0,2, 1,1, 1,1, GridBagConstraints.BOTH);
+			addComp(buttonsPanel,layout,c,createButton(ButtonID.Down    ), 1,2, 1,1, 1,1, GridBagConstraints.BOTH);
+//			addComp(buttonsPanel,layout,c,new   JLabel(                 ), 2,2, 1,1, 1,1, GridBagConstraints.BOTH);
+			addComp(buttonsPanel,layout,c,createButton(ButtonID.PageDown), 3,2, 1,1, GridBagConstraints.REMAINDER,1, GridBagConstraints.BOTH);
+			addComp(buttonsPanel,layout,c,createButton(ButtonID.Play    ), 0,3, 1,1, 2,1, GridBagConstraints.BOTH);
+			addComp(buttonsPanel,layout,c,createButton(ButtonID.Stop    ), 2,3, 1,1, GridBagConstraints.REMAINDER,1, GridBagConstraints.BOTH);
+			
+			JPanel contentPanel = new JPanel();
+			contentPanel.setLayout(layout = new GridBagLayout());
+			addComp(contentPanel,layout,c,lineListLabel      ,0,0,1,0,1,1,GridBagConstraints.BOTH);
+			addComp(contentPanel,layout,c,lineListScrollPane ,0,1,1,0,1,1,GridBagConstraints.BOTH);
+			addComp(contentPanel,layout,c,buttonsPanel       ,0,2,1,0,1,1,GridBagConstraints.VERTICAL);
+			addComp(contentPanel,layout,c,playinfoScrollPane ,0,3,1,1,1,1,GridBagConstraints.BOTH);
+			addComp(contentPanel,layout,c,new JLabel("dummy"),0,4,1,0,1,1,GridBagConstraints.BOTH);
+			
+			
+			return contentPanel;
 		}
 		
-		private void setMouseAdapter() {
-			MouseAdapter mouseAdapter = new MouseAdapter() {
-				
-				private VolumeControl control = VolumeControl.this;
-				private double pickAngle = Double.NaN;
-
-				@Override
-				public void mousePressed(MouseEvent e) {
-					pickAngle = getMouseAngle(e.getX(), e.getY())-angle;
-					isAdjusting = true;
-//					System.out.printf("pickAngle: %f%n",pickAngle);
-				}
-
-				@Override
-				public void mouseReleased(MouseEvent e) {
-					isAdjusting = false;
-					changeValue(e.getX(), e.getY());
-					pickAngle = Double.NaN;
-//					System.out.printf("pickAngle: %f%n",pickAngle);
-				}
-
-				@Override
-				public void mouseDragged(MouseEvent e) {
-					changeValue(e.getX(), e.getY());
-//					System.out.printf("angle: %f%n",angle);
-				}
-				
-
-				private void changeValue(int mouseX, int mouseY) {
-					double mouseAngle = getMouseAngle(mouseX, mouseY);
-					double diff = mouseAngle-pickAngle-angle;
-					if      (Math.abs(diff) > Math.abs(diff+2*Math.PI)) pickAngle -= 2*Math.PI;
-					else if (Math.abs(diff) > Math.abs(diff-2*Math.PI)) pickAngle += 2*Math.PI;
-					angle = mouseAngle-pickAngle;
-					value = angle/2/Math.PI*deltaPerFullCircle;
-					
-					valueListener.valueChanged(value,isAdjusting);
-					control.repaint();
-				}
-
-				private double getMouseAngle(int mouseX, int mouseY) {
-					int x = mouseX-control.width/2;
-					int y = mouseY-control.height/2;
-					double mouseAngle = Math.atan2(y,x);
-					return mouseAngle;
-				}
-			};
-			addMouseListener(mouseAdapter);
-			addMouseMotionListener(mouseAdapter);
+		private void addComp(JPanel panel, GridBagLayout layout, GridBagConstraints c, Component comp, int gridx, int gridy, double weightx, double weighty, int gridwidth, int gridheight, int fill) {
+			c.gridx=gridx;
+			c.gridy=gridy;
+			c.weighty=weighty;
+			c.weightx=weightx;
+			c.gridwidth=gridwidth;
+			c.gridheight=gridheight;
+			c.fill = fill;
+			layout.setConstraints(comp, c);
+			panel.add(comp);
 		}
-		
-		public void setValue(NumberWithUnit numberWithUnit) {
-			if (isAdjusting) return;
-			if (numberWithUnit==null) {
-				this.value = 0;
-				this.unit = "##";
-			} else {
-				this.value = numberWithUnit.number;
-				this.unit = numberWithUnit.unit;
+
+		enum ButtonID {
+			Up, Home, Return, Select, PageUp("Page Up"), Down, PageDown("Page Down"), Play, Stop;
+
+			String label;
+			ButtonID() { label = toString(); }
+			ButtonID(String label) { this.label = label; }
+			public String getLabel() { return label; }
+		}
+		private JButton createButton(ButtonID buttonID) {
+			JButton button = YamahaControl.createButton(buttonID.getLabel(), createListener(buttonID), true);
+			buttons.add(button);
+			return button;
+		}
+
+		private ActionListener createListener(ButtonID buttonID) {
+			switch (buttonID) {
+			case Up    : return createCursorSelectListener(Device.Value.CursorSelect.Up);
+			case Down  : return createCursorSelectListener(Device.Value.CursorSelect.Down);
+			case Return: return createCursorSelectListener(Device.Value.CursorSelect.Return);
+			case Select: return createCursorSelectListener(Device.Value.CursorSelect.Sel);
+			case Home  : return createCursorSelectListener(Device.Value.CursorSelect.ReturnToHome);
+				
+			case PageUp  : return createPageSelectListener(Device.Value.PageSelect.Up);
+			case PageDown: return createPageSelectListener(Device.Value.PageSelect.Down);
+			
+			case Play: return createPlaybackListener(Device.Value.PlayState.Play);
+			case Stop: return createPlaybackListener(Device.Value.PlayState.Stop);
 			}
-			this.angle = value*2*Math.PI/deltaPerFullCircle;
-			repaint();
+			return e->{};
+		}
+
+		private ActionListener createPlaybackListener(PlayState playState) {
+			return e->{
+				device.netRadio.sendPlayback(playState);
+				device.update(EnumSet.of(UpdateWish.NetRadioListInfo,UpdateWish.NetRadioPlayInfo));
+				updateLineList();
+				updatePlayInfo();
+			};
+		}
+
+		private ActionListener createPageSelectListener(PageSelect pageSelect) {
+			return e->{
+				device.netRadio.sendPageSelect(pageSelect);
+				device.update(EnumSet.of(UpdateWish.NetRadioListInfo));
+				updateLineList();
+			};
+		}
+
+		private ActionListener createCursorSelectListener(CursorSelect cursorSelect) {
+			return e->{
+				device.netRadio.sendCursorSelect(cursorSelect);
+				device.update(EnumSet.of(UpdateWish.NetRadioListInfo,UpdateWish.NetRadioPlayInfo));
+				updateLineList();
+				updatePlayInfo();
+			};
+		}
+
+		@Override
+		public void initGUIafterConnect(Device device) {
+			super.initGUIafterConnect(device);
+			setEnabled(device!=null);
+		}
+
+		@Override
+		public void frequentlyUpdate() {
+			super.frequentlyUpdate();
+			updateLineList();
+			updatePlayInfo();
+		}
+
+		private void updatePlayInfo() {
+			float hPos = YamahaControl.getScrollPos(playinfoScrollPane.getHorizontalScrollBar());
+			float vPos = YamahaControl.getScrollPos(playinfoScrollPane.getVerticalScrollBar());
+			playinfoOutput.setText(device.netRadio.getPlayInfo().toString());
+			YamahaControl.setScrollPos(playinfoScrollPane.getHorizontalScrollBar(),hPos);
+			YamahaControl.setScrollPos(playinfoScrollPane.getVerticalScrollBar(),vPos);
+		}
+
+		private void updateLineList() {
+			listInfo = device.netRadio.getListInfo();
+			lineList.setEnabled(listInfo.menuStatus==Device.Value.ReadyOrBusy.Ready);
+			
+			lineListLabel.setText(String.format("[%s] %s (is %s) %s/%s", listInfo.menuLayer, listInfo.menuName, listInfo.menuStatus, listInfo.currentLine, listInfo.maxLine));
+			Line[] lines = listInfo.lines.stream().map((ListInfo.Line line)->new Line(line)).toArray(n->new Line[n]);
+			lineList.setListData(lines);
+			
+			if (listInfo.currentLine!=null) {
+				int lineIndex = ((listInfo.currentLine-1)&0x7);
+				ignoreListSelection=true;
+				lineList.setSelectedIndex(lineIndex);
+				ignoreListSelection=false;
+			}
 		}
 		
 		@Override
-		protected void paintCanvas(Graphics g, int width, int height) {
-			Graphics2D g2 = (g instanceof Graphics2D)?(Graphics2D)g:null;
-			if (g2!=null) g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-			
-			double angle01 = 0.1*2*Math.PI/deltaPerFullCircle;
-			
-			double r1 = 0.95; int i=1;
-			drawRadiusLine(g, width, height, r1, 1.3, zeroAngle);
-			for (double a=angle01; a<Math.PI*0.9; a+=angle01, ++i) {
-				double r2 = (i%10)==0?1.3:(i%5)==0?1.15:1.05;
-				drawRadiusLine(g, width, height, r1, r2, zeroAngle+a);
-				drawRadiusLine(g, width, height, r1, r2, zeroAngle-a);
+		public Collection<UpdateWish> getUpdateWishes(UpdateReason reason) {
+			Vector<UpdateWish> vector = new Vector<>(super.getUpdateWishes(reason));
+			switch (reason) {
+			case Frequently: vector.addAll(Arrays.asList(new UpdateWish[] { UpdateWish.NetRadioPlayInfo, UpdateWish.NetRadioListInfo })); break;
+			case Initial   : vector.addAll(Arrays.asList(new UpdateWish[] { UpdateWish.NetRadioPlayInfo, UpdateWish.NetRadioListInfo })); break;
 			}
-			
-			g.setColor(Color.WHITE);
-			g.fillOval(width/2-radius, height/2-radius, radius*2, radius*2);
-			
-			g.setColor(Color.BLACK);
-//			g.drawOval(0, 0, radius*2, radius*2);
-			g.drawOval(width/2-radius, height/2-radius, radius*2, radius*2);
-			
-			i=1;
-			if (g2!=null) g2.setStroke( new BasicStroke(5,BasicStroke.CAP_ROUND,BasicStroke.JOIN_ROUND) );
-			drawRadiusLine(g, width, height, 0.96, 0.7, angle+zeroAngle);
-			if (g2!=null) g2.setStroke(new BasicStroke(1));
-			for (double a=angle01; a<Math.PI*1.05; a+=angle01, ++i) {
-				double r2 = (i%10)==0?0.7:(i%5)==0?0.85:0.95;
-				drawRadiusLine(g, width, height, 1.0, r2, angle+zeroAngle+a);
-				if (a<=Math.PI*0.95) drawRadiusLine(g, width, height, 1.0, r2, angle+zeroAngle-a);
-			}
-			
-			
-			g.drawString(String.format(Locale.ENGLISH, "%1.1f %s", value, unit), width/2, height/2);
-			//g.drawString(String.format(Locale.ENGLISH, "%6.1f", angle/Math.PI*180), width/2, height/2+15);
+			return vector;
 		}
 
-		private void drawRadiusLine(Graphics g, int width, int height, double r1, double r2, double angle) {
-			double cos = radius*Math.cos(angle);
-			double sin = radius*Math.sin(angle);
-			int x1 = width /2 + (int)Math.round(cos*r1);
-			int y1 = height/2 + (int)Math.round(sin*r1);
-			int x2 = width /2 + (int)Math.round(cos*r2);
-			int y2 = height/2 + (int)Math.round(sin*r2);
-			g.drawLine(x1, y1, x2, y2);
+		@Override
+		protected boolean getReadyState() {
+			if (device==null) return false;
+			// GET[G3]:    NET_RADIO,Config   ->   Feature_Availability -> "Ready" | "Not Ready"
+			ReadyOrNot readyState = device.askValue(Device.KnownCommand.GetNetRadioConfig, ReadyOrNot.values(), "Feature_Availability");
+			return readyState==ReadyOrNot.Ready;
 		}
-	
+
+		private class Line {
+
+			private ListInfo.Line line;
+
+			public Line(ListInfo.Line line) {
+				this.line = line;
+			}
+
+			@Override
+			public String toString() {
+				return String.format("[%s] %s%s", line.index, line.txt==null?"":line.txt, line.attr==Device.Value.LineAttribute.Unselectable?"":(" ("+line.attr+")"));
+			}
+		}
 	}
+	
+	private static class SubUnitTuner extends SubUnit {
+		private static final long serialVersionUID = -8583320100311806933L;
+
+		public SubUnitTuner() {
+			super("Tuner");
+		}
+
+		@Override
+		protected boolean getReadyState() {
+			if (device==null) return false;
+			// GET[G2]:    Tuner,Config   ->   Feature_Availability -> "Ready" | "Not Ready"
+			ReadyOrNot readyState = device.askValue(Device.KnownCommand.GetTunerConfig, ReadyOrNot.values(), "Feature_Availability");
+			return readyState==ReadyOrNot.Ready;
+		}
+
+		@Override
+		public void setEnabled(boolean enabled) {}
+
+		@Override
+		protected JPanel createContentPanel() {
+			return new JPanel();
+		}
+	}
+	
+	
 	
 	static class Log {
 		public static void info   (Class<?> callerClass,                String format, Object... values) { out(System.out, callerClass, "INFO"   ,         format, values); }
