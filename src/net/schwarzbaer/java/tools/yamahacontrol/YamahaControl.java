@@ -46,8 +46,8 @@ import java.util.function.Consumer;
 import java.util.function.Predicate;
 
 import javax.activation.DataHandler;
+import javax.swing.AbstractButton;
 import javax.swing.BorderFactory;
-import javax.swing.BoxLayout;
 import javax.swing.ButtonGroup;
 import javax.swing.Icon;
 import javax.swing.ImageIcon;
@@ -223,16 +223,15 @@ public class YamahaControl {
 		
 		mainGui.createOnOffBtn();
 		
-		JPanel devicePanel = new JPanel(/*new GridLayout(1,0,3,3)*/);
-		devicePanel.setLayout(new BoxLayout(devicePanel, BoxLayout.X_AXIS));
+		GridBagPanel devicePanel = new GridBagPanel();
 		devicePanel.setBorder(BorderFactory.createTitledBorder("Device"));
-		devicePanel.add(createButton("Connect",e->connectToReciever(),true));
-		devicePanel.add(mainGui.onoffBtn);
-		devicePanel.add(createButton("Open Command List",e->CommandList.openWindow(),true));
+		devicePanel.add(createButton("Connect",e->connectToReciever(),true),1,1,GridBagConstraints.BOTH);
+		devicePanel.add(mainGui.onoffBtn,1,GridBagConstraints.REMAINDER,GridBagConstraints.BOTH);
+		devicePanel.add(createButton("Open Command List",e->CommandList.openWindow(),true),1,GridBagConstraints.REMAINDER,GridBagConstraints.BOTH);
 		
 		JTabbedPane scenesInputsPanel = mainGui.createScenesInputsPanel();
 		scenesInputsPanel.setBorder(BorderFactory.createTitledBorder("Scenes/Inputs"));
-		scenesInputsPanel.setPreferredSize(new Dimension(250, 400));
+		scenesInputsPanel.setPreferredSize(new Dimension(150,520));
 		
 		mainGui.createVolumeControl(200);
 		JPanel volumePanel = new JPanel(new BorderLayout());
@@ -434,6 +433,48 @@ public class YamahaControl {
 	}
 	// ///////////////////////////////////////////////////////////////////////////////////
 	
+	static class GridBagPanel extends JPanel {
+		private static final long serialVersionUID = -344141298780014208L;
+		
+		private GridBagLayout layout;
+		protected GridBagConstraints c;
+	
+		GridBagPanel() {
+			super();
+			resetLayout();
+		}
+	
+		void resetLayout() {
+			setLayout(layout = new GridBagLayout());
+			c = new GridBagConstraints();
+		}
+		
+		void setInsets(Insets insets) {
+			c.insets = insets;
+		}
+		
+		void add(Component comp, double weightx, int gridwidth, int fill) {
+			c.weightx=weightx;
+			c.gridwidth=gridwidth;
+			c.fill = fill;
+			layout.setConstraints(comp, c);
+			add(comp);
+		}
+		
+		void add(Component comp, int gridx, int gridy, double weightx, double weighty, int gridwidth, int gridheight, int fill) {
+			c.gridx=gridx;
+			c.gridy=gridy;
+			c.weighty=weighty;
+			c.weightx=weightx;
+			c.gridwidth=gridwidth;
+			c.gridheight=gridheight;
+			c.fill = fill;
+			layout.setConstraints(comp, c);
+			add(comp);
+		}
+		
+	}
+
 	enum UpdateReason { Initial, Frequently }
 
 	public static interface GuiRegion {
@@ -482,7 +523,6 @@ public class YamahaControl {
 			if (device!=null) {
 				scenesPanel.createButtons(device.inputs.getScenes(),this::setScene,dsi->dsi!=null && "W".equals(dsi.rw));
 				inputsPanel.createButtons(device.inputs.getInputs(),this::setInput,null);
-				selectCurrentScene();
 				selectCurrentInput();
 			}
 			
@@ -493,22 +533,17 @@ public class YamahaControl {
 		public void frequentlyUpdate() {
 			setOnOffButton(device==null?(Boolean)false:device.power.isOn());
 			volumeControl.setValue(device==null?null:device.getVolume());
+			selectCurrentInput();
 		}
 
 		private void setScene(Device.Inputs.DeviceSceneInput dsi) {
 			if (device==null) return;
 			device.inputs.setScene(dsi);
-			selectCurrentScene();
 		}
 
 		private void setInput(Device.Inputs.DeviceSceneInput dsi) {
 			if (device==null) return;
 			device.inputs.setInput(dsi);
-			selectCurrentInput();
-		}
-
-		private void selectCurrentScene() {
-			if (scenesPanel!=null) scenesPanel.setSelected(device.inputs.getCurrentScene());
 		}
 
 		private void selectCurrentInput() {
@@ -516,12 +551,17 @@ public class YamahaControl {
 		}
 
 		public JTabbedPane createScenesInputsPanel() {
-			scenesPanel = new DsiPanel();
-			inputsPanel = new DsiPanel();
+			scenesPanel = new DsiPanel(true);
+			inputsPanel = new DsiPanel(false);
+			
+			JScrollPane scenesScrollPane = new JScrollPane(scenesPanel);
+			JScrollPane inputsScrollPane = new JScrollPane(inputsPanel);
+			scenesScrollPane.setMinimumSize(new Dimension(150,20));
+			inputsScrollPane.setMinimumSize(new Dimension(150,20));
 			
 			JTabbedPane scenesInputsPanel = new JTabbedPane();
-			scenesInputsPanel.add("Scenes", new JScrollPane(scenesPanel));
-			scenesInputsPanel.add("Inputs", new JScrollPane(inputsPanel));
+			scenesInputsPanel.add("Scenes", scenesScrollPane);
+			scenesInputsPanel.add("Inputs", inputsScrollPane);
 			
 			return scenesInputsPanel;
 		}
@@ -609,52 +649,57 @@ public class YamahaControl {
 			setOnOffButton(device==null?false:device.power.isOn());
 		}
 		
-		private class DsiPanel extends JPanel {
+		private class DsiPanel extends GridBagPanel {
 			private static final long serialVersionUID = -3330564101527546450L;
 			
 			private ButtonGroup bg;
 			private HashMap<Device.Inputs.DeviceSceneInput,JToggleButton> buttons;
 
-			private GridBagLayout layout;
-			DsiPanel() {
+			private boolean createNormalButtons;
+			
+			DsiPanel(boolean createNormalButtons) {
 				super();
+				this.createNormalButtons = createNormalButtons;
 				bg = null;
 				buttons = null;
 			}
 			
 			public void setSelected(Device.Inputs.DeviceSceneInput dsi) {
+				if (createNormalButtons) throw new UnsupportedOperationException("Can't select a button, if normal buttons are created.");
 				JToggleButton button = buttons.get(dsi);
 				if (button!=null) bg.setSelected(button.getModel(), true);
 			}
 
 			public void createButtons(Device.Inputs.DeviceSceneInput[] dsiArr, Consumer<Device.Inputs.DeviceSceneInput> setFunction, Predicate<Device.Inputs.DeviceSceneInput> filter) {
 				removeAll();
-				layout = new GridBagLayout();
-				setLayout(layout);
-				GridBagConstraints c = new GridBagConstraints();
+				resetLayout();
 				c.weighty=0;
 				
-				bg = new ButtonGroup();
-				buttons = new HashMap<>();
+				if (!createNormalButtons) {
+					bg = new ButtonGroup();
+					buttons = new HashMap<>();
+				}
+				
 				for (Device.Inputs.DeviceSceneInput dsi:dsiArr) {
 					if (filter!=null && !filter.test(dsi)) continue;
+					
 					String title = dsi.title==null?"<???>":dsi.title.trim();
-					JToggleButton button = createToggleButton(title, e->setFunction.accept(dsi), true, bg);
-					buttons.put(dsi,button);
-					addComp(c,button,0,1,GridBagConstraints.HORIZONTAL);
-					addComp(c,new JLabel("["+dsi.ID+"]",JLabel.CENTER),1,GridBagConstraints.REMAINDER,GridBagConstraints.BOTH);
-					//addComp(c,new JLabel(dsi.rw),0,GridBagConstraints.REMAINDER,GridBagConstraints.BOTH);
+					
+					AbstractButton button;
+					if (createNormalButtons) {
+						button = createButton(title, e->setFunction.accept(dsi), true);
+					} else {
+						JToggleButton tButton = createToggleButton(title, e->setFunction.accept(dsi), true, bg);
+						buttons.put(dsi,tButton);
+						button = tButton;
+					}
+					
+					add(button,0,1,GridBagConstraints.HORIZONTAL);
+					add(new JLabel("["+dsi.ID+"]",JLabel.CENTER),1,GridBagConstraints.REMAINDER,GridBagConstraints.BOTH);
+					//add(new JLabel(dsi.rw),0,GridBagConstraints.REMAINDER,GridBagConstraints.BOTH);
 				}
 				c.weighty=1;
-				addComp(c,new JLabel(""),1,GridBagConstraints.REMAINDER,GridBagConstraints.BOTH);
-			}
-			
-			private void addComp(GridBagConstraints c, Component comp, double weightx, int gridwidth, int fill) {
-				c.weightx=weightx;
-				c.gridwidth=gridwidth;
-				c.fill = fill;
-				layout.setConstraints(comp, c);
-				add(comp);
+				add(new JLabel(""),1,GridBagConstraints.REMAINDER,GridBagConstraints.BOTH);
 			}
 		}
 	}
@@ -759,9 +804,6 @@ public class YamahaControl {
 
 		@Override
 		protected JPanel createContentPanel() {
-			GridBagLayout layout;
-			GridBagConstraints c = new GridBagConstraints();
-			c.insets = new Insets(3, 3, 3, 3);
 			
 			lineListLabel = new JTextField("???");
 			lineListLabel.setEditable(false);
@@ -787,6 +829,7 @@ public class YamahaControl {
 			});
 			
 			playinfoOutput = new JTextArea("Play Info");
+			playinfoOutput.setEditable(false);
 			
 			JScrollPane lineListScrollPane = new JScrollPane(lineList);
 			playinfoScrollPane = new JScrollPane(playinfoOutput);
@@ -794,10 +837,10 @@ public class YamahaControl {
 			playinfoScrollPane.setPreferredSize(new Dimension(500, 400));
 			
 			buttons = new Vector<>();
-			JPanel buttonsPanel = new JPanel();
-			buttonsPanel.setLayout(layout = new GridBagLayout());
-			createButtons_CrossLayout(layout, c, buttonsPanel);
-			//createButtons_OtherLayout(layout, c, buttonsPanel);
+			GridBagPanel buttonsPanel = new GridBagPanel();
+			buttonsPanel.setInsets(new Insets(3,3,3,3));
+			createButtons_CrossLayout(buttonsPanel);
+			//createButtons_OtherLayout(buttonsPanel);
 			
 			JPanel lineListPanel = new JPanel(new BorderLayout(3,3));
 			lineListPanel.add(lineListLabel      ,BorderLayout.NORTH);
@@ -808,56 +851,35 @@ public class YamahaControl {
 			contentPanel.add(lineListPanel, BorderLayout.NORTH);
 			contentPanel.add(playinfoScrollPane, BorderLayout.CENTER);
 			
-//			JPanel contentPanel = new JPanel();
-//			contentPanel.setLayout(layout = new GridBagLayout());
-//			addComp(contentPanel,layout,c,lineListLabel      ,0,0,1,0,1,1,GridBagConstraints.BOTH);
-//			addComp(contentPanel,layout,c,lineListScrollPane ,0,1,1,0,1,1,GridBagConstraints.BOTH);
-//			addComp(contentPanel,layout,c,buttonsPanel       ,0,2,1,0,1,1,GridBagConstraints.VERTICAL);
-//			addComp(contentPanel,layout,c,playinfoScrollPane ,0,3,1,1,1,1,GridBagConstraints.BOTH);
-//			//addComp(contentPanel,layout,c,new JLabel("dummy"),0,4,1,0,1,1,GridBagConstraints.BOTH);
-			
-			
 			return contentPanel;
 		}
 
 		@SuppressWarnings("unused")
-		private void createButtons_OtherLayout(GridBagLayout layout, GridBagConstraints c, JPanel buttonsPanel) {
-			addComp(buttonsPanel,layout,c,createButton(ButtonID.Home    ), 0,0, 1,1, 1,1, GridBagConstraints.BOTH);
-			addComp(buttonsPanel,layout,c,createButton(ButtonID.Return  ), 0,1, 1,1, 1,1, GridBagConstraints.BOTH);
-			addComp(buttonsPanel,layout,c,createButton(ButtonID.Select  ), 0,2, 1,1, 1,1, GridBagConstraints.BOTH);
-			addComp(buttonsPanel,layout,c,createButton(ButtonID.Up      ), 1,0, 1,1, 1,1, GridBagConstraints.BOTH);
-			addComp(buttonsPanel,layout,c,createButton(ButtonID.Down    ), 1,1, 1,1, 1,1, GridBagConstraints.BOTH);
-			addComp(buttonsPanel,layout,c,createButton(ButtonID.PageUp  ), 2,0, 1,1, 1,1, GridBagConstraints.BOTH);
-			addComp(buttonsPanel,layout,c,createButton(ButtonID.PageDown), 2,1, 1,1, 1,1, GridBagConstraints.BOTH);
-			addComp(buttonsPanel,layout,c,createButton(ButtonID.Play    ), 1,2, 1,1, 1,1, GridBagConstraints.BOTH);
-			addComp(buttonsPanel,layout,c,createButton(ButtonID.Stop    ), 2,2, 1,1, 1,1, GridBagConstraints.BOTH);
+		private void createButtons_OtherLayout(GridBagPanel buttonsPanel) {
+			buttonsPanel.add(createButton(ButtonID.Home    ), 0,0, 1,1, 1,1, GridBagConstraints.BOTH);
+			buttonsPanel.add(createButton(ButtonID.Return  ), 0,1, 1,1, 1,1, GridBagConstraints.BOTH);
+			buttonsPanel.add(createButton(ButtonID.Select  ), 0,2, 1,1, 1,1, GridBagConstraints.BOTH);
+			buttonsPanel.add(createButton(ButtonID.Up      ), 1,0, 1,1, 1,1, GridBagConstraints.BOTH);
+			buttonsPanel.add(createButton(ButtonID.Down    ), 1,1, 1,1, 1,1, GridBagConstraints.BOTH);
+			buttonsPanel.add(createButton(ButtonID.PageUp  ), 2,0, 1,1, 1,1, GridBagConstraints.BOTH);
+			buttonsPanel.add(createButton(ButtonID.PageDown), 2,1, 1,1, 1,1, GridBagConstraints.BOTH);
+			buttonsPanel.add(createButton(ButtonID.Play    ), 1,2, 1,1, 1,1, GridBagConstraints.BOTH);
+			buttonsPanel.add(createButton(ButtonID.Stop    ), 2,2, 1,1, 1,1, GridBagConstraints.BOTH);
 		}
 
-		private void createButtons_CrossLayout(GridBagLayout layout, GridBagConstraints c, JPanel buttonsPanel) {
-			addComp(buttonsPanel,layout,c,createButton(ButtonID.Up      ), 1,0, 1,1, 1,1, GridBagConstraints.BOTH);
-			addComp(buttonsPanel,layout,c,createButton(ButtonID.Home    ), 3,0, 1,1, 1,1, GridBagConstraints.BOTH);
-			addComp(buttonsPanel,layout,c,createButton(ButtonID.Return  ), 0,1, 1,1, 1,1, GridBagConstraints.BOTH);
-			addComp(buttonsPanel,layout,c,createButton(ButtonID.Select  ), 2,1, 1,1, 1,1, GridBagConstraints.BOTH);
-			addComp(buttonsPanel,layout,c,createButton(ButtonID.PageUp  ), 3,1, 1,1, 1,1, GridBagConstraints.BOTH);
-			addComp(buttonsPanel,layout,c,createButton(ButtonID.Down    ), 1,2, 1,1, 1,1, GridBagConstraints.BOTH);
-			addComp(buttonsPanel,layout,c,createButton(ButtonID.PageDown), 3,2, 1,1, 1,1, GridBagConstraints.BOTH);
-			addComp(buttonsPanel,layout,c,createButton(ButtonID.Play    ), 0,3, 1,1, 2,1, GridBagConstraints.BOTH);
-			addComp(buttonsPanel,layout,c,createButton(ButtonID.Stop    ), 2,3, 1,1, 2,1, GridBagConstraints.BOTH);
-			addComp(buttonsPanel,layout,c,createButton("Add Song to PreferredSongs",e->addSongToPreferredSongs()), 4,3, 1,1, 1,1, GridBagConstraints.BOTH);
+		private void createButtons_CrossLayout(GridBagPanel buttonsPanel) {
+			buttonsPanel.add(createButton(ButtonID.Up      ), 1,0, 1,1, 1,1, GridBagConstraints.BOTH);
+			buttonsPanel.add(createButton(ButtonID.Home    ), 3,0, 1,1, 1,1, GridBagConstraints.BOTH);
+			buttonsPanel.add(createButton(ButtonID.Return  ), 0,1, 1,1, 1,1, GridBagConstraints.BOTH);
+			buttonsPanel.add(createButton(ButtonID.Select  ), 2,1, 1,1, 1,1, GridBagConstraints.BOTH);
+			buttonsPanel.add(createButton(ButtonID.PageUp  ), 3,1, 1,1, 1,1, GridBagConstraints.BOTH);
+			buttonsPanel.add(createButton(ButtonID.Down    ), 1,2, 1,1, 1,1, GridBagConstraints.BOTH);
+			buttonsPanel.add(createButton(ButtonID.PageDown), 3,2, 1,1, 1,1, GridBagConstraints.BOTH);
+			buttonsPanel.add(createButton(ButtonID.Play    ), 0,3, 1,1, 2,1, GridBagConstraints.BOTH);
+			buttonsPanel.add(createButton(ButtonID.Stop    ), 2,3, 1,1, 2,1, GridBagConstraints.BOTH);
+			buttonsPanel.add(createButton("Add Song to PreferredSongs",e->addSongToPreferredSongs()), 4,3, 1,1, 1,1, GridBagConstraints.BOTH);
 		}
 		
-		private void addComp(JPanel panel, GridBagLayout layout, GridBagConstraints c, Component comp, int gridx, int gridy, double weightx, double weighty, int gridwidth, int gridheight, int fill) {
-			c.gridx=gridx;
-			c.gridy=gridy;
-			c.weighty=weighty;
-			c.weightx=weightx;
-			c.gridwidth=gridwidth;
-			c.gridheight=gridheight;
-			c.fill = fill;
-			layout.setConstraints(comp, c);
-			panel.add(comp);
-		}
-
 		enum ButtonID {
 			Up, Home, Return, Select, PageUp("Page Up"), Down, PageDown("Page Down"), Play, Stop;
 
@@ -1195,8 +1217,6 @@ public class YamahaControl {
 			return new JPanel();
 		}
 	}
-	
-	
 	
 	static class Log {
 		public static void info   (Class<?> callerClass,                String format, Object... values) { out(System.out, callerClass, "INFO"   ,         format, values); }

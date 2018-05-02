@@ -26,7 +26,7 @@ public final class Device {
 		this.address = address;
 		this.basicStatus = null;
 		this.power    = new Power   (this.address);
-		this.inputs   = new Inputs  (this.address);
+		this.inputs   = new Inputs  (this);
 		this.netRadio = new NetRadio(this.address);
 		this.tuner    = new Tuner   (this.address);
 		this.airPlay  = new AirPlay (this.address);
@@ -66,7 +66,7 @@ public final class Device {
 		@SuppressWarnings("unused") private Value.SleepState sleep;
 		private NumberWithUnit volume;
 		@SuppressWarnings("unused") private Value.OnOff volMute;
-		@SuppressWarnings("unused") private String currentInput;
+		private String currentInput;
 		@SuppressWarnings("unused") private Inputs.DeviceSceneInput inputInfo;
 
 		public BasicStatus() {
@@ -96,7 +96,6 @@ public final class Device {
 					if (inputInfoNode==null) status.inputInfo = null;
 					else status.inputInfo = Inputs.DeviceSceneInput.parse(inputInfoNode);
 					break;
-					// TODO other values cases in BasicStatus
 				}
 			});
 			return status;
@@ -159,49 +158,41 @@ public final class Device {
 	
 	static class Inputs {
 
-		private String address;
+		private Device device;
 		private DeviceSceneInput[] scenes;
 		private DeviceSceneInput[] inputs;
-		private DeviceSceneInput currentScene;
-		private DeviceSceneInput currentInput;
 		
-		public Inputs(String address) {
-			this.address = address;
+		public Inputs(Device device) {
+			this.device = device;
 			this.scenes = null;
 			this.inputs = null;
-			this.currentScene = null;
-			this.currentInput = null;
-		}
-
-		public DeviceSceneInput getCurrentScene() {
-			// TODO
-			// GET[G1]:    Main_Zone,Basic_Status   ->   Input,Input_Sel -> Values [GET[G2]:Main_Zone,Input,Input_Sel_Item]
-			return currentScene;
 		}
 
 		public DeviceSceneInput getCurrentInput() {
-			// TODO
 			// GET[G1]:    Main_Zone,Basic_Status   ->   Input,Input_Sel -> Values [GET[G2]:Main_Zone,Input,Input_Sel_Item]
-			return currentInput;
+			if (device.basicStatus==null) return null;
+			if (device.basicStatus.currentInput==null) return null;
+			for (DeviceSceneInput dsi:inputs)
+				if (device.basicStatus.currentInput.equals(dsi.ID))
+					return dsi;
+			return null;
 		}
 
 		public void setScene(DeviceSceneInput dsi) {
 			// PUT[P6]:    Main_Zone,Scene,Scene_Sel   =   Values [GET[G4]:Main_Zone,Scene,Scene_Sel_Item]
-			int rc = Ctrl.sendPutCommand(address,KnownCommand.SetCurrentScene,dsi.ID);
-			if (rc==Ctrl.RC_OK) currentScene = dsi;
+			Ctrl.sendPutCommand(device.address,KnownCommand.SetCurrentScene,dsi.ID);
 		}
 
 		public void setInput(DeviceSceneInput dsi) {
 			// PUT[P4]:    Main_Zone,Input,Input_Sel   =   Values [GET[G2]:Main_Zone,Input,Input_Sel_Item]
-			int rc = Ctrl.sendPutCommand(address,KnownCommand.SetCurrentInput,dsi.ID);
-			if (rc==Ctrl.RC_OK) currentInput = dsi;
+			Ctrl.sendPutCommand(device.address,KnownCommand.SetCurrentInput,dsi.ID);
 		}
 
 		public DeviceSceneInput[] getInputs() { return inputs; }
 		public DeviceSceneInput[] getScenes() { return scenes; }
 
 		private DeviceSceneInput[] getSceneInput(KnownCommand knownCommand) {
-			Node node = Ctrl.sendGetCommand_Node(address,knownCommand);
+			Node node = Ctrl.sendGetCommand_Node(device.address,knownCommand);
 			if (node == null) return null;
 			
 			NodeList itemNodes = node.getChildNodes();
@@ -632,8 +623,11 @@ public final class Device {
 	
 	static class AirPlay {
 		
+		@SuppressWarnings("unused")
+		private String address;
+
 		public AirPlay(String address) {
-			// TODO Auto-generated constructor stub
+			this.address = address;
 		}
 
 		public Config config;
