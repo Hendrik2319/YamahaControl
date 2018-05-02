@@ -7,6 +7,7 @@ import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.awt.geom.Rectangle2D;
 import java.util.Locale;
 
 import net.schwarzbaer.gui.Canvas;
@@ -50,7 +51,7 @@ public class VolumeControl extends Canvas {
 
 				@Override
 				public void mousePressed(MouseEvent e) {
-					pickAngle = getMouseAngle(e.getX(), e.getY())-angle;
+					pickAngle = getMouseAngle(e.getX(), e.getY(), true)-angle;
 					isAdjusting = true;
 //					System.out.printf("pickAngle: %f%n",pickAngle);
 				}
@@ -58,20 +59,22 @@ public class VolumeControl extends Canvas {
 				@Override
 				public void mouseReleased(MouseEvent e) {
 					isAdjusting = false;
-					changeValue(e.getX(), e.getY());
+					if (!Double.isNaN(pickAngle))
+						changeValue(e.getX(), e.getY());
 					pickAngle = Double.NaN;
 //					System.out.printf("pickAngle: %f%n",pickAngle);
 				}
 
 				@Override
 				public void mouseDragged(MouseEvent e) {
-					changeValue(e.getX(), e.getY());
+					if (!Double.isNaN(pickAngle))
+						changeValue(e.getX(), e.getY());
 //					System.out.printf("angle: %f%n",angle);
 				}
 				
 
 				private void changeValue(int mouseX, int mouseY) {
-					double mouseAngle = getMouseAngle(mouseX, mouseY);
+					double mouseAngle = getMouseAngle(mouseX, mouseY, false);
 					double diff = mouseAngle-pickAngle-angle;
 					if      (Math.abs(diff) > Math.abs(diff+2*Math.PI)) pickAngle -= 2*Math.PI;
 					else if (Math.abs(diff) > Math.abs(diff-2*Math.PI)) pickAngle += 2*Math.PI;
@@ -82,9 +85,10 @@ public class VolumeControl extends Canvas {
 					control.repaint();
 				}
 
-				private double getMouseAngle(int mouseX, int mouseY) {
+				private double getMouseAngle(int mouseX, int mouseY, boolean checkIfInsideCircle) {
 					int x = mouseX-control.width/2;
 					int y = mouseY-control.height/2;
+					if (checkIfInsideCircle && Math.sqrt(x*x+y*y)>radius) return Double.NaN;
 					double mouseAngle = Math.atan2(y,x);
 					return mouseAngle;
 				}
@@ -111,35 +115,34 @@ public class VolumeControl extends Canvas {
 			Graphics2D g2 = (g instanceof Graphics2D)?(Graphics2D)g:null;
 			if (g2!=null) g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 			
-			double angle01 = 0.1*2*Math.PI/deltaPerFullCircle;
+			double angle1 = 2*Math.PI/deltaPerFullCircle;
 			
-			double r1 = 0.95; int i=1;
-			drawRadiusLine(g, width, height, r1, 1.3, zeroAngle);
-			for (double a=angle01; a<Math.PI*0.9; a+=angle01, ++i) {
-				double r2 = (i%10)==0?1.3:(i%5)==0?1.15:1.05;
-				drawRadiusLine(g, width, height, r1, r2, zeroAngle+a);
-				drawRadiusLine(g, width, height, r1, r2, zeroAngle-a);
+			drawRadiusLine(g, width, height, 0.95, 1.15, zeroAngle);
+			for (double a=angle1; a<Math.PI*0.9; a+=angle1) {
+				drawRadiusLine(g, width, height, 0.95, 1.15, zeroAngle+a);
+				drawRadiusLine(g, width, height, 0.95, 1.15, zeroAngle-a);
 			}
 			
 			g.setColor(Color.WHITE);
 			g.fillOval(width/2-radius, height/2-radius, radius*2, radius*2);
 			
 			g.setColor(Color.BLACK);
-//			g.drawOval(0, 0, radius*2, radius*2);
 			g.drawOval(width/2-radius, height/2-radius, radius*2, radius*2);
+			g.setColor(Color.GRAY);
+			g.drawOval(width/2-radius/2, height/2-radius/2, radius, radius);
 			
-			i=1;
+			g.setColor(Color.BLUE);
 			if (g2!=null) g2.setStroke( new BasicStroke(5,BasicStroke.CAP_ROUND,BasicStroke.JOIN_ROUND) );
 			drawRadiusLine(g, width, height, 0.96, 0.7, angle+zeroAngle);
 			if (g2!=null) g2.setStroke(new BasicStroke(1));
-			for (double a=angle01; a<Math.PI*1.05; a+=angle01, ++i) {
-				double r2 = (i%10)==0?0.7:(i%5)==0?0.85:0.95;
-				drawRadiusLine(g, width, height, 1.0, r2, angle+zeroAngle+a);
-				if (a<=Math.PI*0.95) drawRadiusLine(g, width, height, 1.0, r2, angle+zeroAngle-a);
-			}
 			
+			String str = String.format(Locale.ENGLISH, "%1.1f %s", value, unit);
+			Rectangle2D stringBounds = g.getFontMetrics().getStringBounds(str,g);
+			int strX = width/2-(int)Math.round(stringBounds.getWidth()/2+stringBounds.getX());
+			int strY = height/2-(int)Math.round(stringBounds.getHeight()/2+stringBounds.getY());
 			
-			g.drawString(String.format(Locale.ENGLISH, "%1.1f %s", value, unit), width/2, height/2);
+			g.setColor(Color.BLACK);
+			g.drawString(str, strX, strY);
 			//g.drawString(String.format(Locale.ENGLISH, "%6.1f", angle/Math.PI*180), width/2, height/2+15);
 		}
 

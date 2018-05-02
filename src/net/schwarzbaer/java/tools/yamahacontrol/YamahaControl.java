@@ -15,19 +15,31 @@ import java.awt.datatransfer.Transferable;
 import java.awt.datatransfer.UnsupportedFlavorException;
 import java.awt.event.ActionListener;
 import java.awt.image.BufferedImage;
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.OutputStreamWriter;
 import java.io.PrintStream;
+import java.io.PrintWriter;
 import java.io.Reader;
 import java.io.StringWriter;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Locale;
 import java.util.Vector;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 
@@ -48,13 +60,19 @@ import javax.swing.JTabbedPane;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.JToggleButton;
+import javax.swing.ListCellRenderer;
 import javax.swing.ListSelectionModel;
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
 import javax.swing.UnsupportedLookAndFeelException;
+import javax.swing.filechooser.FileSystemView;
 
 import net.schwarzbaer.gui.StandardMainWindow;
+import net.schwarzbaer.gui.Tables;
+import net.schwarzbaer.gui.Tables.LabelRendererComponent;
 import net.schwarzbaer.java.tools.yamahacontrol.Device.NetRadio.ListInfo;
+import net.schwarzbaer.java.tools.yamahacontrol.Device.NetRadio.PlayInfo;
+import net.schwarzbaer.java.tools.yamahacontrol.Device.NumberWithUnit;
 import net.schwarzbaer.java.tools.yamahacontrol.Device.UpdateWish;
 import net.schwarzbaer.java.tools.yamahacontrol.Device.Value.CursorSelect;
 import net.schwarzbaer.java.tools.yamahacontrol.Device.Value.PageSelect;
@@ -77,6 +95,32 @@ public class YamahaControl {
 		System.out.println("array.length: "+array.length);
 		System.out.println("array: "+Arrays.toString(array));
 	}
+	
+	private static final String PREFERREDSONGS_FILENAME = "YamahaControl.PreferredSongs.txt";
+	private static final HashSet<String> preferredSongs = new HashSet<>();
+
+	static void writePreferredSongsToFile() {
+		Vector<String> list = new Vector<>(preferredSongs);
+		list.sort(null);
+		try (PrintWriter out = new PrintWriter( new OutputStreamWriter( new FileOutputStream(PREFERREDSONGS_FILENAME), StandardCharsets.UTF_8) )) {
+			list.forEach(str->out.println(str));
+		}
+		catch (FileNotFoundException e) {}
+	}
+
+	static void readPreferredSongsFromFile() {
+		preferredSongs.clear();
+		try (BufferedReader in = new BufferedReader( new InputStreamReader( new FileInputStream(PREFERREDSONGS_FILENAME), StandardCharsets.UTF_8) )) {
+			String line;
+			while ( (line=in.readLine())!=null )
+				if (!line.isEmpty())
+					preferredSongs.add(line);
+		}
+		catch (FileNotFoundException e) {}
+		catch (IOException e) {
+			e.printStackTrace();
+		}
+	}
 
 	public static void main(String[] args) {
 		try { UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName()); }
@@ -86,11 +130,16 @@ public class YamahaControl {
 		Ctrl.readCommProtocolFromFile();
 //		new Responder().openWindow();
 		
+		readPreferredSongsFromFile();
 		createSmallImages();
 		
 		YamahaControl yamahaControl = new YamahaControl();
 		yamahaControl.createGUI();
 		
+		probeFile(new File("AlbumART.ymf"));
+		probeFile(new File("AlbumART.ymf.URL"));
+		probeFile(new File("res/ParsedTreeIcons.png")); 
+		probeFile(new File("res/RX-V475 - desc.xml.xml")); 
 		
 //		testByteBuffers();
 		
@@ -124,7 +173,16 @@ public class YamahaControl {
 //		Ctrl.testCommand("192.168.2.34","<YAMAHA_AV cmd=\"GET\"><NET_RADIO><Config>GetParam</Config></NET_RADIO></YAMAHA_AV>");
 	}
 
-	public enum SmallImages { IconOn, IconOff, IconUnknown }
+	private static void probeFile(File file) {
+		try {
+			String typeStr = Files.probeContentType(file.toPath());
+			System.out.println("Type of file \""+file.getAbsolutePath()+"\" is \""+typeStr+"\".");
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+	}
+
+	public enum SmallImages { IconOn, IconOff, IconUnknown, FolderIcon }
 	public static EnumMap<SmallImages,Icon> smallImages = null;
 	private static void createSmallImages() {
 		smallImages = new EnumMap<>(SmallImages.class);
@@ -133,6 +191,7 @@ public class YamahaControl {
 			case IconOff    : smallImages.put(id, ImageToolbox.createIcon_Circle(16,12,10,Color.BLACK,Color.GREEN.darker())); break;
 			case IconOn     : smallImages.put(id, ImageToolbox.createIcon_Circle(16,12,10,Color.BLACK,Color.GREEN)); break;
 			case IconUnknown: smallImages.put(id, ImageToolbox.createIcon_Circle(16,12,10,Color.BLACK,Color.GRAY)); break;
+			case FolderIcon : smallImages.put(id, FileSystemView.getFileSystemView().getSystemIcon(new File("./"))); break;
 			}
 		}
 	}
@@ -141,14 +200,17 @@ public class YamahaControl {
 	private Device device;
 	private MainGui mainGui;
 	private Vector<GuiRegion> guiRegions;
-	private FrequentlyUpdater frequentlyUpdater;
+	private FrequentlyTask frequentlyUpdater;
 	
 	YamahaControl() {
 		mainWindow = null;
 		device = null;
 		mainGui = null;
 		guiRegions = new Vector<>();
-		frequentlyUpdater = new FrequentlyUpdater(2000);
+		frequentlyUpdater = new FrequentlyTask(2000,()->{
+			updateDevice(UpdateReason.Frequently);
+			SwingUtilities.invokeLater(()->guiRegions.forEach(gr->gr.frequentlyUpdate()));
+		});
 	}
 	
 	private void createGUI() {
@@ -228,14 +290,22 @@ public class YamahaControl {
 		}
 	}
 
-	public class FrequentlyUpdater implements Runnable {
+	public static class FrequentlyTask implements Runnable {
 
 		private int interval_ms;
 		private boolean stop;
+		private Runnable task;
+		private boolean isRunning;
 
-		public FrequentlyUpdater(int interval_ms) {
+		public FrequentlyTask(int interval_ms, Runnable task) {
 			this.interval_ms = interval_ms;
+			this.task = task;
 			this.stop = false;
+			this.isRunning = false;
+		}
+
+		public boolean isRunning() {
+			return isRunning;
 		}
 
 		public void start() {
@@ -250,6 +320,7 @@ public class YamahaControl {
 
 		@Override
 		public void run() {
+			isRunning = true;
 			synchronized (this) {
 				while (!stop) {
 					long startTime = System.currentTimeMillis();
@@ -257,10 +328,10 @@ public class YamahaControl {
 						try { wait(interval_ms-(System.currentTimeMillis()-startTime)); }
 						catch (InterruptedException e) {}
 					
-					updateDevice(UpdateReason.Frequently);
-					SwingUtilities.invokeLater(()->guiRegions.forEach(gr->gr.frequentlyUpdate()));
+					task.run();
 				}
 			}
+			isRunning = false;
 		}
 	
 	}
@@ -371,12 +442,14 @@ public class YamahaControl {
 		private VolumeControl volumeControl;
 		private DsiPanel scenesPanel;
 		private DsiPanel inputsPanel;
+		private ExecutorService volumeSetter;
 		
 		MainGui() {
 			onoffBtn = null;
 			volumeControl = null;
 			scenesPanel = null;
 			inputsPanel = null;
+			volumeSetter = Executors.newSingleThreadExecutor();
 		}
 
 		@Override public void setEnabled(boolean enabled) {
@@ -449,9 +522,15 @@ public class YamahaControl {
 		public void createVolumeControl(int width) {
 			volumeControl = new VolumeControl(width, 3.0, -90, (value, isAdjusting) -> {
 				if (device==null) return;
-				device.setVolume(value);
-				if (!isAdjusting) 
-					volumeControl.setValue(device.getVolume());
+				volumeSetter.submit(()->{
+					device.setVolume(value);
+					if (!isAdjusting) {
+						NumberWithUnit volume = device.getVolume();
+						SwingUtilities.invokeLater(()->{
+							volumeControl.setValue(volume);
+						});
+					}
+				});
 			});
 		}
 
@@ -527,9 +606,14 @@ public class YamahaControl {
 		private JLabel readyStateLabel;
 		private JLabel tabHeaderComp;
 
+		private String tabTitle;
+//		private Consumer<Color> setTabBackground;
+
 		protected SubUnit(String tabTitle) {
 			super(new BorderLayout(3,3));
-			tabHeaderComp = new JLabel(tabTitle);
+			this.tabTitle = tabTitle;
+			tabHeaderComp = new JLabel("  "+tabTitle+"  ");
+//			setTabBackground = null;
 			readyStateLabel = new JLabel("???",smallImages.get(SmallImages.IconUnknown),JLabel.LEFT);
 			add(readyStateLabel,BorderLayout.NORTH);
 			add(createContentPanel(),BorderLayout.CENTER);
@@ -538,7 +622,8 @@ public class YamahaControl {
 		public void addTo(Vector<GuiRegion> guiRegions, JTabbedPane subUnitPanel) {
 			guiRegions.add(this);
 			int index = subUnitPanel.getTabCount();
-			subUnitPanel.insertTab("tabTitle",null,this,null, index);
+			subUnitPanel.insertTab(tabTitle,null,this,null, index);
+//			setTabBackground = color -> subUnitPanel.setBackgroundAt(index, color);
 			subUnitPanel.setTabComponentAt(index, tabHeaderComp);
 		}
 
@@ -553,6 +638,7 @@ public class YamahaControl {
 			boolean isReady = getReadyState();
 			tabHeaderComp.setOpaque(isReady);
 			tabHeaderComp.setBackground(isReady?Color.GREEN:null);
+//			setTabBackground.accept(isReady?Color.GREEN:null);
 			readyStateLabel.setText(isReady?"Ready":"Not Ready");
 			readyStateLabel.setIcon(isReady?smallImages.get(SmallImages.IconOn):smallImages.get(SmallImages.IconOff));
 		}
@@ -570,22 +656,40 @@ public class YamahaControl {
 	private static class SubUnitNetRadio extends SubUnit {
 		private static final long serialVersionUID = -8583320100311806933L;
 		private JTextArea playinfoOutput;
-		private JList<Line> lineList;
+		private JList<ListInfo.Line> lineList;
 		private JTextField lineListLabel;
-		private boolean ignoreListSelection;
-		private ListInfo listInfo;
 		private Vector<JButton> buttons;
 		private JScrollPane playinfoScrollPane;
+		private LineRenderer lineRenderer;
+		private FrequentlyTask lineListUpdater;
+		
+		private boolean ignoreListSelection;
+		private PlayInfo playInfo;
+		private ListInfo listInfo;
 
 		public SubUnitNetRadio() {
 			super("Net Radio");
+			playInfo = null;
 			listInfo = null;
+			lineListUpdater = new FrequentlyTask(200,()->{
+				device.update(EnumSet.of(UpdateWish.NetRadioListInfo));
+				updateLineList();
+				if (listInfo!=null && listInfo.menuStatus==Device.Value.ReadyOrBusy.Ready)
+					lineListUpdater.stop();
+			});
 		}
 
 		@Override
 		public void setEnabled(boolean enabled) {
 			lineList.setEnabled(enabled);
 			buttons.forEach(b->b.setEnabled(enabled));
+		}
+
+		private void addSongToPreferredSongs() {
+			if (playInfo!=null && playInfo.currentSong!=null) {
+				preferredSongs.add(playInfo.currentSong);
+				writePreferredSongsToFile();
+			}
 		}
 
 		@Override
@@ -598,18 +702,20 @@ public class YamahaControl {
 			lineListLabel.setEditable(false);
 			
 			ignoreListSelection = false;
-			lineList = new JList<Line>();
+			lineRenderer = new LineRenderer();
+			lineList = new JList<ListInfo.Line>();
+			lineList.setCellRenderer(lineRenderer);
 			lineList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
 			lineList.addListSelectionListener(e -> {
 				if (e.getValueIsAdjusting()) return;
 				if (ignoreListSelection) return;
 				if (listInfo.menuStatus==Device.Value.ReadyOrBusy.Busy) return;
 				
-				Line line = lineList.getSelectedValue();
+				ListInfo.Line line = lineList.getSelectedValue();
 				if (line==null) return;
-				if (line.line.attr==Device.Value.LineAttribute.Unselectable) return;
+				if (line.attr==Device.Value.LineAttribute.Unselectable) return;
 				
-				device.netRadio.sendDirectSelect(line.line);
+				device.netRadio.sendDirectSelect(line);
 				device.update(EnumSet.of(UpdateWish.NetRadioListInfo,UpdateWish.NetRadioPlayInfo));
 				updateLineList();
 				updatePlayInfo();
@@ -619,37 +725,60 @@ public class YamahaControl {
 			
 			JScrollPane lineListScrollPane = new JScrollPane(lineList);
 			playinfoScrollPane = new JScrollPane(playinfoOutput);
-			lineListScrollPane.setPreferredSize(new Dimension(400, 200));
-			playinfoScrollPane.setPreferredSize(new Dimension(400, 400));
+			lineListScrollPane.setPreferredSize(new Dimension(500, 200));
+			playinfoScrollPane.setPreferredSize(new Dimension(500, 400));
 			
 			buttons = new Vector<>();
 			JPanel buttonsPanel = new JPanel();
 			buttonsPanel.setLayout(layout = new GridBagLayout());
-//			addComp(buttonsPanel,layout,c,new   JLabel(                 ), 0,0, 1,1, 1,1, GridBagConstraints.BOTH);
-			addComp(buttonsPanel,layout,c,createButton(ButtonID.Up      ), 1,0, 1,1, 1,1, GridBagConstraints.BOTH);
-//			addComp(buttonsPanel,layout,c,new   JLabel(                 ), 2,0, 1,1, 1,1, GridBagConstraints.BOTH);
-			addComp(buttonsPanel,layout,c,createButton(ButtonID.Home    ), 3,0, 1,1, GridBagConstraints.REMAINDER,1, GridBagConstraints.BOTH);
-			addComp(buttonsPanel,layout,c,createButton(ButtonID.Return  ), 0,1, 1,1, 1,1, GridBagConstraints.BOTH);
-//			addComp(buttonsPanel,layout,c,new   JLabel(                 ), 1,1, 1,1, 1,1, GridBagConstraints.BOTH);
-			addComp(buttonsPanel,layout,c,createButton(ButtonID.Select  ), 2,1, 1,1, 1,1, GridBagConstraints.BOTH);
-			addComp(buttonsPanel,layout,c,createButton(ButtonID.PageUp  ), 3,1, 1,1, GridBagConstraints.REMAINDER,1, GridBagConstraints.BOTH);
-//			addComp(buttonsPanel,layout,c,new   JLabel(                 ), 0,2, 1,1, 1,1, GridBagConstraints.BOTH);
-			addComp(buttonsPanel,layout,c,createButton(ButtonID.Down    ), 1,2, 1,1, 1,1, GridBagConstraints.BOTH);
-//			addComp(buttonsPanel,layout,c,new   JLabel(                 ), 2,2, 1,1, 1,1, GridBagConstraints.BOTH);
-			addComp(buttonsPanel,layout,c,createButton(ButtonID.PageDown), 3,2, 1,1, GridBagConstraints.REMAINDER,1, GridBagConstraints.BOTH);
-			addComp(buttonsPanel,layout,c,createButton(ButtonID.Play    ), 0,3, 1,1, 2,1, GridBagConstraints.BOTH);
-			addComp(buttonsPanel,layout,c,createButton(ButtonID.Stop    ), 2,3, 1,1, GridBagConstraints.REMAINDER,1, GridBagConstraints.BOTH);
+			createButtons_CrossLayout(layout, c, buttonsPanel);
+			//createButtons_OtherLayout(layout, c, buttonsPanel);
 			
-			JPanel contentPanel = new JPanel();
-			contentPanel.setLayout(layout = new GridBagLayout());
-			addComp(contentPanel,layout,c,lineListLabel      ,0,0,1,0,1,1,GridBagConstraints.BOTH);
-			addComp(contentPanel,layout,c,lineListScrollPane ,0,1,1,0,1,1,GridBagConstraints.BOTH);
-			addComp(contentPanel,layout,c,buttonsPanel       ,0,2,1,0,1,1,GridBagConstraints.VERTICAL);
-			addComp(contentPanel,layout,c,playinfoScrollPane ,0,3,1,1,1,1,GridBagConstraints.BOTH);
-			addComp(contentPanel,layout,c,new JLabel("dummy"),0,4,1,0,1,1,GridBagConstraints.BOTH);
+			JPanel lineListPanel = new JPanel(new BorderLayout(3,3));
+			lineListPanel.add(lineListLabel      ,BorderLayout.NORTH);
+			lineListPanel.add(lineListScrollPane ,BorderLayout.CENTER);
+			lineListPanel.add(buttonsPanel       ,BorderLayout.SOUTH);
+			
+			JPanel contentPanel = new JPanel(new BorderLayout(3,3));
+			contentPanel.add(lineListPanel, BorderLayout.NORTH);
+			contentPanel.add(playinfoScrollPane, BorderLayout.CENTER);
+			
+//			JPanel contentPanel = new JPanel();
+//			contentPanel.setLayout(layout = new GridBagLayout());
+//			addComp(contentPanel,layout,c,lineListLabel      ,0,0,1,0,1,1,GridBagConstraints.BOTH);
+//			addComp(contentPanel,layout,c,lineListScrollPane ,0,1,1,0,1,1,GridBagConstraints.BOTH);
+//			addComp(contentPanel,layout,c,buttonsPanel       ,0,2,1,0,1,1,GridBagConstraints.VERTICAL);
+//			addComp(contentPanel,layout,c,playinfoScrollPane ,0,3,1,1,1,1,GridBagConstraints.BOTH);
+//			//addComp(contentPanel,layout,c,new JLabel("dummy"),0,4,1,0,1,1,GridBagConstraints.BOTH);
 			
 			
 			return contentPanel;
+		}
+
+		@SuppressWarnings("unused")
+		private void createButtons_OtherLayout(GridBagLayout layout, GridBagConstraints c, JPanel buttonsPanel) {
+			addComp(buttonsPanel,layout,c,createButton(ButtonID.Home    ), 0,0, 1,1, 1,1, GridBagConstraints.BOTH);
+			addComp(buttonsPanel,layout,c,createButton(ButtonID.Return  ), 0,1, 1,1, 1,1, GridBagConstraints.BOTH);
+			addComp(buttonsPanel,layout,c,createButton(ButtonID.Select  ), 0,2, 1,1, 1,1, GridBagConstraints.BOTH);
+			addComp(buttonsPanel,layout,c,createButton(ButtonID.Up      ), 1,0, 1,1, 1,1, GridBagConstraints.BOTH);
+			addComp(buttonsPanel,layout,c,createButton(ButtonID.Down    ), 1,1, 1,1, 1,1, GridBagConstraints.BOTH);
+			addComp(buttonsPanel,layout,c,createButton(ButtonID.PageUp  ), 2,0, 1,1, 1,1, GridBagConstraints.BOTH);
+			addComp(buttonsPanel,layout,c,createButton(ButtonID.PageDown), 2,1, 1,1, 1,1, GridBagConstraints.BOTH);
+			addComp(buttonsPanel,layout,c,createButton(ButtonID.Play    ), 1,2, 1,1, 1,1, GridBagConstraints.BOTH);
+			addComp(buttonsPanel,layout,c,createButton(ButtonID.Stop    ), 2,2, 1,1, 1,1, GridBagConstraints.BOTH);
+		}
+
+		private void createButtons_CrossLayout(GridBagLayout layout, GridBagConstraints c, JPanel buttonsPanel) {
+			addComp(buttonsPanel,layout,c,createButton(ButtonID.Up      ), 1,0, 1,1, 1,1, GridBagConstraints.BOTH);
+			addComp(buttonsPanel,layout,c,createButton(ButtonID.Home    ), 3,0, 1,1, 1,1, GridBagConstraints.BOTH);
+			addComp(buttonsPanel,layout,c,createButton(ButtonID.Return  ), 0,1, 1,1, 1,1, GridBagConstraints.BOTH);
+			addComp(buttonsPanel,layout,c,createButton(ButtonID.Select  ), 2,1, 1,1, 1,1, GridBagConstraints.BOTH);
+			addComp(buttonsPanel,layout,c,createButton(ButtonID.PageUp  ), 3,1, 1,1, 1,1, GridBagConstraints.BOTH);
+			addComp(buttonsPanel,layout,c,createButton(ButtonID.Down    ), 1,2, 1,1, 1,1, GridBagConstraints.BOTH);
+			addComp(buttonsPanel,layout,c,createButton(ButtonID.PageDown), 3,2, 1,1, 1,1, GridBagConstraints.BOTH);
+			addComp(buttonsPanel,layout,c,createButton(ButtonID.Play    ), 0,3, 1,1, 2,1, GridBagConstraints.BOTH);
+			addComp(buttonsPanel,layout,c,createButton(ButtonID.Stop    ), 2,3, 1,1, 2,1, GridBagConstraints.BOTH);
+			addComp(buttonsPanel,layout,c,createButton("Add Song to PreferredSongs",e->addSongToPreferredSongs()), 4,3, 1,1, 1,1, GridBagConstraints.BOTH);
 		}
 		
 		private void addComp(JPanel panel, GridBagLayout layout, GridBagConstraints c, Component comp, int gridx, int gridy, double weightx, double weighty, int gridwidth, int gridheight, int fill) {
@@ -672,8 +801,14 @@ public class YamahaControl {
 			ButtonID(String label) { this.label = label; }
 			public String getLabel() { return label; }
 		}
+		
 		private JButton createButton(ButtonID buttonID) {
 			JButton button = YamahaControl.createButton(buttonID.getLabel(), createListener(buttonID), true);
+			buttons.add(button);
+			return button;
+		}
+		private JButton createButton(String title, ActionListener l) {
+			JButton button = YamahaControl.createButton(title, l, true);
 			buttons.add(button);
 			return button;
 		}
@@ -737,24 +872,34 @@ public class YamahaControl {
 		private void updatePlayInfo() {
 			float hPos = YamahaControl.getScrollPos(playinfoScrollPane.getHorizontalScrollBar());
 			float vPos = YamahaControl.getScrollPos(playinfoScrollPane.getVerticalScrollBar());
-			playinfoOutput.setText(device.netRadio.getPlayInfo().toString());
+			playInfo = device.netRadio.getPlayInfo();
+			playinfoOutput.setText(playInfo.toString());
 			YamahaControl.setScrollPos(playinfoScrollPane.getHorizontalScrollBar(),hPos);
 			YamahaControl.setScrollPos(playinfoScrollPane.getVerticalScrollBar(),vPos);
 		}
 
 		private void updateLineList() {
 			listInfo = device.netRadio.getListInfo();
-			lineList.setEnabled(listInfo.menuStatus==Device.Value.ReadyOrBusy.Ready);
+			setEnabled(listInfo.menuStatus==Device.Value.ReadyOrBusy.Ready);
+			//System.out.println("updateLineList() -> listInfo.menuStatus: "+listInfo.menuStatus);
 			
-			lineListLabel.setText(String.format("[%s] %s (is %s) %s/%s", listInfo.menuLayer, listInfo.menuName, listInfo.menuStatus, listInfo.currentLine, listInfo.maxLine));
-			Line[] lines = listInfo.lines.stream().map((ListInfo.Line line)->new Line(line)).toArray(n->new Line[n]);
-			lineList.setListData(lines);
+			String lineListLabelStr = String.format("[%s] %s", listInfo.menuLayer, listInfo.menuName==null?"":listInfo.menuName);
+			if (listInfo.currentLine==null || listInfo.maxLine==null || listInfo.currentLine<listInfo.maxLine)
+				lineListLabelStr += "  "+listInfo.currentLine+"/"+listInfo.maxLine;
+			lineListLabel.setText(lineListLabelStr);
+			lineList.setListData(listInfo.lines);
 			
 			if (listInfo.currentLine!=null) {
 				int lineIndex = ((listInfo.currentLine-1)&0x7);
-				ignoreListSelection=true;
-				lineList.setSelectedIndex(lineIndex);
-				ignoreListSelection=false;
+				//ignoreListSelection=true;
+				//lineList.setSelectedIndex(lineIndex);
+				//ignoreListSelection=false;
+				lineRenderer.setSelected(lineIndex+1);
+			}
+			
+			if (listInfo.menuStatus!=Device.Value.ReadyOrBusy.Ready && !lineListUpdater.isRunning()) {
+				//System.out.println("updateLineList() -> start lineListUpdater");
+				lineListUpdater.start();
 			}
 		}
 		
@@ -775,20 +920,58 @@ public class YamahaControl {
 			ReadyOrNot readyState = device.askValue(Device.KnownCommand.GetNetRadioConfig, ReadyOrNot.values(), "Feature_Availability");
 			return readyState==ReadyOrNot.Ready;
 		}
+		
+		private static class LineRenderer implements ListCellRenderer<ListInfo.Line>{
+			
+			private LabelRendererComponent rendererComponent;
+			private int selectedLineIndex;
 
-		private class Line {
+			LineRenderer() {
+				rendererComponent = new Tables.LabelRendererComponent();
+				rendererComponent.setPreferredSize(new Dimension(10,20));
+				this.selectedLineIndex = -1;
+			}
 
-			private ListInfo.Line line;
-
-			public Line(ListInfo.Line line) {
-				this.line = line;
+			public void setSelected(int selectedLineIndex) {
+				this.selectedLineIndex = selectedLineIndex;
 			}
 
 			@Override
-			public String toString() {
-				return String.format("[%s] %s%s", line.index, line.txt==null?"":line.txt, line.attr==Device.Value.LineAttribute.Unselectable?"":(" ("+line.attr+")"));
+			public Component getListCellRendererComponent(JList<? extends ListInfo.Line> list, ListInfo.Line line, int index, boolean isSelected, boolean cellHasFocus) {
+				switch (line.attr) {
+				case Container     : rendererComponent.setIcon(smallImages.get(SmallImages.FolderIcon)); break;
+				case Item          : rendererComponent.setIcon(smallImages.get(SmallImages.IconOn)); break;
+				case UnplayableItem: rendererComponent.setIcon(smallImages.get(SmallImages.IconOff)); break;
+				case Unselectable  : rendererComponent.setIcon(null); break;
+				}
+				rendererComponent.setText(line.txt==null?"":line.txt);
+				if (!list.isEnabled()) {
+					rendererComponent.setOpaque(false);
+					rendererComponent.setForeground(Color.GRAY);
+				} else {
+					rendererComponent.setOpaque(isSelected || line.index==selectedLineIndex);
+					rendererComponent.setBackground(isSelected?list.getSelectionBackground():line.index==selectedLineIndex?Color.GRAY :list.getBackground());
+					rendererComponent.setForeground(isSelected?list.getSelectionForeground():line.index==selectedLineIndex?Color.WHITE:list.getForeground());
+				}
+				
+				return rendererComponent;
 			}
+			
 		}
+		
+//		private class Line {
+//
+//			private ListInfo.Line line;
+//
+//			public Line(ListInfo.Line line) {
+//				this.line = line;
+//			}
+//
+//			@Override
+//			public String toString() {
+//				return String.format("[%s] %s%s", line.index, line.txt==null?"":line.txt, line.attr==Device.Value.LineAttribute.Unselectable?"":(" ("+line.attr+")"));
+//			}
+//		}
 	}
 	
 	private static class SubUnitTuner extends SubUnit {

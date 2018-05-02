@@ -195,7 +195,9 @@ final class XML {
 		Node child = childNodes.item(0);
 		if (child.getNodeType()!=Node.TEXT_NODE || !(child instanceof Text)) return null;
 		
-		return child.getNodeValue();
+		String value = child.getNodeValue();
+		if (value==null) return null;
+		return value.replace("&gt;",">").replace("&lt;","<").replace("&amp;","&");
 	}
 	
 	public static void forEachChild(Node node, Consumer<Node> consumer) {

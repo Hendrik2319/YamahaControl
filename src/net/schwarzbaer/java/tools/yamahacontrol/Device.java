@@ -36,6 +36,7 @@ public final class Device {
 	enum UpdateWish { Power, BasicStatus, Scenes, Inputs, NetRadioPlayInfo, NetRadioListInfo }
 	
 	public void update(EnumSet<UpdateWish> updateWishes) {
+		//System.out.println("Device.update("+updateWishes+")");
 		updateWishes.forEach(uw->{
 			switch (uw) {
 			case Power: isOn = askOn(); break;
@@ -445,14 +446,14 @@ public final class Device {
 		}
 		static class PlayInfo {
 
-			private Value.ReadyOrNot deviceStatus;
-			private Value.PlayState playState;
-			private String currentStation;
-			private String currentAlbum;
-			private String currentSong;
-			private Integer albumCoverID;
-			private String albumCoverURL;
-			private Value.AlbumCoverFormat albumCoverFormat;
+			Value.ReadyOrNot deviceStatus;
+			Value.PlayState playState;
+			String currentStation;
+			String currentAlbum;
+			String currentSong;
+			Integer albumCoverID;
+			String albumCoverURL;
+			Value.AlbumCoverFormat albumCoverFormat;
 
 			public PlayInfo() {
 				this.deviceStatus = null;
@@ -468,19 +469,19 @@ public final class Device {
 			@Override
 			public String toString() {
 				StringBuilder sb = new StringBuilder();
-				sb.append("Device Status: ").append(deviceStatus==null?"???":deviceStatus.getLabel());
+				sb.append("Net Radio: ").append(deviceStatus==null?"???":deviceStatus.getLabel());
 				if (playState==PlayState.Play) sb.append(" & is playing\r\n"); else
 				if (playState==PlayState.Stop) sb.append(" & has stopped\r\n"); else sb.append("\r\n");
 				
-				sb.append("currently:\r\n");
-				sb.append("   Station: ").append(currentStation==null?"???":("\""+currentStation+"\"")).append("\r\n");
-				sb.append("     Album: ").append(currentAlbum==null?"???":("\""+currentAlbum+"\"")).append("\r\n");
-				sb.append("      Song: ").append(currentSong==null?"???":("\""+currentSong+"\"")).append("\r\n");
+				sb.append("Station: ").append(currentStation==null?"":("\""+currentStation+"\"")).append("\r\n");
+				sb.append("  Album: ").append(currentAlbum==null?"":("\""+currentAlbum+"\"")).append("\r\n");
+				sb.append("   Song: ").append(currentSong==null?"":("\""+currentSong+"\"")).append("\r\n");
 				
-				sb.append("AlbumCover: ");
-				sb.append(albumCoverID==null?"???":albumCoverID).append(", ");
-				sb.append(albumCoverFormat==null?"???":albumCoverFormat.getLabel()).append(", ");
-				sb.append(albumCoverURL==null?"???":("\""+albumCoverURL+"\"")).append("\r\n");
+				sb.append("AlbumCover:");
+				sb.append(albumCoverID==null?"":(" "+albumCoverID));
+				sb.append(albumCoverFormat==null?"":(" "+albumCoverFormat.getLabel()));
+				sb.append(albumCoverURL==null?"":(" \""+albumCoverURL+"\""));
+				sb.append("\r\n");
 				
 				return sb.toString();
 			}
