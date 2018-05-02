@@ -37,9 +37,11 @@ import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Locale;
+import java.util.Stack;
 import java.util.Vector;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 
@@ -136,10 +138,10 @@ public class YamahaControl {
 		YamahaControl yamahaControl = new YamahaControl();
 		yamahaControl.createGUI();
 		
-		probeFile(new File("AlbumART.ymf"));
-		probeFile(new File("AlbumART.ymf.URL"));
-		probeFile(new File("res/ParsedTreeIcons.png")); 
-		probeFile(new File("res/RX-V475 - desc.xml.xml")); 
+//		probeFile(new File("AlbumART.ymf"));
+//		probeFile(new File("AlbumART.ymf.URL"));
+//		probeFile(new File("res/ParsedTreeIcons.png")); 
+//		probeFile(new File("res/RX-V475 - desc.xml.xml")); 
 		
 //		testByteBuffers();
 		
@@ -173,6 +175,7 @@ public class YamahaControl {
 //		Ctrl.testCommand("192.168.2.34","<YAMAHA_AV cmd=\"GET\"><NET_RADIO><Config>GetParam</Config></NET_RADIO></YAMAHA_AV>");
 	}
 
+	@SuppressWarnings("unused")
 	private static void probeFile(File file) {
 		try {
 			String typeStr = Files.probeContentType(file.toPath());
@@ -242,9 +245,13 @@ public class YamahaControl {
 		mainControlPanel.add(volumePanel,BorderLayout.SOUTH);
 		
 		JTabbedPane subUnitPanel = new JTabbedPane();
-		
 		new SubUnitNetRadio().addTo(guiRegions,subUnitPanel);
 		new SubUnitTuner   ().addTo(guiRegions,subUnitPanel);
+		new SubUnitAirPlay ().addTo(guiRegions,subUnitPanel);
+		new SubUnitSpotify ().addTo(guiRegions,subUnitPanel);
+		new SubUnitIPodUSB ().addTo(guiRegions,subUnitPanel);
+		new SubUnitUSB     ().addTo(guiRegions,subUnitPanel);
+		new SubUnitDLNA    ().addTo(guiRegions,subUnitPanel);
 		
 		JPanel contentPane = new JPanel(new BorderLayout(3,3));
 		contentPane.setBorder(BorderFactory.createEmptyBorder(3,3,3,3));
@@ -442,14 +449,14 @@ public class YamahaControl {
 		private VolumeControl volumeControl;
 		private DsiPanel scenesPanel;
 		private DsiPanel inputsPanel;
-		private ExecutorService volumeSetter;
+		private VolumeSetter volumeSetter;
 		
 		MainGui() {
 			onoffBtn = null;
 			volumeControl = null;
 			scenesPanel = null;
 			inputsPanel = null;
-			volumeSetter = Executors.newSingleThreadExecutor();
+			volumeSetter = new VolumeSetter(10);
 		}
 
 		@Override public void setEnabled(boolean enabled) {
@@ -473,8 +480,8 @@ public class YamahaControl {
 			setEnabled(device!=null);
 			
 			if (device!=null) {
-				scenesPanel.createButtons(device.getScenes(),this::setScene,dsi->dsi!=null && "W".equals(dsi.rw));
-				inputsPanel.createButtons(device.getInputs(),this::setInput,null);
+				scenesPanel.createButtons(device.inputs.getScenes(),this::setScene,dsi->dsi!=null && "W".equals(dsi.rw));
+				inputsPanel.createButtons(device.inputs.getInputs(),this::setInput,null);
 				selectCurrentScene();
 				selectCurrentInput();
 			}
@@ -484,28 +491,28 @@ public class YamahaControl {
 
 		@Override
 		public void frequentlyUpdate() {
-			setOnOffButton(device==null?false:device.isOn());
+			setOnOffButton(device==null?(Boolean)false:device.power.isOn());
 			volumeControl.setValue(device==null?null:device.getVolume());
 		}
 
-		private void setScene(Device.DeviceSceneInput dsi) {
+		private void setScene(Device.Inputs.DeviceSceneInput dsi) {
 			if (device==null) return;
-			device.setScene(dsi);
+			device.inputs.setScene(dsi);
 			selectCurrentScene();
 		}
 
-		private void setInput(Device.DeviceSceneInput dsi) {
+		private void setInput(Device.Inputs.DeviceSceneInput dsi) {
 			if (device==null) return;
-			device.setInput(dsi);
+			device.inputs.setInput(dsi);
 			selectCurrentInput();
 		}
 
 		private void selectCurrentScene() {
-			if (scenesPanel!=null) scenesPanel.setSelected(device.getScene());
+			if (scenesPanel!=null) scenesPanel.setSelected(device.inputs.getCurrentScene());
 		}
 
 		private void selectCurrentInput() {
-			if (inputsPanel!=null) inputsPanel.setSelected(device.getInput());
+			if (inputsPanel!=null) inputsPanel.setSelected(device.inputs.getCurrentInput());
 		}
 
 		public JTabbedPane createScenesInputsPanel() {
@@ -522,16 +529,69 @@ public class YamahaControl {
 		public void createVolumeControl(int width) {
 			volumeControl = new VolumeControl(width, 3.0, -90, (value, isAdjusting) -> {
 				if (device==null) return;
-				volumeSetter.submit(()->{
-					device.setVolume(value);
-					if (!isAdjusting) {
+				volumeSetter.set(value,isAdjusting);
+			});
+		}
+		
+		private class VolumeSetter {
+			private ExecutorService executor;
+			private int counter;
+			private int queueLength;
+			private Stack<Future<?>> runningTasks;
+
+			VolumeSetter(int queueLength) {
+				this.queueLength = queueLength;
+				executor = Executors.newSingleThreadExecutor();
+				counter = 0;
+				runningTasks = new Stack<>();
+			}
+
+			public synchronized void set(double value, boolean isAdjusting) {
+				if (runningTasks.size()>100) {
+					Log.info(getClass(), "Max. number of running tasks reached");
+					removeCompletedTasks();
+				}
+
+				if (isAdjusting) {
+					
+					if (counter>queueLength) return;
+					
+					runningTasks.add(executor.submit(()->{
+						incCounter();
+						device.setVolume(value);
+						decCounter();
+					}));
+					
+				} else {
+					Log.info(getClass(), "Value stops adjusting: cancel all running tasks");
+					runningTasks.forEach(task->task.cancel(false));
+					removeCompletedTasks();
+					
+					runningTasks.add(executor.submit(()->{
+						incCounter();
+						device.setVolume(value);
 						NumberWithUnit volume = device.getVolume();
 						SwingUtilities.invokeLater(()->{
 							volumeControl.setValue(volume);
 						});
-					}
-				});
-			});
+						decCounter();
+					}));
+				}
+			}
+
+			private void removeCompletedTasks() {
+				Log.info(getClass(), "remove completed tasks");
+				for (int i=0; i<runningTasks.size();) {
+					Future<?> task = runningTasks.get(i); 
+					if (task.isDone() || task.isCancelled())
+						runningTasks.remove(i);
+					else
+						++i;
+				}
+			}
+
+			private synchronized void decCounter() { --counter; }
+			private synchronized void incCounter() { ++counter; }
 		}
 
 		public void createOnOffBtn() {
@@ -545,15 +605,15 @@ public class YamahaControl {
 		}
 
 		private void toggleOnOff() {
-			if (device!=null) device.setOn(!device.isOn());
-			setOnOffButton(device==null?false:device.isOn());
+			if (device!=null) device.power.setOn(!device.power.isOn());
+			setOnOffButton(device==null?false:device.power.isOn());
 		}
 		
 		private class DsiPanel extends JPanel {
 			private static final long serialVersionUID = -3330564101527546450L;
 			
 			private ButtonGroup bg;
-			private HashMap<Device.DeviceSceneInput,JToggleButton> buttons;
+			private HashMap<Device.Inputs.DeviceSceneInput,JToggleButton> buttons;
 
 			private GridBagLayout layout;
 			DsiPanel() {
@@ -562,12 +622,12 @@ public class YamahaControl {
 				buttons = null;
 			}
 			
-			public void setSelected(Device.DeviceSceneInput dsi) {
+			public void setSelected(Device.Inputs.DeviceSceneInput dsi) {
 				JToggleButton button = buttons.get(dsi);
 				if (button!=null) bg.setSelected(button.getModel(), true);
 			}
 
-			public void createButtons(Device.DeviceSceneInput[] dsiArr, Consumer<Device.DeviceSceneInput> setFunction, Predicate<Device.DeviceSceneInput> filter) {
+			public void createButtons(Device.Inputs.DeviceSceneInput[] dsiArr, Consumer<Device.Inputs.DeviceSceneInput> setFunction, Predicate<Device.Inputs.DeviceSceneInput> filter) {
 				removeAll();
 				layout = new GridBagLayout();
 				setLayout(layout);
@@ -576,7 +636,7 @@ public class YamahaControl {
 				
 				bg = new ButtonGroup();
 				buttons = new HashMap<>();
-				for (Device.DeviceSceneInput dsi:dsiArr) {
+				for (Device.Inputs.DeviceSceneInput dsi:dsiArr) {
 					if (filter!=null && !filter.test(dsi)) continue;
 					String title = dsi.title==null?"<???>":dsi.title.trim();
 					JToggleButton button = createToggleButton(title, e->setFunction.accept(dsi), true, bg);
@@ -617,6 +677,7 @@ public class YamahaControl {
 			readyStateLabel = new JLabel("???",smallImages.get(SmallImages.IconUnknown),JLabel.LEFT);
 			add(readyStateLabel,BorderLayout.NORTH);
 			add(createContentPanel(),BorderLayout.CENTER);
+			setBorder(BorderFactory.createEmptyBorder(3,3,3,3));
 		}
 
 		public void addTo(Vector<GuiRegion> guiRegions, JTabbedPane subUnitPanel) {
@@ -645,11 +706,15 @@ public class YamahaControl {
 
 		@Override
 		public Collection<UpdateWish> getUpdateWishes(UpdateReason reason) {
-			return new Vector<UpdateWish>();
+			Vector<UpdateWish> updateWishes = new Vector<UpdateWish>();
+			UpdateWish readyStateUpdateWish = getReadyStateUpdateWish();
+			if (readyStateUpdateWish!=null) updateWishes.add(readyStateUpdateWish);
+			return updateWishes;
 		}
 
 		protected abstract JPanel createContentPanel();
 		protected abstract boolean getReadyState();
+		protected UpdateWish getReadyStateUpdateWish() { return null; }
 		
 	}
 	
@@ -982,10 +1047,143 @@ public class YamahaControl {
 		}
 
 		@Override
+		protected UpdateWish getReadyStateUpdateWish() {
+			return UpdateWish.TunerConfig;
+		}
+
+		@Override
 		protected boolean getReadyState() {
 			if (device==null) return false;
-			// GET[G2]:    Tuner,Config   ->   Feature_Availability -> "Ready" | "Not Ready"
-			ReadyOrNot readyState = device.askValue(Device.KnownCommand.GetTunerConfig, ReadyOrNot.values(), "Feature_Availability");
+			if (device.tuner==null) return false;
+			if (device.tuner.config==null) return false;
+			ReadyOrNot readyState = device.tuner.config.deviceStatus;
+			return readyState==ReadyOrNot.Ready;
+		}
+
+		@Override
+		public void setEnabled(boolean enabled) {}
+
+		@Override
+		protected JPanel createContentPanel() {
+			return new JPanel();
+		}
+	}
+	
+	private static class SubUnitAirPlay extends SubUnit {
+		private static final long serialVersionUID = 8375036678437177239L;
+
+		// [Source_Device | SD_AirPlay | AirPlay]   
+		public SubUnitAirPlay() {
+			super("AirPlay");
+		}
+
+		@Override
+		protected UpdateWish getReadyStateUpdateWish() {
+			return UpdateWish.AirPlayConfig;
+		}
+
+		@Override
+		protected boolean getReadyState() {
+			if (device==null) return false;
+			if (device.airPlay==null) return false;
+			if (device.airPlay.config==null) return false;
+			ReadyOrNot readyState = device.airPlay.config.deviceStatus;
+			return readyState==ReadyOrNot.Ready;
+		}
+
+		@Override
+		public void setEnabled(boolean enabled) {}
+
+		@Override
+		protected JPanel createContentPanel() {
+			return new JPanel();
+		}
+	}
+	
+	private static class SubUnitSpotify extends SubUnit {
+		private static final long serialVersionUID = -869960569061323838L;
+
+		public SubUnitSpotify() {
+			super("Spotify");
+		}
+
+		@Override
+		protected boolean getReadyState() {
+			if (device==null) return false;
+			// GET[G3]:    Spotify,Config   ->   Feature_Availability -> "Ready" | "Not Ready"
+			ReadyOrNot readyState = device.askValue(Device.KnownCommand.GetSpotifyConfig, ReadyOrNot.values(), "Feature_Availability");
+			return readyState==ReadyOrNot.Ready;
+		}
+
+		@Override
+		public void setEnabled(boolean enabled) {}
+
+		@Override
+		protected JPanel createContentPanel() {
+			return new JPanel();
+		}
+	}
+	
+	private static class SubUnitIPodUSB extends SubUnit {
+		private static final long serialVersionUID = -4180795479139795928L;
+
+		public SubUnitIPodUSB() {
+			super("IPod USB");
+		}
+
+		@Override
+		protected boolean getReadyState() {
+			if (device==null) return false;
+			// GET[G3]:    iPod_USB,Config   ->   Feature_Availability -> "Ready" | "Not Ready"
+			ReadyOrNot readyState = device.askValue(Device.KnownCommand.GetIPodUSBConfig, ReadyOrNot.values(), "Feature_Availability");
+			return readyState==ReadyOrNot.Ready;
+		}
+
+		@Override
+		public void setEnabled(boolean enabled) {}
+
+		@Override
+		protected JPanel createContentPanel() {
+			return new JPanel();
+		}
+	}
+	
+	private static class SubUnitUSB extends SubUnit {
+		private static final long serialVersionUID = 8830354607137619068L;
+
+		public SubUnitUSB() {
+			super("USB");
+		}
+
+		@Override
+		protected boolean getReadyState() {
+			if (device==null) return false;
+			// GET[G3]:    USB,Config   ->   Feature_Availability -> "Ready" | "Not Ready"
+			ReadyOrNot readyState = device.askValue(Device.KnownCommand.GetUSBConfig, ReadyOrNot.values(), "Feature_Availability");
+			return readyState==ReadyOrNot.Ready;
+		}
+
+		@Override
+		public void setEnabled(boolean enabled) {}
+
+		@Override
+		protected JPanel createContentPanel() {
+			return new JPanel();
+		}
+	}
+	
+	private static class SubUnitDLNA extends SubUnit {
+		private static final long serialVersionUID = -4585259335586086032L;
+
+		public SubUnitDLNA() {
+			super("DLNA Server");
+		}
+
+		@Override
+		protected boolean getReadyState() {
+			if (device==null) return false;
+			// GET[G3]:    SERVER,Config   ->   Feature_Availability -> "Ready" | "Not Ready"
+			ReadyOrNot readyState = device.askValue(Device.KnownCommand.GetServerConfig, ReadyOrNot.values(), "Feature_Availability");
 			return readyState==ReadyOrNot.Ready;
 		}
 
