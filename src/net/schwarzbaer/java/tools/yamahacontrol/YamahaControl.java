@@ -437,7 +437,7 @@ public class YamahaControl {
 		private static final long serialVersionUID = -344141298780014208L;
 		
 		private GridBagLayout layout;
-		protected GridBagConstraints c;
+		protected GridBagConstraints gbc;
 	
 		GridBagPanel() {
 			super();
@@ -446,30 +446,30 @@ public class YamahaControl {
 	
 		void resetLayout() {
 			setLayout(layout = new GridBagLayout());
-			c = new GridBagConstraints();
+			gbc = new GridBagConstraints();
 		}
 		
 		void setInsets(Insets insets) {
-			c.insets = insets;
+			gbc.insets = insets;
 		}
 		
 		void add(Component comp, double weightx, int gridwidth, int fill) {
-			c.weightx=weightx;
-			c.gridwidth=gridwidth;
-			c.fill = fill;
-			layout.setConstraints(comp, c);
+			gbc.weightx=weightx;
+			gbc.gridwidth=gridwidth;
+			gbc.fill = fill;
+			layout.setConstraints(comp, gbc);
 			add(comp);
 		}
 		
 		void add(Component comp, int gridx, int gridy, double weightx, double weighty, int gridwidth, int gridheight, int fill) {
-			c.gridx=gridx;
-			c.gridy=gridy;
-			c.weighty=weighty;
-			c.weightx=weightx;
-			c.gridwidth=gridwidth;
-			c.gridheight=gridheight;
-			c.fill = fill;
-			layout.setConstraints(comp, c);
+			gbc.gridx=gridx;
+			gbc.gridy=gridy;
+			gbc.weighty=weighty;
+			gbc.weightx=weightx;
+			gbc.gridwidth=gridwidth;
+			gbc.gridheight=gridheight;
+			gbc.fill = fill;
+			layout.setConstraints(comp, gbc);
 			add(comp);
 		}
 		
@@ -673,7 +673,7 @@ public class YamahaControl {
 			public void createButtons(Device.Inputs.DeviceSceneInput[] dsiArr, Consumer<Device.Inputs.DeviceSceneInput> setFunction, Predicate<Device.Inputs.DeviceSceneInput> filter) {
 				removeAll();
 				resetLayout();
-				c.weighty=0;
+				gbc.weighty=0;
 				
 				if (!createNormalButtons) {
 					bg = new ButtonGroup();
@@ -698,7 +698,7 @@ public class YamahaControl {
 					add(new JLabel("["+dsi.ID+"]",JLabel.CENTER),1,GridBagConstraints.REMAINDER,GridBagConstraints.BOTH);
 					//add(new JLabel(dsi.rw),0,GridBagConstraints.REMAINDER,GridBagConstraints.BOTH);
 				}
-				c.weighty=1;
+				gbc.weighty=1;
 				add(new JLabel(""),1,GridBagConstraints.REMAINDER,GridBagConstraints.BOTH);
 			}
 		}
