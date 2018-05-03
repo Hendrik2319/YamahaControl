@@ -13,26 +13,30 @@ import net.schwarzbaer.java.tools.yamahacontrol.YamahaControl.Log;
 public final class Device {
 	
 	String address;
-	Power power;
+	Power  power;
 	Inputs inputs;
 	private BasicStatus basicStatus;
+	
 	NetRadio netRadio;
-	Tuner tuner;
-	AirPlay airPlay;
-	USB usb;
+	Tuner    tuner;
+	AirPlay  airPlay;
+	USB      usb;
+	DLNA     dlna;
 	
 	Device(String address) {
 		this.address = address;
 		this.basicStatus = null;
 		this.power    = new Power   (this.address);
 		this.inputs   = new Inputs  (this);
+		
 		this.netRadio = new NetRadio(this.address);
 		this.tuner    = new Tuner   (this.address);
 		this.airPlay  = new AirPlay (this.address);
 		this.usb      = new USB     (this.address);
+		this.dlna     = new DLNA    (this.address);
 	}
 	
-	enum UpdateWish { Power, BasicStatus, Scenes, Inputs, NetRadioPlayInfo, NetRadioListInfo, TunerConfig, AirPlayConfig, USBListInfo, USBPlayInfo }
+	enum UpdateWish { Power, BasicStatus, Scenes, Inputs, NetRadioPlayInfo, NetRadioListInfo, TunerConfig, AirPlayConfig, USBListInfo, USBPlayInfo, DLNAPlayInfo, DLNAListInfo }
 	
 	public void update(EnumSet<UpdateWish> updateWishes) {
 		//System.out.println("Device.update("+updateWishes+")");
@@ -42,12 +46,14 @@ public final class Device {
 			case Inputs          : inputs.inputs     = inputs.getSceneInput(KnownCommand.GetInputItems); break;
 			case Scenes          : inputs.scenes     = inputs.getSceneInput(KnownCommand.GetSceneItems); break;
 			case BasicStatus     : basicStatus       = BasicStatus      .parse(Ctrl.sendGetCommand_Node(address,KnownCommand.GetBasicStatus     )); break;
-			case NetRadioListInfo: netRadio.listInfo                    .parse(Ctrl.sendGetCommand_Node(address,KnownCommand.GetNetRadioListInfo)); break;
-			case NetRadioPlayInfo: netRadio.playInfo = NetRadio.PlayInfo.parse(Ctrl.sendGetCommand_Node(address,KnownCommand.GetNetRadioPlayInfo)); break;
 			case TunerConfig     : tuner.config      = Tuner   .Config  .parse(Ctrl.sendGetCommand_Node(address,KnownCommand.GetTunerConfig     )); break;
 			case AirPlayConfig   : airPlay.config    = AirPlay .Config  .parse(Ctrl.sendGetCommand_Node(address,KnownCommand.GetAirPlayConfig   )); break;
+			case NetRadioListInfo: netRadio.listInfo                    .parse(Ctrl.sendGetCommand_Node(address,KnownCommand.GetNetRadioListInfo)); break;
+			case NetRadioPlayInfo: netRadio.playInfo                    .parse(Ctrl.sendGetCommand_Node(address,KnownCommand.GetNetRadioPlayInfo)); break;
 			case USBListInfo     : usb.listInfo                         .parse(Ctrl.sendGetCommand_Node(address,KnownCommand.GetUSBListInfo     )); break;
-			case USBPlayInfo     : usb.playInfo      = USB     .PlayInfo.parse(Ctrl.sendGetCommand_Node(address,KnownCommand.GetUSBPlayInfo     )); break;
+			case USBPlayInfo     : usb.playInfo                         .parse(Ctrl.sendGetCommand_Node(address,KnownCommand.GetUSBPlayInfo     )); break;
+			case DLNAListInfo    : dlna.listInfo                        .parse(Ctrl.sendGetCommand_Node(address,KnownCommand.GetDLNAListInfo    )); break;
+			case DLNAPlayInfo    : dlna.playInfo                        .parse(Ctrl.sendGetCommand_Node(address,KnownCommand.GetDLNAPlayInfo    )); break;
 			}
 		});
 	}
@@ -251,26 +257,48 @@ public final class Device {
 		GetNetRadioConfig("NET_RADIO,Config"),
 		GetServerConfig  (   "SERVER,Config"),
 		
+		
 		GetNetRadioListInfo("NET_RADIO,List_Info"), // G2: NET_RADIO,List_Info
 		GetNetRadioPlayInfo("NET_RADIO,Play_Info"), // G1: NET_RADIO,Play_Info
+		
 		SetNetRadioDirectListSel("NET_RADIO,List_Control,Direct_Sel"),
 		SetNetRadioCursorListSel("NET_RADIO,List_Control,Cursor"    ),
 		SetNetRadioPageListSel  ("NET_RADIO,List_Control,Page"      ),
 		SetNetRadioJumpToLine   ("NET_RADIO,List_Control,Jump_Line" ), // P3: NET_RADIO,List_Control,Jump_Line 
+		
 		SetNetRadioPlayback     ("NET_RADIO,Play_Control,Playback"  ),
+		
 		
 		GetUSBListInfo("USB,List_Info"), // G2: USB,List_Info
 		GetUSBPlayInfo("USB,Play_Info"), // G1: USB,Play_Info
-		GetUSBPresets ("USB,Play_Control,Preset,Preset_Sel_Item"), // G4: USB,Play_Control,Preset,Preset_Sel_Item
+		
 		SetUSBDirectListSel("USB,List_Control,Direct_Sel"       ), // P5: USB,List_Control,Direct_Sel
 		SetUSBCursorListSel("USB,List_Control,Cursor"           ), // P7: USB,List_Control,Cursor
 		SetUSBPageListSel  ("USB,List_Control,Page"             ), // P8: USB,List_Control,Page
 		SetUSBJumpToLine   ("USB,List_Control,Jump_Line"        ), // P6: USB,List_Control,Jump_Line
+		
 		SetUSBPlayback     ("USB,Play_Control,Playback"         ), // P3: USB,Play_Control,Playback
 		SetUSBRepeat       ("USB,Play_Control,Play_Mode,Repeat" ), // P1: USB,Play_Control,Play_Mode,Repeat
 		SetUSBShuffle      ("USB,Play_Control,Play_Mode,Shuffle"), // P2: USB,Play_Control,Play_Mode,Shuffle
+		
+		GetUSBPresets ("USB,Play_Control,Preset,Preset_Sel_Item"), // G4: USB,Play_Control,Preset,Preset_Sel_Item
 		SetUSBSelectPreset ("USB,Play_Control,Preset,Preset_Sel"), // P4: USB,Play_Control,Preset,Preset_Sel
 		
+		
+		GetDLNAListInfo("SERVER,List_Info"), // G2: SERVER,List_Info
+		GetDLNAPlayInfo("SERVER,Play_Info"), // G1: SERVER,Play_Info
+		
+		SetDLNADirectListSel("SERVER,List_Control,Direct_Sel"), // P5: SERVER,List_Control,Direct_Sel
+		SetDLNACursorListSel("SERVER,List_Control,Cursor"    ), // P7: SERVER,List_Control,Cursor
+		SetDLNAPageListSel  ("SERVER,List_Control,Page"      ), // P8: SERVER,List_Control,Page
+		SetDLNAJumpToLine   ("SERVER,List_Control,Jump_Line" ), // P6: SERVER,List_Control,Jump_Line
+		
+		SetDLNAPlayback("SERVER,Play_Control,Playback"         ), // P3: SERVER,Play_Control,Playback
+		SetDLNARepeat  ("SERVER,Play_Control,Play_Mode,Repeat" ), // P1: SERVER,Play_Control,Play_Mode,Repeat
+		SetDLNAShuffle ("SERVER,Play_Control,Play_Mode,Shuffle"), // P2: SERVER,Play_Control,Play_Mode,Shuffle
+		
+		GetDLNAPresets ("SERVER,Play_Control,Preset,Preset_Sel_Item"), // G4: SERVER,Play_Control,Preset,Preset_Sel_Item
+		SetDLNASelectPreset ("SERVER,Play_Control,Preset,Preset_Sel"), // P4: SERVER,Play_Control,Preset,Preset_Sel
 		;
 		
 		final TagList tagList;
@@ -287,6 +315,13 @@ public final class Device {
 		public enum AlbumCoverFormat implements Value { BMP, YMF         ; @Override public String getLabel() { return toString(); }  }
 		public enum ReadyOrBusy      implements Value { Ready, Busy      ; @Override public String getLabel() { return toString(); }  }
 		public enum OffOneAll        implements Value { Off, One, All    ; @Override public String getLabel() { return toString(); }  } 
+		
+		public enum SkipFwdRev implements Value {
+			SkipFwd("Skip Fwd"),SkipRev("Skip Rev");
+			private String label;
+			SkipFwdRev(String label) { this.label = label; }
+			@Override public String getLabel() { return label; }
+		}
 		
 		public enum ReadyOrNot implements Value {
 			Ready("Ready"),NotReady("Not Ready");
@@ -366,218 +401,34 @@ public final class Device {
 	
 	static class NetRadio {
 		
-		ListInfo listInfo;
-		PlayInfo playInfo;
-		private String address;
+		ListInfo          listInfo;
+		PlayInfo_NetRadio playInfo;
 		
 		public NetRadio(String address) {
-			this.address = address;
-			this.listInfo = new ListInfo(address, KnownCommand.SetNetRadioDirectListSel, KnownCommand.SetNetRadioCursorListSel, KnownCommand.SetNetRadioPageListSel, KnownCommand.SetNetRadioJumpToLine);
-			this.playInfo = null;
-		}
-		
-		public void sendPlayback(Value.PlayStop playState) {
-			// [Play]    Visible:No     PUT[P1]     NET_RADIO,Play_Control,Playback = Play
-			// [Stop]    Playable:No     PUT[P1]     NET_RADIO,Play_Control,Playback = Stop
-			Ctrl.sendPutCommand(address,KnownCommand.SetNetRadioPlayback, playState.getLabel());
-		}
-
-		static class PlayInfo {
-
-			Value.ReadyOrNot deviceStatus;
-			Value.PlayStop playState;
-			String currentStation;
-			String currentAlbum;
-			String currentSong;
-			Integer albumCoverID;
-			String albumCoverURL;
-			Value.AlbumCoverFormat albumCoverFormat;
-
-			public PlayInfo() {
-				this.deviceStatus = null;
-				this.playState = null;
-				this.currentStation = null;
-				this.currentAlbum = null;
-				this.currentSong = null;
-				this.albumCoverID = null;
-				this.albumCoverURL = null;
-				this.albumCoverFormat = null;
-			}
-
-			@Override
-			public String toString() {
-				StringBuilder sb = new StringBuilder();
-				sb.append("Net Radio: ").append(deviceStatus==null?"???":deviceStatus.getLabel());
-				if (playState==null)
-					sb.append("\r\n");
-				else
-					switch (playState) {
-					case Play: sb.append(" & is playing\r\n"); break;
-					case Stop: sb.append(" & has stopped\r\n"); break;
-					}
-				
-				sb.append("Station: ").append(currentStation==null?"":("\""+currentStation+"\"")).append("\r\n");
-				sb.append("  Album: ").append(currentAlbum==null?"":("\""+currentAlbum+"\"")).append("\r\n");
-				sb.append("   Song: ").append(currentSong==null?"":("\""+currentSong+"\"")).append("\r\n");
-				
-				sb.append("AlbumCover:");
-				sb.append(albumCoverID==null?"":(" "+albumCoverID));
-				sb.append(albumCoverFormat==null?"":(" "+albumCoverFormat.getLabel()));
-				sb.append(albumCoverURL==null?"":(" \""+albumCoverURL+"\""));
-				sb.append("\r\n");
-				
-				return sb.toString();
-			}
-			
-			public static PlayInfo parse(Node node) {
-				PlayInfo playInfo = new PlayInfo();
-				XML.forEachChild(node, child->{
-					switch (child.getNodeName()) {
-					case "Feature_Availability":
-						// GET[G1]:    NET_RADIO,Play_Info   ->   Feature_Availability -> "Ready" | "Not Ready"
-						playInfo.deviceStatus =  XML.getSubValue(child, Value.ReadyOrNot.values());
-						break;
-						
-					case "Playback_Info":
-						// GET[G1]:    NET_RADIO,Play_Info   ->   Playback_Info -> "Play" | "Stop"
-						playInfo.playState =  XML.getSubValue(child, Value.PlayStop.values());
-						break;
-						
-					case "Meta_Info":
-						// GET[G1]:    NET_RADIO,Play_Info   ->   Meta_Info,Station -> Text: 0..128 (UTF-8)
-						// GET[G1]:    NET_RADIO,Play_Info   ->   Meta_Info,Album -> Text: 0..128 (UTF-8)
-						// GET[G1]:    NET_RADIO,Play_Info   ->   Meta_Info,Song -> Text: 0..128 (UTF-8)
-						playInfo.currentStation =  XML.getSubValue(child, "Station"); 
-						playInfo.currentAlbum   =  XML.getSubValue(child, "Album"); 
-						playInfo.currentSong    =  XML.getSubValue(child, "Song"); 
-						break;
-						
-					case "Album_ART":
-						// GET[G1]:    NET_RADIO,Play_Info   ->   Album_ART,URL -> Text: 0..128 (UTF-8)
-						// GET[G1]:    NET_RADIO,Play_Info   ->   Album_ART,ID -> Number: 0..255
-						// GET[G1]:    NET_RADIO,Play_Info   ->   Album_ART,Format -> "BMP" | "YMF"
-						playInfo.albumCoverID     =  XML.getSubValue_Int(child, "ID"); 
-						playInfo.albumCoverURL    =  XML.getSubValue(child, "URL"); 
-						playInfo.albumCoverFormat =  XML.getSubValue(child, Value.AlbumCoverFormat.values(), "Format"); 
-						break;
-					}
-				});
-				return playInfo;
-			}
-			
+			this.listInfo = new ListInfo         (             address, KnownCommand.SetNetRadioDirectListSel, KnownCommand.SetNetRadioCursorListSel, KnownCommand.SetNetRadioPageListSel, KnownCommand.SetNetRadioJumpToLine);
+			this.playInfo = new PlayInfo_NetRadio("Net Radio", address, KnownCommand.SetNetRadioPlayback);
 		}
 	}
 	
 	static class USB {
 		
-		ListInfo listInfo;
-		PlayInfo playInfo;
-		@SuppressWarnings("unused")
-		private String address;
+		ListInfo          listInfo;
+		PlayInfo_USB_DLNA playInfo;
 		
 		public USB(String address) {
-			this.address = address;
-			this.listInfo = new ListInfo(address, KnownCommand.SetUSBDirectListSel, KnownCommand.SetUSBCursorListSel, KnownCommand.SetUSBPageListSel, KnownCommand.SetUSBJumpToLine);
-			this.playInfo = null;
+			this.listInfo = new ListInfo         (       address, KnownCommand.SetUSBDirectListSel, KnownCommand.SetUSBCursorListSel, KnownCommand.SetUSBPageListSel, KnownCommand.SetUSBJumpToLine);
+			this.playInfo = new PlayInfo_USB_DLNA("USB", address, KnownCommand.SetUSBPlayback, KnownCommand.SetUSBRepeat, KnownCommand.SetUSBShuffle);
 		}
+	}
+	
+	static class DLNA {
 		
-		static class PlayInfo {
-
-			Value.ReadyOrNot deviceStatus;
-			Value.PlayPauseStop playState;
-			Value.OffOneAll repeat;
-			Value.OnOff shuffle;
-			String currentArtist;
-			String currentAlbum;
-			String currentSong;
-			String albumCoverURL;
-			Integer albumCoverID;
-			Value.AlbumCoverFormat albumCoverFormat;
-
-			public PlayInfo() {
-				this.deviceStatus = null;
-				this.playState = null;
-				this.repeat = null;
-				this.shuffle = null;
-				this.currentArtist = null;
-				this.currentAlbum = null;
-				this.currentSong = null;
-				this.albumCoverID = null;
-				this.albumCoverURL = null;
-				this.albumCoverFormat = null;
-			}
-
-			@Override
-			public String toString() {
-				StringBuilder sb = new StringBuilder();
-				sb.append("USB: ").append(deviceStatus==null?"???":deviceStatus.getLabel());
-				if (playState==null)
-					sb.append("\r\n");
-				else
-					switch (playState) {
-					case Play : sb.append(" & is playing\r\n"); break;
-					case Pause: sb.append(" & was paused\r\n"); break;
-					case Stop : sb.append(" & was stopped\r\n"); break;
-					}
-				sb.append("   Repeat : ").append(repeat ==null?"???":repeat .getLabel());
-				sb.append("   Shuffle: ").append(shuffle==null?"???":shuffle.getLabel());
-				
-				sb.append("Artist: ").append(currentArtist==null?"":("\""+currentArtist+"\"")).append("\r\n");
-				sb.append(" Album: ").append(currentAlbum==null?"":("\""+currentAlbum+"\"")).append("\r\n");
-				sb.append("  Song: ").append(currentSong==null?"":("\""+currentSong+"\"")).append("\r\n");
-				
-				sb.append("AlbumCover:");
-				sb.append(albumCoverID==null?"":(" "+albumCoverID));
-				sb.append(albumCoverFormat==null?"":(" "+albumCoverFormat.getLabel()));
-				sb.append(albumCoverURL==null?"":(" \""+albumCoverURL+"\""));
-				sb.append("\r\n");
-				
-				return sb.toString();
-			}
-
-			public static PlayInfo parse(Node node) {
-				PlayInfo playInfo = new PlayInfo();
-				XML.forEachChild(node, child->{
-					switch (child.getNodeName()) {
-					case "Feature_Availability":
-						// GET[G1]:    USB,Play_Info   ->   Feature_Availability -> "Ready" | "Not Ready"
-						playInfo.deviceStatus =  XML.getSubValue(child, Value.ReadyOrNot.values());
-						break;
-						
-					case "Playback_Info":
-						// GET[G1]:    USB,Play_Info   ->   Playback_Info -> "Play" | "Pause" | "Stop"
-						playInfo.playState =  XML.getSubValue(child, Value.PlayPauseStop.values());
-						break;
-						
-					case "Play_Mode":
-						// GET[G1]:    USB,Play_Info   ->   Play_Mode,Repeat -> "Off" | "One" | "All"
-						// GET[G1]:    USB,Play_Info   ->   Play_Mode,Shuffle -> "Off" | "On"
-						playInfo.repeat  =  XML.getSubValue(child, Value.OffOneAll.values(), "Repeat");
-						playInfo.shuffle =  XML.getSubValue(child, Value.OnOff.values(), "Shuffle");
-						break;
-						
-					case "Meta_Info":
-						// GET[G1]:    USB,Play_Info   ->   Meta_Info,Artist -> Text: 0..64 (UTF-8)
-						// GET[G1]:    USB,Play_Info   ->   Meta_Info,Album -> Text: 0..64 (UTF-8)
-						// GET[G1]:    USB,Play_Info   ->   Meta_Info,Song -> Text: 0..64 (UTF-8)
-						playInfo.currentArtist =  XML.getSubValue(child, "Artist"); 
-						playInfo.currentAlbum  =  XML.getSubValue(child, "Album"); 
-						playInfo.currentSong   =  XML.getSubValue(child, "Song"); 
-						break;
-						
-					case "Album_ART":
-						// GET[G1]:    USB,Play_Info   ->   Album_ART,URL -> Text: 0..128 (UTF-8)
-						// GET[G1]:    USB,Play_Info   ->   Album_ART,ID -> Number: 0..255
-						// GET[G1]:    USB,Play_Info   ->   Album_ART,Format -> "BMP" | "YMF"
-						playInfo.albumCoverURL    =  XML.getSubValue(child, "URL"); 
-						playInfo.albumCoverID     =  XML.getSubValue_Int(child, "ID"); 
-						playInfo.albumCoverFormat =  XML.getSubValue(child, Value.AlbumCoverFormat.values(), "Format"); 
-						break;
-					}
-				});
-				return playInfo;
-			}
-			
+		ListInfo          listInfo;
+		PlayInfo_USB_DLNA playInfo;
+		
+		public DLNA(String address) {
+			this.listInfo = new ListInfo         (        address, KnownCommand.SetDLNADirectListSel, KnownCommand.SetDLNACursorListSel, KnownCommand.SetDLNAPageListSel, KnownCommand.SetDLNAJumpToLine);
+			this.playInfo = new PlayInfo_USB_DLNA("DLNA", address, KnownCommand.SetDLNAPlayback, KnownCommand.SetDLNARepeat, KnownCommand.SetDLNAShuffle);
 		}
 	}
 
@@ -604,7 +455,7 @@ public final class Device {
 			this.setJumpToLine = setJumpToLine;
 			clearValues();
 		}
-
+	
 		private void clearValues() {
 			this.menuStatus = null;
 			this.menuLayer = null;
@@ -685,6 +536,10 @@ public final class Device {
 					currentLine =  XML.getSubValue_Int(child,"Current_Line");
 					maxLine =  XML.getSubValue_Int(child,"Max_Line");
 					break;
+					
+				default:
+					System.out.println(child.getNodeName());
+					break;
 				}
 			});
 		}
@@ -700,6 +555,255 @@ public final class Device {
 				this.txt = txt;
 				this.attr = attr;
 			}}
+	}
+
+	static class PlayInfo_NetRadio {
+	
+		Value.ReadyOrNot deviceStatus;
+		Value.PlayStop playState;
+		String currentStation;
+		String currentAlbum;
+		String currentSong;
+		Integer albumCoverID;
+		String albumCoverURL;
+		Value.AlbumCoverFormat albumCoverFormat;
+		private String name;
+		private String address;
+		private KnownCommand setPlayback;
+	
+		public PlayInfo_NetRadio(String name, String address, KnownCommand setPlayback) {
+			this.name = name;
+			this.address = address;
+			this.setPlayback = setPlayback;
+			clearValues();
+		}
+	
+		private void clearValues() {
+			this.deviceStatus = null;
+			this.playState = null;
+			this.currentStation = null;
+			this.currentAlbum = null;
+			this.currentSong = null;
+			this.albumCoverID = null;
+			this.albumCoverURL = null;
+			this.albumCoverFormat = null;
+		}
+		
+		public void sendPlayback(Value.PlayStop playState) {
+			// [Play]    Visible:No     PUT[P1]     NET_RADIO,Play_Control,Playback = Play
+			// [Stop]    Playable:No     PUT[P1]     NET_RADIO,Play_Control,Playback = Stop
+			Ctrl.sendPutCommand(address,setPlayback, playState.getLabel());
+		}
+	
+		@Override
+		public String toString() {
+			StringBuilder sb = new StringBuilder();
+			sb.append(name+": ").append(deviceStatus==null?"???":deviceStatus.getLabel());
+			if (playState==null)
+				sb.append("\r\n");
+			else
+				switch (playState) {
+				case Play: sb.append(" & is playing\r\n"); break;
+				case Stop: sb.append(" & has stopped\r\n"); break;
+				}
+			sb.append("\r\n");
+			
+			sb.append("Station: ").append(currentStation==null?"":("\""+currentStation+"\"")).append("\r\n");
+			sb.append("  Album: ").append(currentAlbum==null?"":("\""+currentAlbum+"\"")).append("\r\n");
+			sb.append("   Song: ").append(currentSong==null?"":("\""+currentSong+"\"")).append("\r\n");
+			sb.append("\r\n");
+			
+			sb.append("AlbumCover:\r\n");
+			sb.append("   ");
+			sb.append(albumCoverID==null?"":(" "+albumCoverID));
+			sb.append(albumCoverFormat==null?"":(" "+albumCoverFormat.getLabel()));
+			sb.append("\r\n");
+			sb.append("   ");
+			sb.append(albumCoverURL==null?"":(" \""+albumCoverURL+"\""));
+			sb.append("\r\n");
+			
+			return sb.toString();
+		}
+		
+		public void parse(Node node) {
+			clearValues();
+			XML.forEachChild(node, child->{
+				switch (child.getNodeName()) {
+				case "Feature_Availability":
+					// GET[G1]:    NET_RADIO,Play_Info   ->   Feature_Availability -> "Ready" | "Not Ready"
+					deviceStatus =  XML.getSubValue(child, Value.ReadyOrNot.values());
+					break;
+					
+				case "Playback_Info":
+					// GET[G1]:    NET_RADIO,Play_Info   ->   Playback_Info -> "Play" | "Stop"
+					playState =  XML.getSubValue(child, Value.PlayStop.values());
+					break;
+					
+				case "Meta_Info":
+					// GET[G1]:    NET_RADIO,Play_Info   ->   Meta_Info,Station -> Text: 0..128 (UTF-8)
+					// GET[G1]:    NET_RADIO,Play_Info   ->   Meta_Info,Album -> Text: 0..128 (UTF-8)
+					// GET[G1]:    NET_RADIO,Play_Info   ->   Meta_Info,Song -> Text: 0..128 (UTF-8)
+					currentStation =  XML.getSubValue(child, "Station"); 
+					currentAlbum   =  XML.getSubValue(child, "Album"); 
+					currentSong    =  XML.getSubValue(child, "Song"); 
+					break;
+					
+				case "Album_ART":
+					// GET[G1]:    NET_RADIO,Play_Info   ->   Album_ART,URL -> Text: 0..128 (UTF-8)
+					// GET[G1]:    NET_RADIO,Play_Info   ->   Album_ART,ID -> Number: 0..255
+					// GET[G1]:    NET_RADIO,Play_Info   ->   Album_ART,Format -> "BMP" | "YMF"
+					albumCoverID     =  XML.getSubValue_Int(child, "ID"); 
+					albumCoverURL    =  XML.getSubValue(child, "URL"); 
+					albumCoverFormat =  XML.getSubValue(child, Value.AlbumCoverFormat.values(), "Format"); 
+					break;
+				}
+			});
+		}
+		
+	}
+
+	static class PlayInfo_USB_DLNA {
+	
+		Value.ReadyOrNot deviceStatus;
+		Value.PlayPauseStop playState;
+		Value.OffOneAll repeat;
+		Value.OnOff shuffle;
+		String currentArtist;
+		String currentAlbum;
+		String currentSong;
+		String albumCoverURL;
+		Integer albumCoverID;
+		Value.AlbumCoverFormat albumCoverFormat;
+		
+		private String address;
+		private KnownCommand setPlayback;
+		private KnownCommand setRepeat;
+		private KnownCommand setShuffle;
+		private String name;
+	
+		public PlayInfo_USB_DLNA(String name, String address, KnownCommand setPlayback, KnownCommand setRepeat, KnownCommand setShuffle) {
+			this.name = name;
+			this.address = address;
+			this.setPlayback = setPlayback;
+			this.setRepeat = setRepeat;
+			this.setShuffle = setShuffle;
+			clearValues();
+		}
+	
+		private void clearValues() {
+			this.deviceStatus = null;
+			this.playState = null;
+			this.repeat = null;
+			this.shuffle = null;
+			this.currentArtist = null;
+			this.currentAlbum = null;
+			this.currentSong = null;
+			this.albumCoverID = null;
+			this.albumCoverURL = null;
+			this.albumCoverFormat = null;
+		}
+	
+		@Override
+		public String toString() {
+			StringBuilder sb = new StringBuilder();
+			sb.append(name+": ").append(deviceStatus==null?"???":deviceStatus.getLabel());
+			if (playState==null)
+				sb.append("\r\n");
+			else
+				switch (playState) {
+				case Play : sb.append(" & is playing\r\n"); break;
+				case Pause: sb.append(" & was paused\r\n"); break;
+				case Stop : sb.append(" & was stopped\r\n"); break;
+				}
+			sb.append("   Repeat : ").append(repeat ==null?"???":repeat .getLabel()).append("\r\n");;
+			sb.append("   Shuffle: ").append(shuffle==null?"???":shuffle.getLabel()).append("\r\n");;
+			sb.append("\r\n");
+			
+			sb.append("Artist: ").append(currentArtist==null?"":("\""+currentArtist+"\"")).append("\r\n");
+			sb.append(" Album: ").append(currentAlbum==null?"":("\""+currentAlbum+"\"")).append("\r\n");
+			sb.append("  Song: ").append(currentSong==null?"":("\""+currentSong+"\"")).append("\r\n");
+			sb.append("\r\n");
+			
+			sb.append("AlbumCover:\r\n");
+			sb.append("   ");
+			sb.append(albumCoverID==null?"":(" "+albumCoverID));
+			sb.append(albumCoverFormat==null?"":(" "+albumCoverFormat.getLabel()));
+			sb.append("\r\n");
+			sb.append("   ");
+			sb.append(albumCoverURL==null?"":(" \""+albumCoverURL+"\""));
+			sb.append("\r\n");
+			
+			return sb.toString();
+		}
+		
+		public void sendPlayback(Value.PlayPauseStop playState) {
+			// [Play]      #######,Play_Control,Playback = Play
+			// [Pause]     #######,Play_Control,Playback = Pause
+			// [Stop]      #######,Play_Control,Playback = Stop
+			Ctrl.sendPutCommand(address,setPlayback, playState.getLabel());
+		}
+		
+		public void sendPlayback(Value.SkipFwdRev skip) {
+			// [Plus_1]    #######,Play_Control,Playback = Skip Fwd
+			// [Minus_1]   #######,Play_Control,Playback = Skip Rev
+			Ctrl.sendPutCommand(address,setPlayback, skip.getLabel());
+		}
+		
+		public void sendRepeat(Value.OffOneAll repeatState) {
+			// [Rep_Off]   #######,Play_Control,Play_Mode,Repeat = Off
+			// [Rep_1]     #######,Play_Control,Play_Mode,Repeat = One
+			// [Rep_2]     #######,Play_Control,Play_Mode,Repeat = All
+			Ctrl.sendPutCommand(address,setRepeat, repeatState.getLabel());
+		}
+		
+		public void sendShuffle(Value.OnOff shuffleState) {
+			// [Rnd_Off]   #######,Play_Control,Play_Mode,Shuffle = Off
+			// [Rnd_1]     #######,Play_Control,Play_Mode,Shuffle = On
+			Ctrl.sendPutCommand(address,setShuffle, shuffleState.getLabel());
+		}
+	
+		public void parse(Node node) {
+			clearValues();
+			XML.forEachChild(node, child->{
+				switch (child.getNodeName()) {
+				case "Feature_Availability":
+					// GET:    #######,Play_Info   ->   Feature_Availability -> "Ready" | "Not Ready"
+					deviceStatus =  XML.getSubValue(child, Value.ReadyOrNot.values());
+					break;
+					
+				case "Playback_Info":
+					// GET:    #######,Play_Info   ->   Playback_Info -> "Play" | "Pause" | "Stop"
+					playState =  XML.getSubValue(child, Value.PlayPauseStop.values());
+					break;
+					
+				case "Play_Mode":
+					// GET:    #######,Play_Info   ->   Play_Mode,Repeat -> "Off" | "One" | "All"
+					// GET:    #######,Play_Info   ->   Play_Mode,Shuffle -> "Off" | "On"
+					repeat  =  XML.getSubValue(child, Value.OffOneAll.values(), "Repeat");
+					shuffle =  XML.getSubValue(child, Value.OnOff.values(), "Shuffle");
+					break;
+					
+				case "Meta_Info":
+					// GET:    #######,Play_Info   ->   Meta_Info,Artist -> Text: 0..64 (UTF-8)
+					// GET:    #######,Play_Info   ->   Meta_Info,Album -> Text: 0..64 (UTF-8)
+					// GET:    #######,Play_Info   ->   Meta_Info,Song -> Text: 0..64 (UTF-8)
+					currentArtist =  XML.getSubValue(child, "Artist"); 
+					currentAlbum  =  XML.getSubValue(child, "Album"); 
+					currentSong   =  XML.getSubValue(child, "Song"); 
+					break;
+					
+				case "Album_ART":
+					// GET:    #######,Play_Info   ->   Album_ART,URL -> Text: 0..128 (UTF-8)
+					// GET:    #######,Play_Info   ->   Album_ART,ID -> Number: 0..255
+					// GET:    #######,Play_Info   ->   Album_ART,Format -> "BMP" | "YMF"
+					albumCoverURL    =  XML.getSubValue(child, "URL"); 
+					albumCoverID     =  XML.getSubValue_Int(child, "ID"); 
+					albumCoverFormat =  XML.getSubValue(child, Value.AlbumCoverFormat.values(), "Format"); 
+					break;
+				}
+			});
+		}
+		
 	}
 
 	static class Tuner {
