@@ -67,19 +67,20 @@ class LineList {
 		this.listInfo = listInfo;
 	}
 	
-	public void setEnabled(boolean enabled) {
+	public void setEnabledGUI(boolean enabled) {
+		lineListLabel.setEnabled(enabled);
 		lineList.setEnabled(enabled);
 		buttons.forEach(b->b.setEnabled(enabled));
 	}
 
 	static interface LineListUser {
-		void setEnabled(boolean enabled);
+		void setEnabledGuiIfPossible(boolean enabled);
 		void updatePlayInfo();
 	}
 	
 
 	void updateLineList() {
-		lineListUser.setEnabled(listInfo.menuStatus==Device.Value.ReadyOrBusy.Ready);
+		lineListUser.setEnabledGuiIfPossible(listInfo.menuStatus==Device.Value.ReadyOrBusy.Ready);
 		//System.out.println("updateLineList() -> listInfo.menuStatus: "+listInfo.menuStatus);
 		
 		String lineListLabelStr = String.format("[%s] %s", listInfo.menuLayer, listInfo.menuName==null?"":listInfo.menuName);

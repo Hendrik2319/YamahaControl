@@ -4,6 +4,7 @@ import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Dimension;
+import java.awt.FlowLayout;
 import java.awt.Graphics2D;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
@@ -65,6 +66,7 @@ import javax.swing.UnsupportedLookAndFeelException;
 import javax.swing.filechooser.FileSystemView;
 
 import net.schwarzbaer.gui.StandardMainWindow;
+import net.schwarzbaer.java.tools.yamahacontrol.Device.Inputs.DeviceSceneInput;
 import net.schwarzbaer.java.tools.yamahacontrol.Device.UpdateWish;
 
 public class YamahaControl {
@@ -185,7 +187,7 @@ public class YamahaControl {
 		mainWindow = new StandardMainWindow("YamahaControl");
 		mainWindow.startGUI(contentPane);
 		
-		guiRegions.forEach(gr->gr.setEnabled(false));
+		guiRegions.forEach(gr->gr.setEnabledGUI(false));
 	}
 	
 	private static class ImageToolbox {
@@ -407,7 +409,7 @@ public class YamahaControl {
 	enum UpdateReason { Initial, Frequently }
 
 	public static interface GuiRegion {
-		void setEnabled(boolean enabled);
+		void setEnabledGUI(boolean enabled);
 		void initGUIafterConnect(Device device);
 		void frequentlyUpdate();
 		Collection<Device.UpdateWish> getUpdateWishes(UpdateReason reason);
@@ -429,7 +431,7 @@ public class YamahaControl {
 			volumeSetter = new VolumeSetter(10);
 		}
 
-		@Override public void setEnabled(boolean enabled) {
+		@Override public void setEnabledGUI(boolean enabled) {
 			onoffBtn.setEnabled(enabled);
 			volumeControl.setEnabled(enabled);
 			scenesPanel.setEnabled(enabled);
@@ -447,7 +449,7 @@ public class YamahaControl {
 
 		@Override
 		public void initGUIafterConnect(Device _device) {
-			setEnabled(device!=null);
+			setEnabledGUI(device!=null);
 			
 			if (device!=null) {
 				scenesPanel.createButtons(device.inputs.getScenes(),this::setScene,dsi->dsi!=null && "W".equals(dsi.rw));
@@ -633,26 +635,35 @@ public class YamahaControl {
 		}
 	}
 	
-	private static abstract class SubUnit extends JPanel implements GuiRegion {
+	private static abstract class AbstractSubUnit extends JPanel implements GuiRegion {
 		private static final long serialVersionUID = 7368584160348326790L;
 		
 		protected Device device;
+		protected boolean isReady;
 		private JLabel readyStateLabel;
 		private JLabel tabHeaderComp;
 
+		private String inputID;
 		private String tabTitle;
-//		private Consumer<Color> setTabBackground;
 
-		protected SubUnit(String tabTitle) {
+		protected AbstractSubUnit(String inputID, String tabTitle) {
 			super(new BorderLayout(3,3));
+			this.inputID = inputID;
 			this.tabTitle = tabTitle;
 		}
 
 		private void createPanel() {
 			tabHeaderComp = new JLabel("  "+tabTitle+"  ");
-//			setTabBackground = null;
-			readyStateLabel = new JLabel("???",smallImages.get(SmallImages.IconUnknown),JLabel.LEFT);
-			add(readyStateLabel,BorderLayout.NORTH);
+			
+			JPanel northPanel = new JPanel(new FlowLayout(FlowLayout.LEFT,3,3));
+			northPanel.add(createButton("Activate", e->{
+				if (device==null) return;
+				DeviceSceneInput dsi = device.inputs.findInput(inputID);
+				if (dsi!=null) device.inputs.setInput(dsi);
+			}, true));
+			northPanel.add(readyStateLabel = new JLabel("???",smallImages.get(SmallImages.IconUnknown),JLabel.LEFT));
+			
+			add(northPanel,BorderLayout.NORTH);
 			add(createContentPanel(),BorderLayout.CENTER);
 			setBorder(BorderFactory.createEmptyBorder(3,3,3,3));
 		}
@@ -663,7 +674,6 @@ public class YamahaControl {
 			guiRegions.add(this);
 			int index = subUnitPanel.getTabCount();
 			subUnitPanel.insertTab(tabTitle,null,this,null, index);
-//			setTabBackground = color -> subUnitPanel.setBackgroundAt(index, color);
 			subUnitPanel.setTabComponentAt(index, tabHeaderComp);
 		}
 
@@ -676,7 +686,8 @@ public class YamahaControl {
 
 		@Override
 		public void frequentlyUpdate() {
-			boolean isReady = getReadyState();
+			isReady = getReadyState();
+			setEnabled(isReady);
 			tabHeaderComp.setOpaque(isReady);
 			tabHeaderComp.setBackground(isReady?Color.GREEN:null);
 //			setTabBackground.accept(isReady?Color.GREEN:null);
@@ -695,22 +706,20 @@ public class YamahaControl {
 		protected JPanel createContentPanel() { return new JPanel(); }
 		protected abstract boolean getReadyState();
 		protected UpdateWish getReadyStateUpdateWish() { return null; }
+
+		@Override public void setEnabledGUI(boolean enabled) { setEnabled(enabled); }
+		
 		
 	}
 	
-	private static class SubUnitNetRadio extends SubUnit implements LineList.LineListUser {
+	private static class SubUnitNetRadio extends AbstractSubUnit_ListPlay {
 		private static final long serialVersionUID = -8583320100311806933L;
-		private JTextArea playinfoOutput;
-		private JScrollPane playinfoScrollPane;
 		
-		private LineList lineList;
-		private Vector<JComponent> comps;
-		private ButtonGroup playButtons;
 		private JToggleButton playBtn;
 		private JToggleButton stopBtn;
 
 		public SubUnitNetRadio() {
-			super("Net Radio");
+			super("NET RADIO","Net Radio",UpdateWish.NetRadioListInfo,UpdateWish.NetRadioPlayInfo);
 		}
 
 		@Override
@@ -721,67 +730,29 @@ public class YamahaControl {
 			return readyState==Device.Value.ReadyOrNot.Ready;
 		}
 
+		@Override protected Device.PlayInfo getPlayInfo()              { return device.netRadio.playInfo; }
+		@Override protected Device.ListInfo getListInfo(Device device) { return device.netRadio.listInfo; }
+
 		@Override
-		public Collection<UpdateWish> getUpdateWishes(UpdateReason reason) {
-			Vector<UpdateWish> vector = new Vector<>(super.getUpdateWishes(reason));
-			switch (reason) {
-			case Initial:
-			case Frequently:
-				vector.add(UpdateWish.NetRadioPlayInfo);
-				vector.add(UpdateWish.NetRadioListInfo);
-				break;
+		protected void updateButtons() {
+			if (device!=null) {
+				if (device.netRadio.playInfo.playState==null || !isReady)
+					playButtons.clearSelection();
+				else
+					switch (device.netRadio.playInfo.playState) {
+					case Play : playBtn .setSelected(true); break;
+					case Stop : stopBtn .setSelected(true); break;
+					}
+			} else {
+				playButtons.clearSelection();
 			}
-			return vector;
 		}
 
 		@Override
-		public void initGUIafterConnect(Device device) {
-			lineList.setDeviceAndListInfo(device,device==null?null:device.netRadio.listInfo);
-			super.initGUIafterConnect(device);
-		}
-
-		@Override
-		public void frequentlyUpdate() {
-			super.frequentlyUpdate();
-			lineList.updateLineList();
-			updatePlayInfo();
-		}
-
-		@Override
-		public void setEnabled(boolean enabled) {
-			lineList.setEnabled(enabled);
-			comps.forEach(b->b.setEnabled(enabled));
-		}
-
-		@Override
-		protected JPanel createContentPanel() {
-			comps = new Vector<>();
-			
-			lineList = new LineList(this,UpdateWish.NetRadioListInfo,UpdateWish.NetRadioPlayInfo);
-			JPanel lineListPanel = lineList.createGUIelements();
-			
-			playinfoOutput = new JTextArea("Play Info");
-			playinfoOutput.setEditable(false);
-			
-			playinfoScrollPane = new JScrollPane(playinfoOutput);
-			playinfoScrollPane.setPreferredSize(new Dimension(500, 400));
-			
-			playButtons = new ButtonGroup();
-			GridBagPanel buttonsPanel = new GridBagPanel();
-			buttonsPanel.setInsets(new Insets(3,3,3,3));
+		protected void createButtons(GridBagPanel buttonsPanel) {
 			buttonsPanel.add(playBtn = createButton(Device.Value.PlayStop.Play), 0,0, 0,1, 1,1, GridBagConstraints.BOTH);
 			buttonsPanel.add(stopBtn = createButton(Device.Value.PlayStop.Stop), 1,0, 0,1, 1,1, GridBagConstraints.BOTH);
 			buttonsPanel.add(createButton("Add Song to PreferredSongs",e->addSongToPreferredSongs()), 2,0, 0,1, 1,1, GridBagConstraints.BOTH);
-			
-			JPanel playinfoPanel = new JPanel(new BorderLayout(3,3));
-			playinfoPanel.add(buttonsPanel,BorderLayout.NORTH);
-			playinfoPanel.add(playinfoScrollPane,BorderLayout.CENTER);
-			
-			JPanel contentPanel = new JPanel(new BorderLayout(3,3));
-			contentPanel.add(lineListPanel, BorderLayout.NORTH);
-			contentPanel.add(playinfoPanel, BorderLayout.CENTER);
-			
-			return contentPanel;
 		}
 		
 		private JToggleButton createButton(Device.Value.PlayStop playState) {
@@ -807,34 +778,13 @@ public class YamahaControl {
 				writePreferredSongsToFile();
 			}
 		}
-
-		@Override
-		public void updatePlayInfo() {
-			float hPos = YamahaControl.getScrollPos(playinfoScrollPane.getHorizontalScrollBar());
-			float vPos = YamahaControl.getScrollPos(playinfoScrollPane.getVerticalScrollBar());
-			if (device!=null) {
-				playinfoOutput.setText(device.netRadio.playInfo.toString());
-				if (device.netRadio.playInfo.playState==null)
-					playButtons.clearSelection();
-				else
-					switch (device.netRadio.playInfo.playState) {
-					case Play : playBtn .setSelected(true); break;
-					case Stop : stopBtn .setSelected(true); break;
-					}
-			} else {
-				playinfoOutput.setText("<no data>");
-				playButtons.clearSelection();
-			}
-			YamahaControl.setScrollPos(playinfoScrollPane.getHorizontalScrollBar(),hPos);
-			YamahaControl.setScrollPos(playinfoScrollPane.getVerticalScrollBar(),vPos);
-		}
 	}
 	
-	private static class SubUnitUSB extends SubUnit_USBDLNA {
+	private static class SubUnitUSB extends AbstractSubUnit_USBDLNA {
 		private static final long serialVersionUID = 2909543552931897755L;
 
 		public SubUnitUSB() {
-			super("USB Device",UpdateWish.USBListInfo,UpdateWish.USBPlayInfo);
+			super("USB","USB Device",UpdateWish.USBListInfo,UpdateWish.USBPlayInfo);
 		}
 		
 		@Override
@@ -845,15 +795,15 @@ public class YamahaControl {
 			return readyState==Device.Value.ReadyOrNot.Ready;
 		}
 		
-		@Override protected Device.PlayInfo_USB_DLNA getPlayInfo()     { return device.usb.playInfo; }
-		@Override protected Device.ListInfo getListInfo(Device device) { return device.usb.listInfo; }
+		@Override protected Device.PlayInfo_USB_DLNA getPlayInfo_USB_DLNA()     { return device.usb.playInfo; }
+		@Override protected Device.ListInfo          getListInfo(Device device) { return device.usb.listInfo; }
 	}
 	
-	private static class SubUnitDLNA extends SubUnit_USBDLNA {
+	private static class SubUnitDLNA extends AbstractSubUnit_USBDLNA {
 		private static final long serialVersionUID = -4585259335586086032L;
 
 		public SubUnitDLNA() {
-			super("DLNA Server",UpdateWish.DLNAListInfo,UpdateWish.DLNAPlayInfo);
+			super("SERVER","DLNA Server",UpdateWish.DLNAListInfo,UpdateWish.DLNAPlayInfo);
 		}
 		
 		@Override
@@ -864,34 +814,130 @@ public class YamahaControl {
 			return readyState==Device.Value.ReadyOrNot.Ready;
 		}
 		
-		@Override protected Device.PlayInfo_USB_DLNA getPlayInfo()     { return device.dlna.playInfo; }
-		@Override protected Device.ListInfo getListInfo(Device device) { return device.dlna.listInfo; }
+		@Override protected Device.PlayInfo_USB_DLNA getPlayInfo_USB_DLNA()     { return device.dlna.playInfo; }
+		@Override protected Device.ListInfo          getListInfo(Device device) { return device.dlna.listInfo; }
 	}
 
-	private static abstract class SubUnit_USBDLNA extends SubUnit implements LineList.LineListUser {
+	private static abstract class AbstractSubUnit_USBDLNA extends AbstractSubUnit_ListPlay {
 		private static final long serialVersionUID = 8830354607137619068L;
-		private LineList lineList;
-		private JTextArea playinfoOutput;
-		private JScrollPane playinfoScrollPane;
-		private Vector<JComponent> comps;
-		private ButtonGroup playButtons;
+		
 		private JToggleButton playBtn;
 		private JToggleButton pauseBtn;
 		private JToggleButton stopBtn;
 		private JButton repeatBtn;
 		private JButton shuffleBtn;
+		
+		public AbstractSubUnit_USBDLNA(String inputID, String tabTitle, UpdateWish listInfoUpdateWish, UpdateWish playInfoUpdateWish) {
+			super(inputID, tabTitle, listInfoUpdateWish, playInfoUpdateWish);
+		}
+		
+		protected abstract Device.PlayInfo_USB_DLNA getPlayInfo_USB_DLNA();
+		
+		@Override
+		protected Device.PlayInfo getPlayInfo() { return getPlayInfo_USB_DLNA(); }
+
+		@Override
+		protected void updateButtons() {
+			if (device!=null && getPlayInfo()!=null) {
+				Device.PlayInfo_USB_DLNA playInfo = getPlayInfo_USB_DLNA();
+				if (playInfo.playState==null || !isReady)
+					playButtons.clearSelection();
+				else
+					switch (playInfo.playState) {
+					case Play : playBtn .setSelected(true); break;
+					case Pause: pauseBtn.setSelected(true); break;
+					case Stop : stopBtn .setSelected(true); break;
+					}
+				repeatBtn .setText(playInfo.repeat ==null? "Repeat":( "Repeat: "+playInfo.repeat .getLabel()));
+				shuffleBtn.setText(playInfo.shuffle==null?"Shuffle":("Shuffle: "+playInfo.shuffle.getLabel()));
+				
+			} else{
+				playButtons.clearSelection();
+			}
+		}
+
+		@Override
+		protected void createButtons(GridBagPanel buttonsPanel) {
+			buttonsPanel.add(playBtn    = createButton(     Device.Value.PlayPauseStop.Play ), 0,0, 0,1, 1,1, GridBagConstraints.BOTH);
+			buttonsPanel.add(pauseBtn   = createButton(     Device.Value.PlayPauseStop.Pause), 1,0, 0,1, 1,1, GridBagConstraints.BOTH);
+			buttonsPanel.add(stopBtn    = createButton(     Device.Value.PlayPauseStop.Stop ), 2,0, 0,1, 1,1, GridBagConstraints.BOTH);
+			buttonsPanel.add(             createButton("<<",Device.Value.SkipFwdRev.SkipRev ), 3,0, 0,1, 1,1, GridBagConstraints.BOTH);
+			buttonsPanel.add(             createButton(">>",Device.Value.SkipFwdRev.SkipFwd ), 4,0, 0,1, 1,1, GridBagConstraints.BOTH);
+			buttonsPanel.add(repeatBtn  = createButton("Repeat"                             ), 5,0, 0,1, 1,1, GridBagConstraints.BOTH);
+			buttonsPanel.add(shuffleBtn = createButton("Shuffle"                            ), 6,0, 0,1, 1,1, GridBagConstraints.BOTH);
+			
+			repeatBtn.addActionListener(e->{
+				if (device==null) return;
+				Device.PlayInfo_USB_DLNA playInfo = getPlayInfo_USB_DLNA();
+				playInfo.sendRepeat(YamahaControl.getNext(playInfo.repeat,Device.Value.OffOneAll.values()));
+				device.update(EnumSet.of(UpdateWish.USBListInfo,UpdateWish.USBPlayInfo));
+				lineList.updateLineList();
+				updatePlayInfo();
+			});
+			shuffleBtn.addActionListener(e->{
+				if (device==null) return;
+				Device.PlayInfo_USB_DLNA playInfo = getPlayInfo_USB_DLNA();
+				playInfo.sendShuffle(YamahaControl.getNext(playInfo.shuffle,Device.Value.OnOff.values()));
+				device.update(EnumSet.of(UpdateWish.USBListInfo,UpdateWish.USBPlayInfo));
+				lineList.updateLineList();
+				updatePlayInfo();
+			});
+		}
+		
+		private JToggleButton createButton(Device.Value.PlayPauseStop playState) {
+			ActionListener listener = e->{
+				getPlayInfo_USB_DLNA().sendPlayback(playState);
+				device.update(EnumSet.of(UpdateWish.USBListInfo,UpdateWish.USBPlayInfo));
+				lineList.updateLineList();
+				updatePlayInfo();
+			};
+			JToggleButton button = YamahaControl.createToggleButton(playState.getLabel(), listener, true, playButtons);
+			comps.add(button);
+			return button;
+		}
+		
+		private JButton createButton(String title, Device.Value.SkipFwdRev skip) {
+			ActionListener listener = e->{
+				getPlayInfo_USB_DLNA().sendPlayback(skip);
+				device.update(EnumSet.of(UpdateWish.USBListInfo,UpdateWish.USBPlayInfo));
+				lineList.updateLineList();
+				updatePlayInfo();
+			};
+			JButton button = YamahaControl.createButton(title, listener, true);
+			comps.add(button);
+			return button;
+		}
+		
+		private JButton createButton(String title) {
+			JButton button = YamahaControl.createButton(title, null, true);
+			comps.add(button);
+			return button;
+		}
+	}
+
+	private static abstract class AbstractSubUnit_ListPlay extends AbstractSubUnit implements LineList.LineListUser {
+		private static final long serialVersionUID = 3773609643258015474L;
+		
+		protected LineList lineList;
+		private   JTextArea playinfoOutput;
+		private   JScrollPane playinfoScrollPane;
+		protected Vector<JComponent> comps;
+		protected ButtonGroup playButtons;
+		
 		private UpdateWish listInfoUpdateWish;
 		private UpdateWish playInfoUpdateWish;
 	
-		public SubUnit_USBDLNA(String tabTitle, UpdateWish listInfoUpdateWish, UpdateWish playInfoUpdateWish) {
-			super(tabTitle);
+		public AbstractSubUnit_ListPlay(String inputID, String tabTitle, UpdateWish listInfoUpdateWish, UpdateWish playInfoUpdateWish) {
+			super(inputID, tabTitle);
 			this.listInfoUpdateWish = listInfoUpdateWish;
 			this.playInfoUpdateWish = playInfoUpdateWish;
 		}
 
-		protected abstract Device.PlayInfo_USB_DLNA getPlayInfo();
+		protected abstract Device.PlayInfo getPlayInfo();
 		protected abstract Device.ListInfo getListInfo(Device device);
-	
+		protected abstract void createButtons(GridBagPanel buttonsPanel);
+		protected abstract void updateButtons();
+
 		@Override
 		public Collection<UpdateWish> getUpdateWishes(UpdateReason reason) {
 			Vector<UpdateWish> vector = new Vector<>(super.getUpdateWishes(reason));
@@ -919,28 +965,34 @@ public class YamahaControl {
 		}
 
 		@Override
-		public void setEnabled(boolean enabled) {
-			lineList.setEnabled(enabled);
+		public void setEnabledGuiIfPossible(boolean enabled) {
+			setEnabledGUI(isReady && enabled);
+		}
+
+		@Override
+		public void setEnabledGUI(boolean enabled) {
+			lineList.setEnabledGUI(enabled);
 			comps.forEach(b->b.setEnabled(enabled));
 		}
 	
 		@Override
 		protected JPanel createContentPanel() {
+			comps = new Vector<>();
 			
 			lineList = new LineList(this,listInfoUpdateWish,playInfoUpdateWish);
 			JPanel lineListPanel = lineList.createGUIelements();
 			
 			playinfoOutput = new JTextArea("Play Info");
 			playinfoOutput.setEditable(false);
+			comps.add(playinfoOutput);
 			
 			playinfoScrollPane = new JScrollPane(playinfoOutput);
 			playinfoScrollPane.setPreferredSize(new Dimension(500, 400));
 			
-			comps = new Vector<>();
 			playButtons = new ButtonGroup();
 			GridBagPanel buttonsPanel = new GridBagPanel();
 			buttonsPanel.setInsets(new Insets(3,3,3,3));
-			createPlayButons(buttonsPanel);
+			createButtons(buttonsPanel);
 			
 			JPanel playinfoPanel = new JPanel(new BorderLayout(3,3));
 			playinfoPanel.add(buttonsPanel,BorderLayout.NORTH);
@@ -953,92 +1005,26 @@ public class YamahaControl {
 			return contentPanel;
 		}
 
-		private void createPlayButons(GridBagPanel buttonsPanel) {
-			buttonsPanel.add(playBtn    = createButton(     Device.Value.PlayPauseStop.Play ), 0,0, 0,1, 1,1, GridBagConstraints.BOTH);
-			buttonsPanel.add(pauseBtn   = createButton(     Device.Value.PlayPauseStop.Pause), 1,0, 0,1, 1,1, GridBagConstraints.BOTH);
-			buttonsPanel.add(stopBtn    = createButton(     Device.Value.PlayPauseStop.Stop ), 2,0, 0,1, 1,1, GridBagConstraints.BOTH);
-			buttonsPanel.add(             createButton("<<",Device.Value.SkipFwdRev.SkipRev ), 3,0, 0,1, 1,1, GridBagConstraints.BOTH);
-			buttonsPanel.add(             createButton(">>",Device.Value.SkipFwdRev.SkipFwd ), 4,0, 0,1, 1,1, GridBagConstraints.BOTH);
-			buttonsPanel.add(repeatBtn  = createButton("Repeat"                             ), 5,0, 0,1, 1,1, GridBagConstraints.BOTH);
-			buttonsPanel.add(shuffleBtn = createButton("Shuffle"                            ), 6,0, 0,1, 1,1, GridBagConstraints.BOTH);
-			
-			repeatBtn.addActionListener(e->{
-				if (device==null) return;
-				getPlayInfo().sendRepeat(YamahaControl.getNext(getPlayInfo().repeat,Device.Value.OffOneAll.values()));
-				device.update(EnumSet.of(UpdateWish.USBListInfo,UpdateWish.USBPlayInfo));
-				lineList.updateLineList();
-				updatePlayInfo();
-			});
-			shuffleBtn.addActionListener(e->{
-				if (device==null) return;
-				getPlayInfo().sendShuffle(YamahaControl.getNext(getPlayInfo().shuffle,Device.Value.OnOff.values()));
-				device.update(EnumSet.of(UpdateWish.USBListInfo,UpdateWish.USBPlayInfo));
-				lineList.updateLineList();
-				updatePlayInfo();
-			});
-		}
-		
-		private JToggleButton createButton(Device.Value.PlayPauseStop playState) {
-			ActionListener listener = e->{
-				getPlayInfo().sendPlayback(playState);
-				device.update(EnumSet.of(UpdateWish.USBListInfo,UpdateWish.USBPlayInfo));
-				lineList.updateLineList();
-				updatePlayInfo();
-			};
-			JToggleButton button = YamahaControl.createToggleButton(playState.getLabel(), listener, true, playButtons);
-			comps.add(button);
-			return button;
-		}
-		
-		private JButton createButton(String title, Device.Value.SkipFwdRev skip) {
-			ActionListener listener = e->{
-				getPlayInfo().sendPlayback(skip);
-				device.update(EnumSet.of(UpdateWish.USBListInfo,UpdateWish.USBPlayInfo));
-				lineList.updateLineList();
-				updatePlayInfo();
-			};
-			JButton button = YamahaControl.createButton(title, listener, true);
-			comps.add(button);
-			return button;
-		}
-		
-		private JButton createButton(String title) {
-			JButton button = YamahaControl.createButton(title, null, true);
-			comps.add(button);
-			return button;
-		}
-
 		@Override
 		public void updatePlayInfo() {
 			float hPos = YamahaControl.getScrollPos(playinfoScrollPane.getHorizontalScrollBar());
 			float vPos = YamahaControl.getScrollPos(playinfoScrollPane.getVerticalScrollBar());
-			if (device!=null && getPlayInfo()!=null) {
+			if (device!=null) {
 				playinfoOutput.setText(getPlayInfo().toString());
-				if (getPlayInfo().playState==null)
-					playButtons.clearSelection();
-				else
-					switch (getPlayInfo().playState) {
-					case Play : playBtn .setSelected(true); break;
-					case Pause: pauseBtn.setSelected(true); break;
-					case Stop : stopBtn .setSelected(true); break;
-					}
-				repeatBtn .setText(getPlayInfo().repeat ==null? "Repeat":( "Repeat: "+getPlayInfo().repeat .getLabel()));
-				shuffleBtn.setText(getPlayInfo().shuffle==null?"Shuffle":("Shuffle: "+getPlayInfo().shuffle.getLabel()));
-				
 			} else{
 				playinfoOutput.setText("<no data>");
-				playButtons.clearSelection();
 			}
+			updateButtons();
 			YamahaControl.setScrollPos(playinfoScrollPane.getHorizontalScrollBar(),hPos);
 			YamahaControl.setScrollPos(playinfoScrollPane.getVerticalScrollBar(),vPos);
 		}
 	}
 
-	private static class SubUnitTuner extends SubUnit {
+	private static class SubUnitTuner extends AbstractSubUnit {
 		private static final long serialVersionUID = -8583320100311806933L;
 
 		public SubUnitTuner() {
-			super("Tuner");
+			super("TUNER","Tuner");
 		}
 
 		@Override
@@ -1056,12 +1042,12 @@ public class YamahaControl {
 		}
 	}
 	
-	private static class SubUnitAirPlay extends SubUnit {
+	private static class SubUnitAirPlay extends AbstractSubUnit {
 		private static final long serialVersionUID = 8375036678437177239L;
 
 		// [Source_Device | SD_AirPlay | AirPlay]   
 		public SubUnitAirPlay() {
-			super("AirPlay");
+			super("AirPlay","AirPlay");
 		}
 
 		@Override
@@ -1079,11 +1065,11 @@ public class YamahaControl {
 		}
 	}
 	
-	private static class SubUnitSpotify extends SubUnit {
+	private static class SubUnitSpotify extends AbstractSubUnit {
 		private static final long serialVersionUID = -869960569061323838L;
 
 		public SubUnitSpotify() {
-			super("Spotify");
+			super("Spotify","Spotify");
 		}
 
 		@Override
@@ -1095,11 +1081,11 @@ public class YamahaControl {
 		}
 	}
 	
-	private static class SubUnitIPodUSB extends SubUnit {
+	private static class SubUnitIPodUSB extends AbstractSubUnit {
 		private static final long serialVersionUID = -4180795479139795928L;
 
 		public SubUnitIPodUSB() {
-			super("IPod USB");
+			super("iPod (USB)","IPod USB");
 		}
 
 		@Override

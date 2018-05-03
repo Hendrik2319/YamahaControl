@@ -176,6 +176,15 @@ public final class Device {
 			this.inputs = null;
 		}
 
+		public DeviceSceneInput findInput(String inputID) {
+			if (inputID==null) return null;
+			if (inputs==null) return null;
+			for (DeviceSceneInput dsi:inputs)
+				if (inputID.equals(dsi.ID))
+					return dsi;
+			return null;
+		}
+
 		public DeviceSceneInput getCurrentInput() {
 			// GET[G1]:    Main_Zone,Basic_Status   ->   Input,Input_Sel -> Values [GET[G2]:Main_Zone,Input,Input_Sel_Item]
 			if (device.basicStatus==null) return null;
@@ -557,7 +566,10 @@ public final class Device {
 			}}
 	}
 
-	static class PlayInfo_NetRadio {
+	static class PlayInfo {
+	}
+
+	static class PlayInfo_NetRadio extends PlayInfo {
 	
 		Value.ReadyOrNot deviceStatus;
 		Value.PlayStop playState;
@@ -662,7 +674,7 @@ public final class Device {
 		
 	}
 
-	static class PlayInfo_USB_DLNA {
+	static class PlayInfo_USB_DLNA extends PlayInfo {
 	
 		Value.ReadyOrNot deviceStatus;
 		Value.PlayPauseStop playState;
