@@ -53,7 +53,7 @@ public class CommandList {
 		Ctrl.readCommProtocolFromFile();
 //		new Responder().openWindow();
 		
-		openWindow();
+		openWindow(null);
 		
 		//  http://rx-v475/YamahaRemoteControl/desc.xml
 		
@@ -62,13 +62,15 @@ public class CommandList {
 //		commandList.readCommandList(addr,true);
 	}
 	
-	public static void openWindow() {
+	public static void openWindow(String address) {
 		IconSource<ParsedTreeIcon> parsedTreeIconsIS = new IconSource<ParsedTreeIcon>(16,16);
 		parsedTreeIconsIS.readIconsFromResource("/ParsedTreeIcons.png");
 		parsedTreeIcons = parsedTreeIconsIS.cacheIcons(ParsedTreeIcon.values());
 		
-		CommandList commandList = new CommandList();
+		CommandList commandList = new CommandList(address);
 		commandList.createGUI();
+		commandList.readCommandList();
+		commandList.showCommandList();
 	}
 	
 	private TreeViewType selectedTreeViewType;
@@ -77,12 +79,16 @@ public class CommandList {
 	private Document document;
 	private JFrame mainWindow;
 	private ContextMenuHandler contextMenu;
+	private DefaultTreeModel treeModel;
+	private JTree tree;
 
-	CommandList() {
+	CommandList(String selectedAddress) {
 		document = null;
 		selectedTreeViewType = null;
-		selectedAddress = null;
+		this.selectedAddress = selectedAddress;
 		contextMenu = null;
+		treeModel = null;
+		tree = null;
 	}
 	
 	private enum TreeViewType { DOM, Parsed } 
@@ -114,7 +120,7 @@ public class CommandList {
 			clickedTreeNode = null;
 		}
 		
-		public void activate(JTree tree, int x, int y) {
+		public void activate(int x, int y) {
 			clickedTreePath = tree.getPathForLocation(x,y);
 			if (clickedTreePath == null) clickedTreeNode = null;
 			else clickedTreeNode = clickedTreePath.getLastPathComponent();
@@ -144,8 +150,8 @@ public class CommandList {
 	
 	private void createGUI() {
 		
-		DefaultTreeModel treeModel = new DefaultTreeModel(null);
-		JTree tree = new JTree(treeModel);
+		treeModel = new DefaultTreeModel(null);
+		tree = new JTree(treeModel);
 		
 		JScrollPane treeScrollPane = new JScrollPane(tree);
 		treeScrollPane.setPreferredSize(new Dimension(800,800));
@@ -154,7 +160,7 @@ public class CommandList {
 		contextMenu.add(ContextMenuItemType.NodeFunction, "Copy Value to Clipboard", e->YamahaControl.copyToClipBoard(getClickedNodeText()));
 		contextMenu.add(ContextMenuItemType.NodeFunction, "Copy Path to Clipboard", e->YamahaControl.copyToClipBoard(getClickedNodePath()));
 		contextMenu.addSeparator();
-		contextMenu.add(ContextMenuItemType.TreeFunction, "Expand Full Tree", e->expandFullTree(tree));
+		contextMenu.add(ContextMenuItemType.TreeFunction, "Expand Full Tree", e->expandFullTree());
 		contextMenu.addSeparator();
 		contextMenu.add(ContextMenuItemType.GetCommand, "Test Get Command", e->testCommand(contextMenu.getClickedTreeNode()));
 		contextMenu.add(ContextMenuItemType.PutCommand, "Test Put Command", e->testCommand(contextMenu.getClickedTreeNode()));
@@ -167,18 +173,18 @@ public class CommandList {
 		tree.addMouseListener(new MouseAdapter() {
 			@Override public void mouseClicked(MouseEvent e) {
 				if (e.getButton()==MouseEvent.BUTTON3)
-					contextMenu.activate(tree, e.getX(), e.getY());
+					contextMenu.activate(e.getX(), e.getY());
 			}
 		});
 		
 		treeViewTypeComboBox.addActionListener(e->{
 			selectedTreeViewType = (TreeViewType)(treeViewTypeComboBox.getSelectedItem());
-			showCommandList(tree,treeModel);
+			showCommandList();
 		});
 		
 		JPanel northPanel = new JPanel();
 		northPanel.setLayout(new BoxLayout(northPanel, BoxLayout.X_AXIS));
-		northPanel.add(YamahaControl.createButton("Get Data",e->{readCommandList();showCommandList(tree,treeModel);},true));
+		northPanel.add(YamahaControl.createButton("Get Data",e->{ selectedAddress = Config.selectAddress(mainWindow); readCommandList(); showCommandList(); },true));
 		northPanel.add(treeViewTypeComboBox);
 		northPanel.add(YamahaControl.createButton("Write CommProtocol to File",e->Ctrl.writeCommProtocolToFile(),true));
 		
@@ -204,7 +210,7 @@ public class CommandList {
 		Ctrl.testCommand(selectedAddress, xmlCommand, false);
 	}
 
-	private void expandFullTree(JTree tree) {
+	private void expandFullTree() {
 		for (int row=0; row<tree.getRowCount(); ++row)
 			if (!tree.isExpanded(row))
 				tree.expandRow(row);
@@ -212,7 +218,7 @@ public class CommandList {
 			ParsedTreeNode_Exp.showUnknownTagNames();
 	}
 
-	private void showCommandList(JTree tree, DefaultTreeModel treeModel) {
+	private void showCommandList() {
 		if (document==null) return;
 		if (selectedTreeViewType==null)
 			treeModel.setRoot(null);
@@ -246,13 +252,9 @@ public class CommandList {
 	}
 
 	private void readCommandList() {
-		selectedAddress = Config.selectAddress(mainWindow);
-		if (selectedAddress!=null)
-			readCommandList(selectedAddress.toString(), true);
-	}
-
-	private void readCommandList(String addr, boolean verbose) {
-		String content = Ctrl.http.getContentFromURL("http://"+addr+"/YamahaRemoteControl/desc.xml", verbose);
+		if (selectedAddress==null) return;
+		boolean verbose = true;
+		String content = Ctrl.http.getContentFromURL("http://"+selectedAddress+"/YamahaRemoteControl/desc.xml", verbose );
 		document = content==null?null:XML.parse(content);
 		if (verbose) System.out.println("done");
 	}

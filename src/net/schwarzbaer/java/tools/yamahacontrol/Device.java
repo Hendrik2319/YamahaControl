@@ -7,20 +7,19 @@ import java.util.Vector;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 
-import net.schwarzbaer.java.tools.yamahacontrol.Device.Value.PlayState;
-import net.schwarzbaer.java.tools.yamahacontrol.Device.Value.ReadyOrNot;
 import net.schwarzbaer.java.tools.yamahacontrol.XML.TagList;
 import net.schwarzbaer.java.tools.yamahacontrol.YamahaControl.Log;
 
 public final class Device {
 	
-	private String address;
-	public Power power;
-	public Inputs inputs;
+	String address;
+	Power power;
+	Inputs inputs;
 	private BasicStatus basicStatus;
-	public NetRadio netRadio;
-	public Tuner tuner;
-	public AirPlay airPlay;
+	NetRadio netRadio;
+	Tuner tuner;
+	AirPlay airPlay;
+	USB usb;
 	
 	Device(String address) {
 		this.address = address;
@@ -30,9 +29,10 @@ public final class Device {
 		this.netRadio = new NetRadio(this.address);
 		this.tuner    = new Tuner   (this.address);
 		this.airPlay  = new AirPlay (this.address);
+		this.usb      = new USB     (this.address);
 	}
 	
-	enum UpdateWish { Power, BasicStatus, Scenes, Inputs, NetRadioPlayInfo, NetRadioListInfo, TunerConfig, AirPlayConfig }
+	enum UpdateWish { Power, BasicStatus, Scenes, Inputs, NetRadioPlayInfo, NetRadioListInfo, TunerConfig, AirPlayConfig, USBListInfo, USBPlayInfo }
 	
 	public void update(EnumSet<UpdateWish> updateWishes) {
 		//System.out.println("Device.update("+updateWishes+")");
@@ -42,10 +42,12 @@ public final class Device {
 			case Inputs          : inputs.inputs     = inputs.getSceneInput(KnownCommand.GetInputItems); break;
 			case Scenes          : inputs.scenes     = inputs.getSceneInput(KnownCommand.GetSceneItems); break;
 			case BasicStatus     : basicStatus       = BasicStatus      .parse(Ctrl.sendGetCommand_Node(address,KnownCommand.GetBasicStatus     )); break;
-			case NetRadioListInfo: netRadio.listInfo = NetRadio.ListInfo.parse(Ctrl.sendGetCommand_Node(address,KnownCommand.GetNetRadioListInfo)); break;
+			case NetRadioListInfo: netRadio.listInfo                    .parse(Ctrl.sendGetCommand_Node(address,KnownCommand.GetNetRadioListInfo)); break;
 			case NetRadioPlayInfo: netRadio.playInfo = NetRadio.PlayInfo.parse(Ctrl.sendGetCommand_Node(address,KnownCommand.GetNetRadioPlayInfo)); break;
 			case TunerConfig     : tuner.config      = Tuner   .Config  .parse(Ctrl.sendGetCommand_Node(address,KnownCommand.GetTunerConfig     )); break;
 			case AirPlayConfig   : airPlay.config    = AirPlay .Config  .parse(Ctrl.sendGetCommand_Node(address,KnownCommand.GetAirPlayConfig   )); break;
+			case USBListInfo     : usb.listInfo                         .parse(Ctrl.sendGetCommand_Node(address,KnownCommand.GetUSBListInfo     )); break;
+			case USBPlayInfo     : usb.playInfo      = USB     .PlayInfo.parse(Ctrl.sendGetCommand_Node(address,KnownCommand.GetUSBPlayInfo     )); break;
 			}
 		});
 	}
@@ -248,12 +250,27 @@ public final class Device {
 		GetUSBConfig     (      "USB,Config"),
 		GetNetRadioConfig("NET_RADIO,Config"),
 		GetServerConfig  (   "SERVER,Config"),
+		
 		GetNetRadioListInfo("NET_RADIO,List_Info"), // G2: NET_RADIO,List_Info
 		GetNetRadioPlayInfo("NET_RADIO,Play_Info"), // G1: NET_RADIO,Play_Info
 		SetNetRadioDirectListSel("NET_RADIO,List_Control,Direct_Sel"),
-		SetNetRadioCursorListSel("NET_RADIO,List_Control,Cursor"),
-		SetNetRadioPageListSel  ("NET_RADIO,List_Control,Page"),
-		SetNetRadioPlayback     ("NET_RADIO,Play_Control,Playback")
+		SetNetRadioCursorListSel("NET_RADIO,List_Control,Cursor"    ),
+		SetNetRadioPageListSel  ("NET_RADIO,List_Control,Page"      ),
+		SetNetRadioJumpToLine   ("NET_RADIO,List_Control,Jump_Line" ), // P3: NET_RADIO,List_Control,Jump_Line 
+		SetNetRadioPlayback     ("NET_RADIO,Play_Control,Playback"  ),
+		
+		GetUSBListInfo("USB,List_Info"), // G2: USB,List_Info
+		GetUSBPlayInfo("USB,Play_Info"), // G1: USB,Play_Info
+		GetUSBPresets ("USB,Play_Control,Preset,Preset_Sel_Item"), // G4: USB,Play_Control,Preset,Preset_Sel_Item
+		SetUSBDirectListSel("USB,List_Control,Direct_Sel"       ), // P5: USB,List_Control,Direct_Sel
+		SetUSBCursorListSel("USB,List_Control,Cursor"           ), // P7: USB,List_Control,Cursor
+		SetUSBPageListSel  ("USB,List_Control,Page"             ), // P8: USB,List_Control,Page
+		SetUSBJumpToLine   ("USB,List_Control,Jump_Line"        ), // P6: USB,List_Control,Jump_Line
+		SetUSBPlayback     ("USB,Play_Control,Playback"         ), // P3: USB,Play_Control,Playback
+		SetUSBRepeat       ("USB,Play_Control,Play_Mode,Repeat" ), // P1: USB,Play_Control,Play_Mode,Repeat
+		SetUSBShuffle      ("USB,Play_Control,Play_Mode,Shuffle"), // P2: USB,Play_Control,Play_Mode,Shuffle
+		SetUSBSelectPreset ("USB,Play_Control,Preset,Preset_Sel"), // P4: USB,Play_Control,Preset,Preset_Sel
+		
 		;
 		
 		final TagList tagList;
@@ -263,6 +280,14 @@ public final class Device {
 	static interface Value {
 		public String getLabel();
 		
+		public enum OnOff            implements Value { On, Off          ; @Override public String getLabel() { return toString(); }  } 
+		public enum PowerState       implements Value { On, Standby      ; @Override public String getLabel() { return toString(); }  }
+		public enum PlayStop         implements Value { Play, Stop       ; @Override public String getLabel() { return toString(); }  }
+		public enum PlayPauseStop    implements Value { Play, Pause, Stop; @Override public String getLabel() { return toString(); }  }
+		public enum AlbumCoverFormat implements Value { BMP, YMF         ; @Override public String getLabel() { return toString(); }  }
+		public enum ReadyOrBusy      implements Value { Ready, Busy      ; @Override public String getLabel() { return toString(); }  }
+		public enum OffOneAll        implements Value { Off, One, All    ; @Override public String getLabel() { return toString(); }  } 
+		
 		public enum ReadyOrNot implements Value {
 			Ready("Ready"),NotReady("Not Ready");
 			private String label;
@@ -270,18 +295,12 @@ public final class Device {
 			@Override public String getLabel() { return label; }
 		}
 		
-		public enum OnOff implements Value { On, Off; @Override public String getLabel() { return toString(); }  } 
-		public enum PowerState implements Value { On, Standby; @Override public String getLabel() { return toString(); }  } 
 		public enum SleepState implements Value {
 			_120min("120 min"),_90min("90 min"),_60min("60 min"),_30min("30 min"),Off("Off");
 			private String label;
 			SleepState(String label) { this.label = label; }
 			@Override public String getLabel() { return label; }
 		}
-		
-		public enum PlayState implements Value { Play, Stop; @Override public String getLabel() { return toString(); }  }
-		public enum AlbumCoverFormat implements Value { BMP, YMF; @Override public String getLabel() { return toString(); }  }
-		public enum ReadyOrBusy implements Value { Ready, Busy; @Override public String getLabel() { return toString(); }  }
 		
 		public enum LineAttribute implements Value {
 			Container,UnplayableItem("Unplayable Item"),Item,Unselectable;
@@ -353,120 +372,20 @@ public final class Device {
 		
 		public NetRadio(String address) {
 			this.address = address;
-			this.listInfo = null;
+			this.listInfo = new ListInfo(address, KnownCommand.SetNetRadioDirectListSel, KnownCommand.SetNetRadioCursorListSel, KnownCommand.SetNetRadioPageListSel, KnownCommand.SetNetRadioJumpToLine);
 			this.playInfo = null;
 		}
 		
-		public void sendDirectSelect(ListInfo.Line line) {
-			// PUT[P2]:    NET_RADIO,List_Control,Direct_Sel   =   Label: Line_% (1..8)
-			Ctrl.sendPutCommand(address,KnownCommand.SetNetRadioDirectListSel, "Line_"+line.index);
-		}
-		
-		public void sendCursorSelect(Value.CursorSelect cursorSelect) {
-			// [Cursor_Up]        PUT[P4]     NET_RADIO,List_Control,Cursor = Up
-			// [Cursor_Down]        PUT[P4]     NET_RADIO,List_Control,Cursor = Down
-			// [Cursor_Left]        PUT[P4]     NET_RADIO,List_Control,Cursor = Return
-			// [Cursor_Sel]        PUT[P4]     NET_RADIO,List_Control,Cursor = Sel
-			// [Cursor_Home]        PUT[P4]     NET_RADIO,List_Control,Cursor = Return to Home
-			Ctrl.sendPutCommand(address,KnownCommand.SetNetRadioCursorListSel, cursorSelect.getLabel());
-		}
-		
-		public void sendPageSelect(Value.PageSelect pageSelect) {
-			// [Page_Up_1]        PUT[P5]     NET_RADIO,List_Control,Page = Up
-			// [Page_Down_1]        PUT[P5]     NET_RADIO,List_Control,Page = Down
-			Ctrl.sendPutCommand(address,KnownCommand.SetNetRadioPageListSel, pageSelect.getLabel());
-		}
-		
-		public void sendPlayback(Value.PlayState playState) {
-			//[Play]    Visible:No     PUT[P1]     NET_RADIO,Play_Control,Playback = Play
+		public void sendPlayback(Value.PlayStop playState) {
+			// [Play]    Visible:No     PUT[P1]     NET_RADIO,Play_Control,Playback = Play
 			// [Stop]    Playable:No     PUT[P1]     NET_RADIO,Play_Control,Playback = Stop
 			Ctrl.sendPutCommand(address,KnownCommand.SetNetRadioPlayback, playState.getLabel());
 		}
 
-		public ListInfo getListInfo() { return listInfo; }
-		public PlayInfo getPlayInfo() { return playInfo; }
-
-		static class ListInfo {
-
-			Value.ReadyOrBusy menuStatus;
-			Integer menuLayer;
-			String  menuName;
-			Integer currentLine;
-			Integer maxLine;
-			Vector<Line> lines;
-
-			public ListInfo() {
-				this.menuStatus = null;
-				this.menuLayer = null;
-				this.menuName = null;
-				this.currentLine = null;
-				this.maxLine = null;
-				this.lines = new Vector<>();
-			}
-
-			public static ListInfo parse(Node node) {
-				ListInfo listInfo = new ListInfo();
-				XML.forEachChild(node, child->{
-					switch (child.getNodeName()) {
-					case "Menu_Status":
-						// GET[G2]:    NET_RADIO,List_Info   ->   Menu_Status -> "Ready" | "Busy"
-						listInfo.menuStatus =  XML.getSubValue(child, Value.ReadyOrBusy.values());
-						break;
-						
-					case "Menu_Layer":
-						// GET[G2]:    NET_RADIO,List_Info   ->   Menu_Layer -> Number: 1..16
-						listInfo.menuLayer =  XML.getSubValue_Int(child);
-						break;
-						
-					case "Menu_Name":
-						// GET[G2]:    NET_RADIO,List_Info   ->   Menu_Name -> Text: 0..128 (UTF-8)
-						listInfo.menuName =  XML.getSubValue(child);
-						break;
-						
-					case "Current_List":
-						// GET[G2]:    NET_RADIO,List_Info
-						// Value 0:   Current_List,Line_1,Txt -> Text: 0..128 (UTF-8)
-						// Value 1:   Current_List,Line_1,Attribute -> "Container" | "Unplayable Item" | "Item" | "Unselectable"
-						listInfo.lines.clear();;
-						XML.forEachChild(child, line->{
-							String nodeName = line.getNodeName();
-							if (nodeName==null || !nodeName.startsWith("Line_")) return;
-							
-							int index = Integer.parseInt(nodeName.substring("Line_".length()));
-							String txt = XML.getSubValue(line,"Txt");
-							Value.LineAttribute attr = XML.getSubValue(line,Value.LineAttribute.values(), "Attribute");
-							listInfo.lines.add(new Line(index,txt,attr));
-						});
-						listInfo.lines.sort(Comparator.nullsLast(Comparator.comparing(line->line.index)));
-						break;
-						
-					case "Cursor_Position":
-						// GET[G2]:    NET_RADIO,List_Info   ->   Cursor_Position,Current_Line -> Number: 1..65536
-						// GET[G2]:    NET_RADIO,List_Info   ->   Cursor_Position,Max_Line -> Number: 0..65536
-						listInfo.currentLine =  XML.getSubValue_Int(child,"Current_Line");
-						listInfo.maxLine =  XML.getSubValue_Int(child,"Max_Line");
-						break;
-					}
-				});
-				return listInfo;
-			}
-			
-			static class Line {
-
-				int index;
-				String txt;
-				Value.LineAttribute attr;
-
-				public Line(int index, String txt, Value.LineAttribute attr) {
-					this.index = index;
-					this.txt = txt;
-					this.attr = attr;
-				}}
-		}
 		static class PlayInfo {
 
 			Value.ReadyOrNot deviceStatus;
-			Value.PlayState playState;
+			Value.PlayStop playState;
 			String currentStation;
 			String currentAlbum;
 			String currentSong;
@@ -489,8 +408,13 @@ public final class Device {
 			public String toString() {
 				StringBuilder sb = new StringBuilder();
 				sb.append("Net Radio: ").append(deviceStatus==null?"???":deviceStatus.getLabel());
-				if (playState==PlayState.Play) sb.append(" & is playing\r\n"); else
-				if (playState==PlayState.Stop) sb.append(" & has stopped\r\n"); else sb.append("\r\n");
+				if (playState==null)
+					sb.append("\r\n");
+				else
+					switch (playState) {
+					case Play: sb.append(" & is playing\r\n"); break;
+					case Stop: sb.append(" & has stopped\r\n"); break;
+					}
 				
 				sb.append("Station: ").append(currentStation==null?"":("\""+currentStation+"\"")).append("\r\n");
 				sb.append("  Album: ").append(currentAlbum==null?"":("\""+currentAlbum+"\"")).append("\r\n");
@@ -516,7 +440,7 @@ public final class Device {
 						
 					case "Playback_Info":
 						// GET[G1]:    NET_RADIO,Play_Info   ->   Playback_Info -> "Play" | "Stop"
-						playInfo.playState =  XML.getSubValue(child, Value.PlayState.values());
+						playInfo.playState =  XML.getSubValue(child, Value.PlayStop.values());
 						break;
 						
 					case "Meta_Info":
@@ -543,6 +467,240 @@ public final class Device {
 			
 		}
 	}
+	
+	static class USB {
+		
+		ListInfo listInfo;
+		PlayInfo playInfo;
+		@SuppressWarnings("unused")
+		private String address;
+		
+		public USB(String address) {
+			this.address = address;
+			this.listInfo = new ListInfo(address, KnownCommand.SetUSBDirectListSel, KnownCommand.SetUSBCursorListSel, KnownCommand.SetUSBPageListSel, KnownCommand.SetUSBJumpToLine);
+			this.playInfo = null;
+		}
+		
+		static class PlayInfo {
+
+			Value.ReadyOrNot deviceStatus;
+			Value.PlayPauseStop playState;
+			Value.OffOneAll repeat;
+			Value.OnOff shuffle;
+			String currentArtist;
+			String currentAlbum;
+			String currentSong;
+			String albumCoverURL;
+			Integer albumCoverID;
+			Value.AlbumCoverFormat albumCoverFormat;
+
+			public PlayInfo() {
+				this.deviceStatus = null;
+				this.playState = null;
+				this.repeat = null;
+				this.shuffle = null;
+				this.currentArtist = null;
+				this.currentAlbum = null;
+				this.currentSong = null;
+				this.albumCoverID = null;
+				this.albumCoverURL = null;
+				this.albumCoverFormat = null;
+			}
+
+			@Override
+			public String toString() {
+				StringBuilder sb = new StringBuilder();
+				sb.append("USB: ").append(deviceStatus==null?"???":deviceStatus.getLabel());
+				if (playState==null)
+					sb.append("\r\n");
+				else
+					switch (playState) {
+					case Play : sb.append(" & is playing\r\n"); break;
+					case Pause: sb.append(" & was paused\r\n"); break;
+					case Stop : sb.append(" & was stopped\r\n"); break;
+					}
+				sb.append("   Repeat : ").append(repeat ==null?"???":repeat .getLabel());
+				sb.append("   Shuffle: ").append(shuffle==null?"???":shuffle.getLabel());
+				
+				sb.append("Artist: ").append(currentArtist==null?"":("\""+currentArtist+"\"")).append("\r\n");
+				sb.append(" Album: ").append(currentAlbum==null?"":("\""+currentAlbum+"\"")).append("\r\n");
+				sb.append("  Song: ").append(currentSong==null?"":("\""+currentSong+"\"")).append("\r\n");
+				
+				sb.append("AlbumCover:");
+				sb.append(albumCoverID==null?"":(" "+albumCoverID));
+				sb.append(albumCoverFormat==null?"":(" "+albumCoverFormat.getLabel()));
+				sb.append(albumCoverURL==null?"":(" \""+albumCoverURL+"\""));
+				sb.append("\r\n");
+				
+				return sb.toString();
+			}
+
+			public static PlayInfo parse(Node node) {
+				PlayInfo playInfo = new PlayInfo();
+				XML.forEachChild(node, child->{
+					switch (child.getNodeName()) {
+					case "Feature_Availability":
+						// GET[G1]:    USB,Play_Info   ->   Feature_Availability -> "Ready" | "Not Ready"
+						playInfo.deviceStatus =  XML.getSubValue(child, Value.ReadyOrNot.values());
+						break;
+						
+					case "Playback_Info":
+						// GET[G1]:    USB,Play_Info   ->   Playback_Info -> "Play" | "Pause" | "Stop"
+						playInfo.playState =  XML.getSubValue(child, Value.PlayPauseStop.values());
+						break;
+						
+					case "Play_Mode":
+						// GET[G1]:    USB,Play_Info   ->   Play_Mode,Repeat -> "Off" | "One" | "All"
+						// GET[G1]:    USB,Play_Info   ->   Play_Mode,Shuffle -> "Off" | "On"
+						playInfo.repeat  =  XML.getSubValue(child, Value.OffOneAll.values(), "Repeat");
+						playInfo.shuffle =  XML.getSubValue(child, Value.OnOff.values(), "Shuffle");
+						break;
+						
+					case "Meta_Info":
+						// GET[G1]:    USB,Play_Info   ->   Meta_Info,Artist -> Text: 0..64 (UTF-8)
+						// GET[G1]:    USB,Play_Info   ->   Meta_Info,Album -> Text: 0..64 (UTF-8)
+						// GET[G1]:    USB,Play_Info   ->   Meta_Info,Song -> Text: 0..64 (UTF-8)
+						playInfo.currentArtist =  XML.getSubValue(child, "Artist"); 
+						playInfo.currentAlbum  =  XML.getSubValue(child, "Album"); 
+						playInfo.currentSong   =  XML.getSubValue(child, "Song"); 
+						break;
+						
+					case "Album_ART":
+						// GET[G1]:    USB,Play_Info   ->   Album_ART,URL -> Text: 0..128 (UTF-8)
+						// GET[G1]:    USB,Play_Info   ->   Album_ART,ID -> Number: 0..255
+						// GET[G1]:    USB,Play_Info   ->   Album_ART,Format -> "BMP" | "YMF"
+						playInfo.albumCoverURL    =  XML.getSubValue(child, "URL"); 
+						playInfo.albumCoverID     =  XML.getSubValue_Int(child, "ID"); 
+						playInfo.albumCoverFormat =  XML.getSubValue(child, Value.AlbumCoverFormat.values(), "Format"); 
+						break;
+					}
+				});
+				return playInfo;
+			}
+			
+		}
+	}
+
+	static class ListInfo {
+	
+		Value.ReadyOrBusy menuStatus;
+		Integer menuLayer;
+		String  menuName;
+		Integer currentLine;
+		Integer maxLine;
+		Vector<Line> lines;
+		
+		private String address;
+		private KnownCommand setDirectListSel;
+		private KnownCommand setCursorListSel;
+		private KnownCommand setPageListSel;
+		private KnownCommand setJumpToLine;
+	
+		public ListInfo(String address, KnownCommand setDirectListSel, KnownCommand setCursorListSel, KnownCommand setPageListSel, KnownCommand setJumpToLine) {
+			this.address = address;
+			this.setDirectListSel = setDirectListSel;
+			this.setCursorListSel = setCursorListSel;
+			this.setPageListSel = setPageListSel;
+			this.setJumpToLine = setJumpToLine;
+			clearValues();
+		}
+
+		private void clearValues() {
+			this.menuStatus = null;
+			this.menuLayer = null;
+			this.menuName = null;
+			this.currentLine = null;
+			this.maxLine = null;
+			this.lines = new Vector<>();
+		}
+		
+		public void sendDirectSelect(ListInfo.Line line) {
+			if (setDirectListSel==null) throw new UnsupportedOperationException("DirectSelect not supported");
+			// PUT:    #######,List_Control,Direct_Sel   =   Label: Line_% (1..8)
+			Ctrl.sendPutCommand(address,setDirectListSel, "Line_"+line.index);
+		}
+		
+		public void sendJumpToLine(int lineNumber) {
+			if (setJumpToLine==null) throw new UnsupportedOperationException("JumpToLine not supported");
+			// PUT:    #######,List_Control,Jump_Line   =   Number: 1..65536
+			Ctrl.sendPutCommand(address,setJumpToLine, ""+lineNumber);
+		}
+		
+		public void sendCursorSelect(Value.CursorSelect cursorSelect) {
+			if (setCursorListSel==null) throw new UnsupportedOperationException("CursorSelect not supported");
+			// [Cursor_Up]      #######,List_Control,Cursor = Up
+			// [Cursor_Down]    #######,List_Control,Cursor = Down
+			// [Cursor_Left]    #######,List_Control,Cursor = Return
+			// [Cursor_Sel]     #######,List_Control,Cursor = Sel
+			// [Cursor_Home]    #######,List_Control,Cursor = Return to Home
+			Ctrl.sendPutCommand(address,setCursorListSel, cursorSelect.getLabel());
+		}
+		
+		public void sendPageSelect(Value.PageSelect pageSelect) {
+			if (setPageListSel==null) throw new UnsupportedOperationException("PageSelect not supported");
+			// [Page_Up_1]      #######,List_Control,Page = Up
+			// [Page_Down_1]    #######,List_Control,Page = Down
+			Ctrl.sendPutCommand(address,setPageListSel, pageSelect.getLabel());
+		}
+	
+		public void parse(Node node) {
+			clearValues();
+			XML.forEachChild(node, child->{
+				switch (child.getNodeName()) {
+				case "Menu_Status":
+					// GET:    #######,List_Info   ->   Menu_Status -> "Ready" | "Busy"
+					menuStatus =  XML.getSubValue(child, Value.ReadyOrBusy.values());
+					break;
+					
+				case "Menu_Layer":
+					// GET:    #######,List_Info   ->   Menu_Layer -> Number: 1..16
+					menuLayer =  XML.getSubValue_Int(child);
+					break;
+					
+				case "Menu_Name":
+					// GET:    #######,List_Info   ->   Menu_Name -> Text: 0..128 (UTF-8)
+					menuName =  XML.getSubValue(child);
+					break;
+					
+				case "Current_List":
+					// GET:    #######,List_Info
+					// Value 0:   Current_List,Line_1,Txt -> Text: 0..128 (UTF-8)
+					// Value 1:   Current_List,Line_1,Attribute -> "Container" | "Unplayable Item" | "Item" | "Unselectable"
+					lines.clear();;
+					XML.forEachChild(child, line->{
+						String nodeName = line.getNodeName();
+						if (nodeName==null || !nodeName.startsWith("Line_")) return;
+						
+						int index = Integer.parseInt(nodeName.substring("Line_".length()));
+						String txt = XML.getSubValue(line,"Txt");
+						Value.LineAttribute attr = XML.getSubValue(line,Value.LineAttribute.values(), "Attribute");
+						lines.add(new Line(index,txt,attr));
+					});
+					lines.sort(Comparator.nullsLast(Comparator.comparing(line->line.index)));
+					break;
+					
+				case "Cursor_Position":
+					// GET:    #######,List_Info   ->   Cursor_Position,Current_Line -> Number: 1..65536
+					// GET:    #######,List_Info   ->   Cursor_Position,Max_Line -> Number: 0..65536
+					currentLine =  XML.getSubValue_Int(child,"Current_Line");
+					maxLine =  XML.getSubValue_Int(child,"Max_Line");
+					break;
+				}
+			});
+		}
+		
+		static class Line {
+	
+			int index;
+			String txt;
+			Value.LineAttribute attr;
+	
+			public Line(int index, String txt, Value.LineAttribute attr) {
+				this.index = index;
+				this.txt = txt;
+				this.attr = attr;
+			}}
+	}
 
 	static class Tuner {
 		@SuppressWarnings("unused")
@@ -556,7 +714,7 @@ public final class Device {
 	
 		static class Config {
 	
-			ReadyOrNot deviceStatus;
+			Value.ReadyOrNot deviceStatus;
 			String RDS;
 			BandRange FM;
 			BandRange AM;
@@ -634,7 +792,7 @@ public final class Device {
 
 		static class Config {
 
-			ReadyOrNot deviceStatus;
+			Value.ReadyOrNot deviceStatus;
 			String volumeInterlock;
 
 			public static Config parse(Node node) {

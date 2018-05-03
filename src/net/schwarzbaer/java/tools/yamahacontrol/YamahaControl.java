@@ -72,13 +72,13 @@ import javax.swing.filechooser.FileSystemView;
 import net.schwarzbaer.gui.StandardMainWindow;
 import net.schwarzbaer.gui.Tables;
 import net.schwarzbaer.gui.Tables.LabelRendererComponent;
-import net.schwarzbaer.java.tools.yamahacontrol.Device.NetRadio.ListInfo;
+import net.schwarzbaer.java.tools.yamahacontrol.Device.ListInfo;
 import net.schwarzbaer.java.tools.yamahacontrol.Device.NetRadio.PlayInfo;
 import net.schwarzbaer.java.tools.yamahacontrol.Device.NumberWithUnit;
 import net.schwarzbaer.java.tools.yamahacontrol.Device.UpdateWish;
 import net.schwarzbaer.java.tools.yamahacontrol.Device.Value.CursorSelect;
 import net.schwarzbaer.java.tools.yamahacontrol.Device.Value.PageSelect;
-import net.schwarzbaer.java.tools.yamahacontrol.Device.Value.PlayState;
+import net.schwarzbaer.java.tools.yamahacontrol.Device.Value.PlayStop;
 import net.schwarzbaer.java.tools.yamahacontrol.Device.Value.ReadyOrNot;
 import net.schwarzbaer.java.tools.yamahacontrol.gui.VolumeControl;
 
@@ -227,7 +227,7 @@ public class YamahaControl {
 		devicePanel.setBorder(BorderFactory.createTitledBorder("Device"));
 		devicePanel.add(createButton("Connect",e->connectToReciever(),true),1,1,GridBagConstraints.BOTH);
 		devicePanel.add(mainGui.onoffBtn,1,GridBagConstraints.REMAINDER,GridBagConstraints.BOTH);
-		devicePanel.add(createButton("Open Command List",e->CommandList.openWindow(),true),1,GridBagConstraints.REMAINDER,GridBagConstraints.BOTH);
+		devicePanel.add(createButton("Open Command List",e->CommandList.openWindow(device==null?null:device.address),true),1,GridBagConstraints.REMAINDER,GridBagConstraints.BOTH);
 		
 		JTabbedPane scenesInputsPanel = mainGui.createScenesInputsPanel();
 		scenesInputsPanel.setBorder(BorderFactory.createTitledBorder("Scenes/Inputs"));
@@ -588,7 +588,7 @@ public class YamahaControl {
 
 			public synchronized void set(double value, boolean isAdjusting) {
 				if (runningTasks.size()>100) {
-					Log.info(getClass(), "Max. number of running tasks reached");
+//					Log.info(getClass(), "Max. number of running tasks reached");
 					removeCompletedTasks();
 				}
 
@@ -603,7 +603,7 @@ public class YamahaControl {
 					}));
 					
 				} else {
-					Log.info(getClass(), "Value stops adjusting: cancel all running tasks");
+//					Log.info(getClass(), "Value stops adjusting: cancel all running tasks");
 					runningTasks.forEach(task->task.cancel(false));
 					removeCompletedTasks();
 					
@@ -620,7 +620,7 @@ public class YamahaControl {
 			}
 
 			private void removeCompletedTasks() {
-				Log.info(getClass(), "remove completed tasks");
+//				Log.info(getClass(), "remove completed tasks");
 				for (int i=0; i<runningTasks.size();) {
 					Future<?> task = runningTasks.get(i); 
 					if (task.isDone() || task.isCancelled())
@@ -822,7 +822,7 @@ public class YamahaControl {
 				if (line==null) return;
 				if (line.attr==Device.Value.LineAttribute.Unselectable) return;
 				
-				device.netRadio.sendDirectSelect(line);
+				device.netRadio.listInfo.sendDirectSelect(line);
 				device.update(EnumSet.of(UpdateWish.NetRadioListInfo,UpdateWish.NetRadioPlayInfo));
 				updateLineList();
 				updatePlayInfo();
@@ -911,13 +911,13 @@ public class YamahaControl {
 			case PageUp  : return createPageSelectListener(Device.Value.PageSelect.Up);
 			case PageDown: return createPageSelectListener(Device.Value.PageSelect.Down);
 			
-			case Play: return createPlaybackListener(Device.Value.PlayState.Play);
-			case Stop: return createPlaybackListener(Device.Value.PlayState.Stop);
+			case Play: return createPlaybackListener(Device.Value.PlayStop.Play);
+			case Stop: return createPlaybackListener(Device.Value.PlayStop.Stop);
 			}
 			return e->{};
 		}
 
-		private ActionListener createPlaybackListener(PlayState playState) {
+		private ActionListener createPlaybackListener(PlayStop playState) {
 			return e->{
 				device.netRadio.sendPlayback(playState);
 				device.update(EnumSet.of(UpdateWish.NetRadioListInfo,UpdateWish.NetRadioPlayInfo));
@@ -928,7 +928,7 @@ public class YamahaControl {
 
 		private ActionListener createPageSelectListener(PageSelect pageSelect) {
 			return e->{
-				device.netRadio.sendPageSelect(pageSelect);
+				device.netRadio.listInfo.sendPageSelect(pageSelect);
 				device.update(EnumSet.of(UpdateWish.NetRadioListInfo));
 				updateLineList();
 			};
@@ -936,7 +936,7 @@ public class YamahaControl {
 
 		private ActionListener createCursorSelectListener(CursorSelect cursorSelect) {
 			return e->{
-				device.netRadio.sendCursorSelect(cursorSelect);
+				device.netRadio.listInfo.sendCursorSelect(cursorSelect);
 				device.update(EnumSet.of(UpdateWish.NetRadioListInfo,UpdateWish.NetRadioPlayInfo));
 				updateLineList();
 				updatePlayInfo();
@@ -959,14 +959,14 @@ public class YamahaControl {
 		private void updatePlayInfo() {
 			float hPos = YamahaControl.getScrollPos(playinfoScrollPane.getHorizontalScrollBar());
 			float vPos = YamahaControl.getScrollPos(playinfoScrollPane.getVerticalScrollBar());
-			playInfo = device.netRadio.getPlayInfo();
+			playInfo = device.netRadio.playInfo;
 			playinfoOutput.setText(playInfo.toString());
 			YamahaControl.setScrollPos(playinfoScrollPane.getHorizontalScrollBar(),hPos);
 			YamahaControl.setScrollPos(playinfoScrollPane.getVerticalScrollBar(),vPos);
 		}
 
 		private void updateLineList() {
-			listInfo = device.netRadio.getListInfo();
+			listInfo = device.netRadio.listInfo;
 			setEnabled(listInfo.menuStatus==Device.Value.ReadyOrBusy.Ready);
 			//System.out.println("updateLineList() -> listInfo.menuStatus: "+listInfo.menuStatus);
 			
@@ -1045,20 +1045,10 @@ public class YamahaControl {
 			}
 			
 		}
+	}
+	
+	private static class LineList {
 		
-//		private class Line {
-//
-//			private ListInfo.Line line;
-//
-//			public Line(ListInfo.Line line) {
-//				this.line = line;
-//			}
-//
-//			@Override
-//			public String toString() {
-//				return String.format("[%s] %s%s", line.index, line.txt==null?"":line.txt, line.attr==Device.Value.LineAttribute.Unselectable?"":(" ("+line.attr+")"));
-//			}
-//		}
 	}
 	
 	private static class SubUnitTuner extends SubUnit {
