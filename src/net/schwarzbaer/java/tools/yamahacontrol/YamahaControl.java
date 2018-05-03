@@ -78,7 +78,6 @@ import net.schwarzbaer.java.tools.yamahacontrol.Device.NumberWithUnit;
 import net.schwarzbaer.java.tools.yamahacontrol.Device.UpdateWish;
 import net.schwarzbaer.java.tools.yamahacontrol.Device.Value.CursorSelect;
 import net.schwarzbaer.java.tools.yamahacontrol.Device.Value.PageSelect;
-import net.schwarzbaer.java.tools.yamahacontrol.Device.Value.PlayStop;
 import net.schwarzbaer.java.tools.yamahacontrol.Device.Value.ReadyOrNot;
 import net.schwarzbaer.java.tools.yamahacontrol.gui.VolumeControl;
 
@@ -763,211 +762,58 @@ public class YamahaControl {
 		
 	}
 	
-	private static class SubUnitNetRadio extends SubUnit {
-		private static final long serialVersionUID = -8583320100311806933L;
-		private JTextArea playinfoOutput;
-		private JList<ListInfo.Line> lineList;
+	private static class LineList {
+		
 		private JTextField lineListLabel;
+		private JList<ListInfo.Line> lineList;
+		private JScrollPane lineListScrollPane;
 		private Vector<JButton> buttons;
-		private JScrollPane playinfoScrollPane;
+		
+		private boolean ignoreListSelection;
+		
 		private LineRenderer lineRenderer;
 		private FrequentlyTask lineListUpdater;
 		
-		private boolean ignoreListSelection;
-		private PlayInfo playInfo;
+		private Device device;
 		private ListInfo listInfo;
-
-		public SubUnitNetRadio() {
-			super("Net Radio");
-			playInfo = null;
-			listInfo = null;
+		
+		private LineListUser lineListUser;
+		private UpdateWish listInfoUpdateWish;
+		private UpdateWish playInfoUpdateWish;
+		
+		LineList(Device device_, ListInfo listInfo_, LineListUser lineListUser, UpdateWish listInfoUpdateWish, UpdateWish playInfoUpdateWish) {
+			setDeviceAndListInfo(device_, listInfo_);
+			this.lineListUser = lineListUser;
+			this.listInfoUpdateWish = listInfoUpdateWish;
+			this.playInfoUpdateWish = playInfoUpdateWish;
+			this.buttons = new Vector<>();
+			
 			lineListUpdater = new FrequentlyTask(200,()->{
-				device.update(EnumSet.of(UpdateWish.NetRadioListInfo));
+				device.update(EnumSet.of(listInfoUpdateWish));
 				updateLineList();
 				if (listInfo!=null && listInfo.menuStatus==Device.Value.ReadyOrBusy.Ready)
 					lineListUpdater.stop();
 			});
 		}
 
-		@Override
+		public void setDeviceAndListInfo(Device device, ListInfo listInfo) {
+			this.device = device;
+			this.listInfo = listInfo;
+		}
+		
 		public void setEnabled(boolean enabled) {
 			lineList.setEnabled(enabled);
 			buttons.forEach(b->b.setEnabled(enabled));
 		}
 
-		private void addSongToPreferredSongs() {
-			if (playInfo!=null && playInfo.currentSong!=null) {
-				preferredSongs.add(playInfo.currentSong);
-				writePreferredSongsToFile();
-			}
-		}
-
-		@Override
-		protected JPanel createContentPanel() {
-			
-			lineListLabel = new JTextField("???");
-			lineListLabel.setEditable(false);
-			
-			ignoreListSelection = false;
-			lineRenderer = new LineRenderer();
-			lineList = new JList<ListInfo.Line>();
-			lineList.setCellRenderer(lineRenderer);
-			lineList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-			lineList.addListSelectionListener(e -> {
-				if (e.getValueIsAdjusting()) return;
-				if (ignoreListSelection) return;
-				if (listInfo.menuStatus==Device.Value.ReadyOrBusy.Busy) return;
-				
-				ListInfo.Line line = lineList.getSelectedValue();
-				if (line==null) return;
-				if (line.attr==Device.Value.LineAttribute.Unselectable) return;
-				
-				device.netRadio.listInfo.sendDirectSelect(line);
-				device.update(EnumSet.of(UpdateWish.NetRadioListInfo,UpdateWish.NetRadioPlayInfo));
-				updateLineList();
-				updatePlayInfo();
-			});
-			
-			playinfoOutput = new JTextArea("Play Info");
-			playinfoOutput.setEditable(false);
-			
-			JScrollPane lineListScrollPane = new JScrollPane(lineList);
-			playinfoScrollPane = new JScrollPane(playinfoOutput);
-			lineListScrollPane.setPreferredSize(new Dimension(500, 200));
-			playinfoScrollPane.setPreferredSize(new Dimension(500, 400));
-			
-			buttons = new Vector<>();
-			GridBagPanel buttonsPanel = new GridBagPanel();
-			buttonsPanel.setInsets(new Insets(3,3,3,3));
-			createButtons_CrossLayout(buttonsPanel);
-			//createButtons_OtherLayout(buttonsPanel);
-			
-			JPanel lineListPanel = new JPanel(new BorderLayout(3,3));
-			lineListPanel.add(lineListLabel      ,BorderLayout.NORTH);
-			lineListPanel.add(lineListScrollPane ,BorderLayout.CENTER);
-			lineListPanel.add(buttonsPanel       ,BorderLayout.SOUTH);
-			
-			JPanel contentPanel = new JPanel(new BorderLayout(3,3));
-			contentPanel.add(lineListPanel, BorderLayout.NORTH);
-			contentPanel.add(playinfoScrollPane, BorderLayout.CENTER);
-			
-			return contentPanel;
-		}
-
-		@SuppressWarnings("unused")
-		private void createButtons_OtherLayout(GridBagPanel buttonsPanel) {
-			buttonsPanel.add(createButton(ButtonID.Home    ), 0,0, 1,1, 1,1, GridBagConstraints.BOTH);
-			buttonsPanel.add(createButton(ButtonID.Return  ), 0,1, 1,1, 1,1, GridBagConstraints.BOTH);
-			buttonsPanel.add(createButton(ButtonID.Select  ), 0,2, 1,1, 1,1, GridBagConstraints.BOTH);
-			buttonsPanel.add(createButton(ButtonID.Up      ), 1,0, 1,1, 1,1, GridBagConstraints.BOTH);
-			buttonsPanel.add(createButton(ButtonID.Down    ), 1,1, 1,1, 1,1, GridBagConstraints.BOTH);
-			buttonsPanel.add(createButton(ButtonID.PageUp  ), 2,0, 1,1, 1,1, GridBagConstraints.BOTH);
-			buttonsPanel.add(createButton(ButtonID.PageDown), 2,1, 1,1, 1,1, GridBagConstraints.BOTH);
-			buttonsPanel.add(createButton(ButtonID.Play    ), 1,2, 1,1, 1,1, GridBagConstraints.BOTH);
-			buttonsPanel.add(createButton(ButtonID.Stop    ), 2,2, 1,1, 1,1, GridBagConstraints.BOTH);
-		}
-
-		private void createButtons_CrossLayout(GridBagPanel buttonsPanel) {
-			buttonsPanel.add(createButton(ButtonID.Up      ), 1,0, 1,1, 1,1, GridBagConstraints.BOTH);
-			buttonsPanel.add(createButton(ButtonID.Home    ), 3,0, 1,1, 1,1, GridBagConstraints.BOTH);
-			buttonsPanel.add(createButton(ButtonID.Return  ), 0,1, 1,1, 1,1, GridBagConstraints.BOTH);
-			buttonsPanel.add(createButton(ButtonID.Select  ), 2,1, 1,1, 1,1, GridBagConstraints.BOTH);
-			buttonsPanel.add(createButton(ButtonID.PageUp  ), 3,1, 1,1, 1,1, GridBagConstraints.BOTH);
-			buttonsPanel.add(createButton(ButtonID.Down    ), 1,2, 1,1, 1,1, GridBagConstraints.BOTH);
-			buttonsPanel.add(createButton(ButtonID.PageDown), 3,2, 1,1, 1,1, GridBagConstraints.BOTH);
-			buttonsPanel.add(createButton(ButtonID.Play    ), 0,3, 1,1, 2,1, GridBagConstraints.BOTH);
-			buttonsPanel.add(createButton(ButtonID.Stop    ), 2,3, 1,1, 2,1, GridBagConstraints.BOTH);
-			buttonsPanel.add(createButton("Add Song to PreferredSongs",e->addSongToPreferredSongs()), 4,3, 1,1, 1,1, GridBagConstraints.BOTH);
+		static interface LineListUser {
+			void setEnabled(boolean enabled);
+			void updatePlayInfo();
 		}
 		
-		enum ButtonID {
-			Up, Home, Return, Select, PageUp("Page Up"), Down, PageDown("Page Down"), Play, Stop;
-
-			String label;
-			ButtonID() { label = toString(); }
-			ButtonID(String label) { this.label = label; }
-			public String getLabel() { return label; }
-		}
-		
-		private JButton createButton(ButtonID buttonID) {
-			JButton button = YamahaControl.createButton(buttonID.getLabel(), createListener(buttonID), true);
-			buttons.add(button);
-			return button;
-		}
-		private JButton createButton(String title, ActionListener l) {
-			JButton button = YamahaControl.createButton(title, l, true);
-			buttons.add(button);
-			return button;
-		}
-
-		private ActionListener createListener(ButtonID buttonID) {
-			switch (buttonID) {
-			case Up    : return createCursorSelectListener(Device.Value.CursorSelect.Up);
-			case Down  : return createCursorSelectListener(Device.Value.CursorSelect.Down);
-			case Return: return createCursorSelectListener(Device.Value.CursorSelect.Return);
-			case Select: return createCursorSelectListener(Device.Value.CursorSelect.Sel);
-			case Home  : return createCursorSelectListener(Device.Value.CursorSelect.ReturnToHome);
-				
-			case PageUp  : return createPageSelectListener(Device.Value.PageSelect.Up);
-			case PageDown: return createPageSelectListener(Device.Value.PageSelect.Down);
-			
-			case Play: return createPlaybackListener(Device.Value.PlayStop.Play);
-			case Stop: return createPlaybackListener(Device.Value.PlayStop.Stop);
-			}
-			return e->{};
-		}
-
-		private ActionListener createPlaybackListener(PlayStop playState) {
-			return e->{
-				device.netRadio.sendPlayback(playState);
-				device.update(EnumSet.of(UpdateWish.NetRadioListInfo,UpdateWish.NetRadioPlayInfo));
-				updateLineList();
-				updatePlayInfo();
-			};
-		}
-
-		private ActionListener createPageSelectListener(PageSelect pageSelect) {
-			return e->{
-				device.netRadio.listInfo.sendPageSelect(pageSelect);
-				device.update(EnumSet.of(UpdateWish.NetRadioListInfo));
-				updateLineList();
-			};
-		}
-
-		private ActionListener createCursorSelectListener(CursorSelect cursorSelect) {
-			return e->{
-				device.netRadio.listInfo.sendCursorSelect(cursorSelect);
-				device.update(EnumSet.of(UpdateWish.NetRadioListInfo,UpdateWish.NetRadioPlayInfo));
-				updateLineList();
-				updatePlayInfo();
-			};
-		}
-
-		@Override
-		public void initGUIafterConnect(Device device) {
-			super.initGUIafterConnect(device);
-			setEnabled(device!=null);
-		}
-
-		@Override
-		public void frequentlyUpdate() {
-			super.frequentlyUpdate();
-			updateLineList();
-			updatePlayInfo();
-		}
-
-		private void updatePlayInfo() {
-			float hPos = YamahaControl.getScrollPos(playinfoScrollPane.getHorizontalScrollBar());
-			float vPos = YamahaControl.getScrollPos(playinfoScrollPane.getVerticalScrollBar());
-			playInfo = device.netRadio.playInfo;
-			playinfoOutput.setText(playInfo.toString());
-			YamahaControl.setScrollPos(playinfoScrollPane.getHorizontalScrollBar(),hPos);
-			YamahaControl.setScrollPos(playinfoScrollPane.getVerticalScrollBar(),vPos);
-		}
 
 		private void updateLineList() {
-			listInfo = device.netRadio.listInfo;
-			setEnabled(listInfo.menuStatus==Device.Value.ReadyOrBusy.Ready);
+			lineListUser.setEnabled(listInfo.menuStatus==Device.Value.ReadyOrBusy.Ready);
 			//System.out.println("updateLineList() -> listInfo.menuStatus: "+listInfo.menuStatus);
 			
 			String lineListLabelStr = String.format("[%s] %s", listInfo.menuLayer, listInfo.menuName==null?"":listInfo.menuName);
@@ -990,39 +836,106 @@ public class YamahaControl {
 			}
 		}
 		
-		@Override
-		public Collection<UpdateWish> getUpdateWishes(UpdateReason reason) {
-			Vector<UpdateWish> vector = new Vector<>(super.getUpdateWishes(reason));
-			switch (reason) {
-			case Frequently: vector.addAll(Arrays.asList(new UpdateWish[] { UpdateWish.NetRadioPlayInfo, UpdateWish.NetRadioListInfo })); break;
-			case Initial   : vector.addAll(Arrays.asList(new UpdateWish[] { UpdateWish.NetRadioPlayInfo, UpdateWish.NetRadioListInfo })); break;
-			}
-			return vector;
+		public void createGUIelements() {
+			lineListLabel = new JTextField("???");
+			lineListLabel.setEditable(false);
+			
+			ignoreListSelection = false;
+			lineRenderer = new LineRenderer();
+			lineList = new JList<ListInfo.Line>();
+			lineList.setCellRenderer(lineRenderer);
+			lineList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+			lineList.addListSelectionListener(e -> {
+				if (e.getValueIsAdjusting()) return;
+				if (ignoreListSelection) return;
+				if (listInfo.menuStatus==Device.Value.ReadyOrBusy.Busy) return;
+				
+				ListInfo.Line line = lineList.getSelectedValue();
+				if (line==null) return;
+				if (line.attr==Device.Value.LineAttribute.Unselectable) return;
+				
+				listInfo.sendDirectSelect(line);
+				device.update(EnumSet.of(listInfoUpdateWish,playInfoUpdateWish));
+				updateLineList();
+				lineListUser.updatePlayInfo();
+			});
+			
+			lineListScrollPane = new JScrollPane(lineList);
+			lineListScrollPane.setPreferredSize(new Dimension(500, 200));
 		}
 
-		@Override
-		protected boolean getReadyState() {
-			if (device==null) return false;
-			// GET[G3]:    NET_RADIO,Config   ->   Feature_Availability -> "Ready" | "Not Ready"
-			ReadyOrNot readyState = device.askValue(Device.KnownCommand.GetNetRadioConfig, ReadyOrNot.values(), "Feature_Availability");
-			return readyState==ReadyOrNot.Ready;
+		public void createButtons(GridBagPanel buttonsPanel) {
+			buttons.clear();
+			buttonsPanel.add(createButton(ButtonID.Up      ), 1,0, 1,1, 1,1, GridBagConstraints.BOTH);
+			buttonsPanel.add(createButton(ButtonID.Home    ), 3,0, 1,1, 1,1, GridBagConstraints.BOTH);
+			buttonsPanel.add(createButton(ButtonID.Return  ), 0,1, 1,1, 1,1, GridBagConstraints.BOTH);
+			buttonsPanel.add(createButton(ButtonID.Select  ), 2,1, 1,1, 1,1, GridBagConstraints.BOTH);
+			buttonsPanel.add(createButton(ButtonID.PageUp  ), 3,1, 1,1, 1,1, GridBagConstraints.BOTH);
+			buttonsPanel.add(createButton(ButtonID.Down    ), 1,2, 1,1, 1,1, GridBagConstraints.BOTH);
+			buttonsPanel.add(createButton(ButtonID.PageDown), 3,2, 1,1, 1,1, GridBagConstraints.BOTH);
 		}
 		
+		enum ButtonID {
+			Up, Home, Return, Select, PageUp("Page Up"), Down, PageDown("Page Down");
+
+			String label;
+			ButtonID() { label = toString(); }
+			ButtonID(String label) { this.label = label; }
+			public String getLabel() { return label; }
+		}
+		
+		private JButton createButton(ButtonID buttonID) {
+			JButton button = YamahaControl.createButton(buttonID.getLabel(), createListener(buttonID), true);
+			buttons.add(button);
+			return button;
+		}
+
+		private ActionListener createListener(ButtonID buttonID) {
+			switch (buttonID) {
+			case Up    : return createCursorSelectListener(Device.Value.CursorSelect.Up);
+			case Down  : return createCursorSelectListener(Device.Value.CursorSelect.Down);
+			case Return: return createCursorSelectListener(Device.Value.CursorSelect.Return);
+			case Select: return createCursorSelectListener(Device.Value.CursorSelect.Sel);
+			case Home  : return createCursorSelectListener(Device.Value.CursorSelect.ReturnToHome);
+				
+			case PageUp  : return createPageSelectListener(Device.Value.PageSelect.Up);
+			case PageDown: return createPageSelectListener(Device.Value.PageSelect.Down);
+			}
+			return e->{};
+		}
+
+		private ActionListener createPageSelectListener(PageSelect pageSelect) {
+			return e->{
+				listInfo.sendPageSelect(pageSelect);
+				device.update(EnumSet.of(listInfoUpdateWish));
+				updateLineList();
+			};
+		}
+
+		private ActionListener createCursorSelectListener(CursorSelect cursorSelect) {
+			return e->{
+				listInfo.sendCursorSelect(cursorSelect);
+				device.update(EnumSet.of(listInfoUpdateWish,playInfoUpdateWish));
+				updateLineList();
+				lineListUser.updatePlayInfo();
+			};
+		}
+
 		private static class LineRenderer implements ListCellRenderer<ListInfo.Line>{
 			
 			private LabelRendererComponent rendererComponent;
 			private int selectedLineIndex;
-
+		
 			LineRenderer() {
 				rendererComponent = new Tables.LabelRendererComponent();
 				rendererComponent.setPreferredSize(new Dimension(10,20));
 				this.selectedLineIndex = -1;
 			}
-
+		
 			public void setSelected(int selectedLineIndex) {
 				this.selectedLineIndex = selectedLineIndex;
 			}
-
+		
 			@Override
 			public Component getListCellRendererComponent(JList<? extends ListInfo.Line> list, ListInfo.Line line, int index, boolean isSelected, boolean cellHasFocus) {
 				switch (line.attr) {
@@ -1046,9 +959,129 @@ public class YamahaControl {
 			
 		}
 	}
-	
-	private static class LineList {
+
+	private static class SubUnitNetRadio extends SubUnit implements LineList.LineListUser {
+		private static final long serialVersionUID = -8583320100311806933L;
+		private JTextArea playinfoOutput;
+		private JScrollPane playinfoScrollPane;
 		
+		private PlayInfo playInfo;
+		private LineList newLineList;
+		private Vector<JButton> buttons;
+
+		public SubUnitNetRadio() {
+			super("Net Radio");
+			playInfo = null;
+		}
+
+		@Override
+		public void setEnabled(boolean enabled) {
+			newLineList.setEnabled(enabled);
+			buttons.forEach(b->b.setEnabled(enabled));
+		}
+
+		private void addSongToPreferredSongs() {
+			if (playInfo!=null && playInfo.currentSong!=null) {
+				preferredSongs.add(playInfo.currentSong);
+				writePreferredSongsToFile();
+			}
+		}
+
+		@Override
+		protected JPanel createContentPanel() {
+			
+			newLineList = new LineList(device,device==null?null:device.netRadio.listInfo,this,UpdateWish.NetRadioListInfo,UpdateWish.NetRadioPlayInfo);
+			newLineList.createGUIelements();
+			
+			playinfoOutput = new JTextArea("Play Info");
+			playinfoOutput.setEditable(false);
+			
+			playinfoScrollPane = new JScrollPane(playinfoOutput);
+			playinfoScrollPane.setPreferredSize(new Dimension(500, 400));
+			
+			buttons = new Vector<>();
+			GridBagPanel buttonsPanel = new GridBagPanel();
+			buttonsPanel.setInsets(new Insets(3,3,3,3));
+			createButtons_CrossLayout(buttonsPanel);
+			//createButtons_OtherLayout(buttonsPanel);
+			
+			JPanel lineListPanel = new JPanel(new BorderLayout(3,3));
+			lineListPanel.add(newLineList.lineListLabel      ,BorderLayout.NORTH);
+			lineListPanel.add(newLineList.lineListScrollPane ,BorderLayout.CENTER);
+			lineListPanel.add(buttonsPanel       ,BorderLayout.SOUTH);
+			
+			JPanel contentPanel = new JPanel(new BorderLayout(3,3));
+			contentPanel.add(lineListPanel, BorderLayout.NORTH);
+			contentPanel.add(playinfoScrollPane, BorderLayout.CENTER);
+			
+			return contentPanel;
+		}
+
+		private void createButtons_CrossLayout(GridBagPanel buttonsPanel) {
+			newLineList.createButtons(buttonsPanel);
+			buttonsPanel.add(createButton(Device.Value.PlayStop.Play), 0,3, 1,1, 2,1, GridBagConstraints.BOTH);
+			buttonsPanel.add(createButton(Device.Value.PlayStop.Stop), 2,3, 1,1, 2,1, GridBagConstraints.BOTH);
+			buttonsPanel.add(createButton("Add Song to PreferredSongs",e->addSongToPreferredSongs()), 4,3, 1,1, 1,1, GridBagConstraints.BOTH);
+		}
+		
+		private JButton createButton(Device.Value.PlayStop playState) {
+			ActionListener listener = e->{
+				device.netRadio.sendPlayback(playState);
+				device.update(EnumSet.of(UpdateWish.NetRadioListInfo,UpdateWish.NetRadioPlayInfo));
+				newLineList.updateLineList();
+				updatePlayInfo();
+			};
+			JButton button = YamahaControl.createButton(playState.getLabel(), listener, true);
+			buttons.add(button);
+			return button;
+		}
+		private JButton createButton(String title, ActionListener l) {
+			JButton button = YamahaControl.createButton(title, l, true);
+			buttons.add(button);
+			return button;
+		}
+
+		@Override
+		public void initGUIafterConnect(Device device) {
+			newLineList.setDeviceAndListInfo(device,device==null?null:device.netRadio.listInfo);
+			super.initGUIafterConnect(device);
+			setEnabled(device!=null);
+		}
+
+		@Override
+		public void frequentlyUpdate() {
+			super.frequentlyUpdate();
+			newLineList.updateLineList();
+			updatePlayInfo();
+		}
+
+		@Override
+		public void updatePlayInfo() {
+			float hPos = YamahaControl.getScrollPos(playinfoScrollPane.getHorizontalScrollBar());
+			float vPos = YamahaControl.getScrollPos(playinfoScrollPane.getVerticalScrollBar());
+			playInfo = device.netRadio.playInfo;
+			playinfoOutput.setText(playInfo.toString());
+			YamahaControl.setScrollPos(playinfoScrollPane.getHorizontalScrollBar(),hPos);
+			YamahaControl.setScrollPos(playinfoScrollPane.getVerticalScrollBar(),vPos);
+		}
+		
+		@Override
+		public Collection<UpdateWish> getUpdateWishes(UpdateReason reason) {
+			Vector<UpdateWish> vector = new Vector<>(super.getUpdateWishes(reason));
+			switch (reason) {
+			case Frequently: vector.addAll(Arrays.asList(new UpdateWish[] { UpdateWish.NetRadioPlayInfo, UpdateWish.NetRadioListInfo })); break;
+			case Initial   : vector.addAll(Arrays.asList(new UpdateWish[] { UpdateWish.NetRadioPlayInfo, UpdateWish.NetRadioListInfo })); break;
+			}
+			return vector;
+		}
+
+		@Override
+		protected boolean getReadyState() {
+			if (device==null) return false;
+			// GET[G3]:    NET_RADIO,Config   ->   Feature_Availability -> "Ready" | "Not Ready"
+			ReadyOrNot readyState = device.askValue(Device.KnownCommand.GetNetRadioConfig, ReadyOrNot.values(), "Feature_Availability");
+			return readyState==ReadyOrNot.Ready;
+		}
 	}
 	
 	private static class SubUnitTuner extends SubUnit {
