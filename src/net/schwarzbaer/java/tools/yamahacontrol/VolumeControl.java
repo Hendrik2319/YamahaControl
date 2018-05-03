@@ -1,4 +1,4 @@
-package net.schwarzbaer.java.tools.yamahacontrol.gui;
+package net.schwarzbaer.java.tools.yamahacontrol;
 
 import java.awt.BasicStroke;
 import java.awt.Color;
@@ -11,7 +11,6 @@ import java.awt.geom.Rectangle2D;
 import java.util.Locale;
 
 import net.schwarzbaer.gui.Canvas;
-import net.schwarzbaer.java.tools.yamahacontrol.Device.NumberWithUnit;
 
 public class VolumeControl extends Canvas {
 		private static final long serialVersionUID = -5870265710270984615L;
@@ -97,7 +96,7 @@ public class VolumeControl extends Canvas {
 			addMouseMotionListener(mouseAdapter);
 		}
 		
-		public void setValue(NumberWithUnit numberWithUnit) {
+		public void setValue(Device.NumberWithUnit numberWithUnit) {
 			if (isAdjusting) return;
 			if (numberWithUnit==null) {
 				this.value = 0;

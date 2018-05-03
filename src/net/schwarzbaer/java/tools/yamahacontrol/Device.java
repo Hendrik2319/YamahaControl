@@ -363,7 +363,7 @@ public final class Device {
 		public enum PageSelect implements Value { Up,Down; @Override public String getLabel() { return toString(); }  }
 	}
 
-	public static class NumberWithUnit {
+	static class NumberWithUnit {
 		public Float number;
 		public final String unit;
 		
