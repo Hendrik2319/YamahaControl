@@ -53,6 +53,7 @@ import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
+import javax.swing.JProgressBar;
 import javax.swing.JScrollBar;
 import javax.swing.JScrollPane;
 import javax.swing.JTabbedPane;
@@ -66,6 +67,7 @@ import javax.swing.filechooser.FileSystemView;
 
 import net.schwarzbaer.gui.StandardMainWindow;
 import net.schwarzbaer.java.tools.yamahacontrol.Device.Inputs.DeviceSceneInput;
+import net.schwarzbaer.java.tools.yamahacontrol.Device.NumberWithUnit;
 import net.schwarzbaer.java.tools.yamahacontrol.Device.UpdateWish;
 import net.schwarzbaer.java.tools.yamahacontrol.Device.Value;
 
@@ -152,8 +154,8 @@ public class YamahaControl {
 		VolumeCtrl volumeCtrl = new VolumeCtrl();
 		guiRegions.add(volumeCtrl);
 		
-		MainPlayNListCtrl mainPlayCtrl = new MainPlayNListCtrl();
-		guiRegions.add(mainPlayCtrl);
+		MainPlayNListCtrl mainPlayNListCtrl = new MainPlayNListCtrl();
+		guiRegions.add(mainPlayNListCtrl);
 		
 		GridBagPanel devicePanel = new GridBagPanel();
 		devicePanel.setBorder(BorderFactory.createTitledBorder("Device"));
@@ -166,8 +168,8 @@ public class YamahaControl {
 		//settingsPanel.setPreferredSize(new Dimension(150,520));
 		
 		scenesAndInputs.createPanels(settingsPanel);
-		mainPlayCtrl.createPanel(settingsPanel);
-		settingsPanel.add("Dummy", new JLabel("Dummy"));
+		mainPlayNListCtrl.createPanel(settingsPanel);
+		//settingsPanel.add("Dummy", new JLabel("Dummy"));
 		
 		JPanel volumeControlPanel = volumeCtrl.createVolumeControlPanel(200);
 		volumeControlPanel.setBorder(BorderFactory.createTitledBorder("Volume"));
@@ -281,18 +283,27 @@ public class YamahaControl {
 	// 
 	//    Toolbox methods
 	//
-	static JButton createButton(String title, ActionListener l, boolean enabled) {
+	static JButton createButton(String title, boolean enabled) {
 		JButton button = new JButton(title);
 		button.setEnabled(enabled);
-		if (l!=null) button.addActionListener(l);
+		return button;
+	}
+	static JButton createButton(String title, ActionListener l, boolean enabled) {
+		JButton button = createButton(title,enabled);
+		button.addActionListener(l);
 		return button;
 	}
 
 	static JToggleButton createToggleButton(String title, ActionListener l, boolean enabled, ButtonGroup bg) {
+		JToggleButton button = createToggleButton(title, l, enabled);
+		if (bg!=null) bg.add(button);
+		return button;
+	}
+
+	static JToggleButton createToggleButton(String title, ActionListener l, boolean enabled) {
 		JToggleButton button = new JToggleButton(title);
 		button.setEnabled(enabled);
 		if (l!=null) button.addActionListener(l);
-		bg.add(button);
 		return button;
 	}
 
@@ -450,6 +461,8 @@ public class YamahaControl {
 			
 			comps.clear();
 			int row=0;
+			panel.add(new JLabel(" "), 0,row++, 1,0, 3,1, GridBagConstraints.HORIZONTAL);
+			
 			GridBagPanel setupPanel = new GridBagPanel();
 			setupPanel.add(createButton(Value.MainZoneMenuControl.Setup  ), 0,0, 1,0, 1,1, GridBagConstraints.HORIZONTAL);
 			setupPanel.add(createButton(Value.MainZoneMenuControl.Option ), 1,0, 1,0, 1,1, GridBagConstraints.HORIZONTAL);
@@ -482,8 +495,9 @@ public class YamahaControl {
 			skipPanel.add(createButton(Value.SkipFwdRev.SkipFwd,">>"), 1,0, 1,0, 1,1, GridBagConstraints.HORIZONTAL);
 			panel.add(skipPanel, 0,row++, 1,0, 3,1, GridBagConstraints.HORIZONTAL);
 			
+			panel.add(new JLabel(" "), 0,row++, 1,1, 3,1, GridBagConstraints.BOTH);
 			
-			settingsPanel.addTab("Play Ctrl", panel);
+			settingsPanel.addTab("Play Control", panel);
 		}
 
 		private JButton createButton(Value.CursorSelectExt cursor) {
@@ -528,7 +542,7 @@ public class YamahaControl {
 		OnOffBtn() {
 			device = null;
 			button = createButton("",e->toggleOnOff(),false);
-			setOnOffButton(false);
+			setOnOffButton(null);
 		}
 		@Override public void setEnabledGUI(boolean enabled) {
 			button.setEnabled(enabled);
@@ -539,37 +553,61 @@ public class YamahaControl {
 			frequentlyUpdate();
 		}
 		@Override public void frequentlyUpdate() {
-			setOnOffButton(device==null?(Boolean)false:device.power.isOn());
+			setOnOffButton(device==null?null:device.getPowerState());
 		}
 		@Override public EnumSet<UpdateWish> getUpdateWishes(UpdateReason reason) {
-			return EnumSet.of( UpdateWish.Power );
+			return EnumSet.of( UpdateWish.BasicStatus );
 		}
 
-		private void setOnOffButton(Boolean isOn) {
-			button.setIcon(smallImages.get(isOn==null?SmallImages.IconUnknown:isOn?SmallImages.IconOn:SmallImages.IconOff));
-			button.setText(isOn==null?"??":isOn?"On":"Off");
+		private void setOnOffButton(Device.Value.PowerState power) {
+			SmallImages icon = SmallImages.IconUnknown;
+			String title = "???";
+			if (power!=null)
+				switch (power) {
+				case On     : icon = SmallImages.IconOn; title = "On"; break;
+				case Standby: icon = SmallImages.IconOff; title = "Off"; break;
+				}
+			button.setIcon(smallImages.get(icon));
+			button.setText(title);
 		}
 
 		private void toggleOnOff() {
-			if (device!=null) device.power.setOn(!device.power.isOn());
-			setOnOffButton(device==null?false:device.power.isOn());
+			if (device!=null) {
+				Device.Value.PowerState powerState = device.getPowerState();
+				if (powerState==null) device.setPowerState(Device.Value.PowerState.On);
+				else device.setPowerState(getNext(powerState,Device.Value.PowerState.values()));
+				device.update(EnumSet.of( UpdateWish.BasicStatus ));
+			}
+			setOnOffButton(device==null?null:device.getPowerState());
 		}
 	}
 	
 	private static class VolumeCtrl implements GuiRegion {
 		
+		private static final int BAR_MAX = 300;
+		private static final int BAR_MIN = 0;
 		private Device device;
-		private VolumeControl volumeControl;
+		private RotaryCtrl rotaryCtrl;
 		private VolumeSetter volumeSetter;
+		private JToggleButton muteBtn;
+		private JButton decBtn;
+		private JButton incBtn;
+		private JProgressBar volumeBar;
 
 		VolumeCtrl() {
 			device = null;
-			volumeControl = null;
+			rotaryCtrl = null;
 			volumeSetter = new VolumeSetter(10);
+			decBtn = null;
+			muteBtn= null;
+			incBtn = null;
 		}
 		
 		@Override public void setEnabledGUI(boolean enabled) {
-			volumeControl.setEnabled(enabled);
+			rotaryCtrl.setEnabled(enabled);
+			decBtn .setEnabled(enabled);
+			muteBtn.setEnabled(enabled);
+			incBtn .setEnabled(enabled);
 		}
 		@Override public void initGUIafterConnect(Device device) {
 			this.device = device;
@@ -577,22 +615,80 @@ public class YamahaControl {
 			frequentlyUpdate();
 		}
 		@Override public void frequentlyUpdate() {
-			volumeControl.setValue(device==null?null:device.getVolume());
+			updateValues();
 		}
+
+		private void updateValues() {
+			rotaryCtrl.setValue(device==null?null:device.getVolume());
+			if (device!=null) setMuteBtn(device.getMute());
+			updateVolumeBar();
+		}
+		private void updateVolumeBar() {
+			if (device==null) { volumeBar.setValue(BAR_MIN); return; }
+			NumberWithUnit value = device.getVolume();
+			if (value==null || value.number==null) { volumeBar.setValue(BAR_MIN); return; }
+			
+			double ratio = (value.number-Device.getMinVolume())/(Device.getMaxVolume()-Device.getMinVolume());
+			ratio = Math.max(0.0,Math.min(ratio,1.0));
+			
+			int barValue = (int)Math.round( ratio*(BAR_MAX-BAR_MIN) + BAR_MIN );
+			//Log.info(getClass(), "updateVolumeBar() -> %d", barValue);
+			volumeBar.setValue(barValue);
+			volumeBar.repaint();
+		}
+
 		@Override public EnumSet<UpdateWish> getUpdateWishes(UpdateReason reason) {
 			return EnumSet.of( UpdateWish.BasicStatus );
 		}
 
 		public JPanel createVolumeControlPanel(int width) {
-			volumeControl = new VolumeControl(width, 3.0, -90, (value, isAdjusting) -> {
+			rotaryCtrl = new RotaryCtrl(width, 3.0, -90, (value, isAdjusting) -> {
 				if (device==null) return;
 				volumeSetter.set(value,isAdjusting);
 			});
-			JPanel volumePanel = new JPanel(new BorderLayout());
-			volumePanel.add( volumeControl, BorderLayout.CENTER );
+			volumeBar = new JProgressBar(JProgressBar.HORIZONTAL,BAR_MIN,BAR_MAX);
+			
+			GridBagPanel volumePanel = new GridBagPanel();
+			volumePanel.add(rotaryCtrl , 0,0, 1,1, 3,1, GridBagConstraints.BOTH);
+			volumePanel.add(volumeBar  , 0,1, 1,1, 3,1, GridBagConstraints.BOTH);
+			volumePanel.add(decBtn  = createButton      ("Vol -",e-> decVol(),true), 0,2, 1,1, 1,1, GridBagConstraints.BOTH);
+			volumePanel.add(muteBtn = createToggleButton("Mute" ,e->muteVol(),true), 1,2, 1,1, 1,1, GridBagConstraints.BOTH);
+			volumePanel.add(incBtn  = createButton      ("Vol +",e-> incVol(),true), 2,2, 1,1, 1,1, GridBagConstraints.BOTH);
+			
+			setMuteBtn(null);
 			return volumePanel;
 		}
+
+		private void setMuteBtn(Value.OnOff mute) {
+			muteBtn.setSelected(mute==Value.OnOff.On);
+		}
 		
+		private void incVol() { changeVol(+0.5); }
+		private void decVol() { changeVol(-0.5); }
+
+		private void changeVol(double d) {
+			if (device==null) return;
+			NumberWithUnit value = device.getVolume();
+			if (value==null || value.number==null) return;
+			
+			if (Device.getMinVolume()>value.number+d || Device.getMaxVolume()<value.number+d) return;
+			
+			device.setVolume(value.number+d);
+			device.update(EnumSet.of( UpdateWish.BasicStatus ));
+			updateValues();
+		}
+
+		private void muteVol() {
+			if (device==null) return;
+			
+			Value.OnOff mute = device.getMute();
+			if (mute==null) return;
+			
+			device.setMute(getNext(mute,Value.OnOff.values()));
+			device.update(EnumSet.of( UpdateWish.BasicStatus ));
+			updateValues();
+		}
+
 		private class VolumeSetter {
 			private ExecutorService executor;
 			private int counter;
@@ -619,6 +715,9 @@ public class YamahaControl {
 					runningTasks.add(executor.submit(()->{
 						incCounter();
 						device.setVolume(value);
+						SwingUtilities.invokeLater(()->{
+							updateVolumeBar();
+						});
 						decCounter();
 					}));
 					
@@ -630,9 +729,9 @@ public class YamahaControl {
 					runningTasks.add(executor.submit(()->{
 						incCounter();
 						device.setVolume(value);
-						Device.NumberWithUnit volume = device.getVolume();
+						device.update(EnumSet.of( UpdateWish.BasicStatus ));
 						SwingUtilities.invokeLater(()->{
-							volumeControl.setValue(volume);
+							updateValues();
 						});
 						decCounter();
 					}));

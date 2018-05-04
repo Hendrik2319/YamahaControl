@@ -12,7 +12,7 @@ import java.util.Locale;
 
 import net.schwarzbaer.gui.Canvas;
 
-public class VolumeControl extends Canvas {
+public class RotaryCtrl extends Canvas {
 		private static final long serialVersionUID = -5870265710270984615L;
 		private double angle;
 		private int radius;
@@ -21,13 +21,13 @@ public class VolumeControl extends Canvas {
 		private double deltaPerFullCircle;
 		protected boolean isAdjusting;
 		private String unit;
-		private VolumeListener valueListener;
+		private RotaryCtrl.ValueListener valueListener;
 		
-		public interface VolumeListener {
+		public interface ValueListener {
 			public void valueChanged(double value, boolean isAdjusting);
 		}
 		
-		public VolumeControl(int width, double deltaPerFullCircle, double zeroAngle_deg, VolumeListener valueListener) {
+		public RotaryCtrl(int width, double deltaPerFullCircle, double zeroAngle_deg, RotaryCtrl.ValueListener valueListener) {
 			super(width, width);
 			this.deltaPerFullCircle = deltaPerFullCircle;
 			this.valueListener = valueListener;
@@ -45,7 +45,7 @@ public class VolumeControl extends Canvas {
 		private void setMouseAdapter() {
 			MouseAdapter mouseAdapter = new MouseAdapter() {
 				
-				private VolumeControl control = VolumeControl.this;
+				private RotaryCtrl control = RotaryCtrl.this;
 				private double pickAngle = Double.NaN;
 
 				@Override

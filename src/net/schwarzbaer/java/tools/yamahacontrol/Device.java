@@ -7,13 +7,13 @@ import java.util.Vector;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 
+import net.schwarzbaer.java.tools.yamahacontrol.Device.Value.PowerState;
 import net.schwarzbaer.java.tools.yamahacontrol.XML.TagList;
 import net.schwarzbaer.java.tools.yamahacontrol.YamahaControl.Log;
 
 public final class Device {
 	
 	String address;
-	Power  power;
 	Inputs inputs;
 	MainPlayCtrl mainPlayCtrl;
 	private BasicStatus basicStatus;
@@ -28,7 +28,6 @@ public final class Device {
 	Device(String address) {
 		this.address = address;
 		this.basicStatus = null;
-		this.power    = new Power   (this.address);
 		this.inputs   = new Inputs  (this);
 		this.mainPlayCtrl = new MainPlayCtrl(this.address);
 		
@@ -41,7 +40,7 @@ public final class Device {
 	}
 	
 	enum UpdateWish {
-		Power, BasicStatus, Scenes, Inputs, TunerConfig, AirPlayConfig,
+		BasicStatus, Scenes, Inputs, TunerConfig, AirPlayConfig,
 		NetRadioPlayInfo, NetRadioListInfo, USBListInfo, USBPlayInfo,
 		DLNAPlayInfo, DLNAListInfo, IPodUSBListInfo, IPodUSBPlayInfo, IPodUSBMode
 	}
@@ -50,7 +49,6 @@ public final class Device {
 		//System.out.println("Device.update("+updateWishes+")");
 		updateWishes.forEach(uw->{
 			switch (uw) {
-			case Power           : power.askOn(); break;
 			case Inputs          : inputs.inputs     = inputs.getSceneInput(KnownCommand.General.GetInputItems); break;
 			case Scenes          : inputs.scenes     = inputs.getSceneInput(KnownCommand.General.GetSceneItems); break;
 			case BasicStatus     : basicStatus       = BasicStatus   .parse(Ctrl.sendGetCommand_Node(address,KnownCommand.General.GetBasicStatus  )); break;
@@ -81,10 +79,10 @@ public final class Device {
 
 	private static class BasicStatus {
 
-		@SuppressWarnings("unused") private Value.PowerState power;
+		private Value.PowerState power;
 		@SuppressWarnings("unused") private Value.SleepState sleep;
 		private NumberWithUnit volume;
-		@SuppressWarnings("unused") private Value.OnOff volMute;
+		private Value.OnOff volMute;
 		private String currentInput;
 		@SuppressWarnings("unused") private Inputs.DeviceSceneInput inputInfo;
 
@@ -140,39 +138,33 @@ public final class Device {
 			String xmlStr = NumberWithUnit.createXML(newValue/2.0,1,"dB");
 			basicStatus.volume.number = newValue/2.0f;
 			int rc = Ctrl.sendPutCommand(address,KnownCommand.General.SetVolume,xmlStr);
-			if (rc!=Ctrl.RC_OK) {
+			if (rc!=Ctrl.RC_OK)
 				Log.error(getClass(), "setVolume(%f)-> %s %s -> RC:%d", value, KnownCommand.General.SetVolume.tagList, xmlStr, rc);
-			}
-			
 		}
 	}
+	// Value 0:   Val = Number: -805..(5)..165
+	public static double getMinVolume() { return -80.5; }
+	public static double getMaxVolume() { return  16.5; }
+
+	public Value.OnOff getMute() {
+		if (basicStatus==null) return null;
+		return basicStatus.volMute;
+	}
+	public void setMute(Value.OnOff volMute) {
+		// [Vol_Mute_On]        PUT[P3]     Main_Zone,Volume,Mute = On
+		// [Vol_Mute_Off]        PUT[P3]     Main_Zone,Volume,Mute = Off
+		Ctrl.sendPutCommand(address,KnownCommand.General.SetMute,volMute.getLabel());
+	}
 	
-	static class Power {
-		
-		private Boolean isOn;
-		private String address;
-		
-		Power(String address) {
-			this.address = address;
-			this.isOn = null;
-		}
-		
-		public Boolean isOn() { return isOn; }
-
-		public void setOn(boolean isOn) {
-			// System,Power_Control,Power = On
-			// System,Power_Control,Power = Standby
-			int rc = Ctrl.sendPutCommand(address,KnownCommand.General.GetNSetSystemPower,isOn?Value.PowerState.On.getLabel():Value.PowerState.Standby.getLabel());
-			if (rc!=Ctrl.RC_OK) return;
-			askOn();
-		}
-
-		private void askOn() {
-			String value = Ctrl.sendGetCommand_String(address,KnownCommand.General.GetNSetSystemPower);
-			if (Value.PowerState.On     .getLabel().equals(value)) { isOn = true;  return; }
-			if (Value.PowerState.Standby.getLabel().equals(value)) { isOn = false; return; }
-			isOn = null;
-		}
+	public PowerState getPowerState() {
+		if (basicStatus==null) return null;
+		return basicStatus.power;
+	}
+	
+	public void setPowerState(Value.PowerState power) {
+		// System,Power_Control,Power = On
+		// System,Power_Control,Power = Standby
+		Ctrl.sendPutCommand(address,KnownCommand.General.GetNSetSystemPower,power.getLabel());
 	}
 	
 	static class MainPlayCtrl {
@@ -301,6 +293,7 @@ public final class Device {
 			SetCurrentInput("Main_Zone,Input,Input_Sel"),
 			GetBasicStatus("Main_Zone,Basic_Status"),
 			SetVolume("Main_Zone,Volume,Lvl"),
+			SetMute("Main_Zone,Volume,Mute"), // P3: Main_Zone,Volume,Mute
 			;
 			
 			final private TagList tagList;
@@ -621,14 +614,7 @@ public final class Device {
 		}
 
 		public void updateMode() {
-			String str = Ctrl.sendGetCommand_String(address,KnownCommand.Special.SetIPodUSBMode);
-			this.mode = null;
-			if (str!=null)
-				for (Value.IPodMode mode:Value.IPodMode.values())
-					if (str.equals(mode.getLabel())) {
-						this.mode = mode;
-						break;
-					}
+			mode = Ctrl.sendGetCommand(address,KnownCommand.Special.SetIPodUSBMode,Value.IPodMode.values());
 			//Log.info(getClass(), "update mode: %s", mode.getLabel());
 		}
 

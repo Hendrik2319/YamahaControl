@@ -151,7 +151,16 @@ final class Ctrl {
 		sendCommand_controlled(address, command);
 		return lastRC;
 	}
-	
+	 
+	public static <T extends Device.Value> T sendGetCommand(String address, Device.KnownCommand knownCommand, T[] values) {
+		String str = sendGetCommand_String(address, knownCommand);
+		if (str==null) return null;
+		for (T v:values)
+			if (str.equals(v.getLabel()))
+				return v;
+		return null;
+	}
+	 
 	public static String sendGetCommand_String(String address, Device.KnownCommand knownCommand) {
 		
 		String command = buildGetCommand(knownCommand.getTagList());
