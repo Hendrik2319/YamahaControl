@@ -21,13 +21,13 @@ public class VolumeControl extends Canvas {
 		private double deltaPerFullCircle;
 		protected boolean isAdjusting;
 		private String unit;
-		private VolumeControl.ValueListener valueListener;
+		private VolumeListener valueListener;
 		
-		public interface ValueListener {
+		public interface VolumeListener {
 			public void valueChanged(double value, boolean isAdjusting);
 		}
 		
-		public VolumeControl(int width, double deltaPerFullCircle, double zeroAngle_deg, VolumeControl.ValueListener valueListener) {
+		public VolumeControl(int width, double deltaPerFullCircle, double zeroAngle_deg, VolumeListener valueListener) {
 			super(width, width);
 			this.deltaPerFullCircle = deltaPerFullCircle;
 			this.valueListener = valueListener;

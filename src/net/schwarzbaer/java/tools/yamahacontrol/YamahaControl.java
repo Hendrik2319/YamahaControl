@@ -57,6 +57,7 @@ import javax.swing.JScrollBar;
 import javax.swing.JScrollPane;
 import javax.swing.JTabbedPane;
 import javax.swing.JTextArea;
+import javax.swing.JTextField;
 import javax.swing.JToggleButton;
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
@@ -127,14 +128,12 @@ public class YamahaControl {
 
 	private StandardMainWindow mainWindow;
 	private Device device;
-	private MainGui mainGui;
 	private Vector<GuiRegion> guiRegions;
 	private FrequentlyTask frequentlyUpdater;
 	
 	YamahaControl() {
 		mainWindow = null;
 		device = null;
-		mainGui = null;
 		guiRegions = new Vector<>();
 		frequentlyUpdater = new FrequentlyTask(2000,()->{
 			updateDevice(UpdateReason.Frequently);
@@ -144,27 +143,38 @@ public class YamahaControl {
 	
 	private void createGUI() {
 		
-		mainGui = new MainGui();
-		guiRegions.add(mainGui);
+		ScenesAndInputs scenesAndInputs = new ScenesAndInputs();
+		guiRegions.add(scenesAndInputs);
 		
-		mainGui.createOnOffBtn();
+		OnOffBtn onOffBtn = new OnOffBtn();
+		guiRegions.add(onOffBtn);
+		
+		VolumeCtrl volumeCtrl = new VolumeCtrl();
+		guiRegions.add(volumeCtrl);
+		
+		MainPlayNListCtrl mainPlayCtrl = new MainPlayNListCtrl();
+		guiRegions.add(mainPlayCtrl);
 		
 		GridBagPanel devicePanel = new GridBagPanel();
 		devicePanel.setBorder(BorderFactory.createTitledBorder("Device"));
 		devicePanel.add(createButton("Connect",e->connectToReciever(),true),1,1,GridBagConstraints.BOTH);
-		devicePanel.add(mainGui.onoffBtn,1,GridBagConstraints.REMAINDER,GridBagConstraints.BOTH);
+		devicePanel.add(onOffBtn.button,1,GridBagConstraints.REMAINDER,GridBagConstraints.BOTH);
 		devicePanel.add(createButton("Open Command List",e->CommandList.openWindow(device==null?null:device.address),true),1,GridBagConstraints.REMAINDER,GridBagConstraints.BOTH);
 		
-		JTabbedPane scenesInputsPanel = mainGui.createScenesInputsPanel();
-		scenesInputsPanel.setBorder(BorderFactory.createTitledBorder("Scenes/Inputs"));
-		scenesInputsPanel.setPreferredSize(new Dimension(150,520));
+		JTabbedPane settingsPanel = new JTabbedPane();
+		settingsPanel.setBorder(BorderFactory.createTitledBorder("Settings"));
+		//settingsPanel.setPreferredSize(new Dimension(150,520));
 		
-		JPanel volumeControlPanel = mainGui.createVolumeControlPanel(200);
+		scenesAndInputs.createPanels(settingsPanel);
+		mainPlayCtrl.createPanel(settingsPanel);
+		settingsPanel.add("Dummy", new JLabel("Dummy"));
+		
+		JPanel volumeControlPanel = volumeCtrl.createVolumeControlPanel(200);
 		volumeControlPanel.setBorder(BorderFactory.createTitledBorder("Volume"));
 		
 		JPanel mainControlPanel = new JPanel(new BorderLayout(3,3));
 		mainControlPanel.add(devicePanel,BorderLayout.NORTH);
-		mainControlPanel.add(scenesInputsPanel,BorderLayout.CENTER);
+		mainControlPanel.add(settingsPanel,BorderLayout.CENTER);
 		mainControlPanel.add(volumeControlPanel,BorderLayout.SOUTH);
 		
 		JTabbedPane subUnitPanel = new JTabbedPane();
@@ -413,86 +423,164 @@ public class YamahaControl {
 		EnumSet<UpdateWish> getUpdateWishes(UpdateReason reason);
 	}
 	
-	private class MainGui implements GuiRegion {
-
-		public JButton onoffBtn;
-		private VolumeControl volumeControl;
-		private DsiPanel scenesPanel;
-		private DsiPanel inputsPanel;
-		private VolumeSetter volumeSetter;
+	private static class MainPlayNListCtrl implements GuiRegion {
 		
-		MainGui() {
-			onoffBtn = null;
-			volumeControl = null;
-			scenesPanel = null;
-			inputsPanel = null;
-			volumeSetter = new VolumeSetter(10);
+		private Device device;
+		private Vector<JComponent> comps;
+		MainPlayNListCtrl() {
+			device = null;
+			comps = new Vector<JComponent>();
 		}
-
+	
 		@Override public void setEnabledGUI(boolean enabled) {
-			onoffBtn.setEnabled(enabled);
-			volumeControl.setEnabled(enabled);
-			scenesPanel.setEnabled(enabled);
-			inputsPanel.setEnabled(enabled);
+			comps.forEach(c->c.setEnabled(enabled));
 		}
-
-		@Override
-		public EnumSet<UpdateWish> getUpdateWishes(UpdateReason reason) {
-			switch (reason) {
-			case Initial   : return EnumSet.of( UpdateWish.Power, UpdateWish.BasicStatus, UpdateWish.Scenes, UpdateWish.Inputs );
-			case Frequently: return EnumSet.of( UpdateWish.Power, UpdateWish.BasicStatus );
-			}
-			return null;
-		}
-
-		@Override
-		public void initGUIafterConnect(Device _device) {
+		@Override public void initGUIafterConnect(Device device) {
+			this.device = device;
 			setEnabledGUI(device!=null);
-			
-			if (device!=null) {
-				scenesPanel.createButtons(device.inputs.getScenes(),this::setScene,dsi->dsi!=null && "W".equals(dsi.rw));
-				inputsPanel.createButtons(device.inputs.getInputs(),this::setInput,null);
-				selectCurrentInput();
-			}
-			
 			frequentlyUpdate();
 		}
+		@Override public void frequentlyUpdate() {}
+		@Override public EnumSet<UpdateWish> getUpdateWishes(UpdateReason reason) {
+			return EnumSet.noneOf(UpdateWish.class);
+		}
 
-		@Override
-		public void frequentlyUpdate() {
+		public void createPanel(JTabbedPane settingsPanel) {
+			GridBagPanel panel = new GridBagPanel();
+			
+			comps.clear();
+			int row=0;
+			GridBagPanel setupPanel = new GridBagPanel();
+			setupPanel.add(createButton(Value.MainZoneMenuControl.Setup  ), 0,0, 1,0, 1,1, GridBagConstraints.HORIZONTAL);
+			setupPanel.add(createButton(Value.MainZoneMenuControl.Option ), 1,0, 1,0, 1,1, GridBagConstraints.HORIZONTAL);
+			panel.add(setupPanel, 0,row++, 1,0, 3,1, GridBagConstraints.HORIZONTAL);
+			
+			panel.add(new JLabel(" "), 0,row++, 1,0, 3,1, GridBagConstraints.HORIZONTAL);
+			
+			panel.add(createButton(Value.CursorSelectExt.Up    ), 1,row++, 1,0, 1,1, GridBagConstraints.HORIZONTAL);
+			panel.add(createButton(Value.CursorSelectExt.Left  ), 0,row  , 1,0, 1,1, GridBagConstraints.HORIZONTAL);
+			panel.add(createButton(Value.CursorSelectExt.Sel   ), 1,row  , 1,0, 1,1, GridBagConstraints.HORIZONTAL);
+			panel.add(createButton(Value.CursorSelectExt.Right ), 2,row++, 1,0, 1,1, GridBagConstraints.HORIZONTAL);
+			panel.add(createButton(Value.CursorSelectExt.Down  ), 1,row++, 1,0, 1,1, GridBagConstraints.HORIZONTAL);
+			
+			panel.add(new JLabel(" "), 0,row++, 1,0, 3,1, GridBagConstraints.HORIZONTAL);
+			
+			GridBagPanel row4Panel = new GridBagPanel();
+			row4Panel.add(createButton(Value.CursorSelectExt.Return     ), 0,0, 1,0, 1,1, GridBagConstraints.HORIZONTAL);
+			row4Panel.add(createButton(Value.MainZoneMenuControl.Display), 1,0, 1,0, 1,1, GridBagConstraints.HORIZONTAL);
+			row4Panel.add(createButton(Value.CursorSelectExt.Home       ), 0,1, 1,0, 2,1, GridBagConstraints.HORIZONTAL);
+			panel.add(row4Panel, 0,row++, 1,0, 3,1, GridBagConstraints.HORIZONTAL);
+			
+			panel.add(new JLabel(" "), 0,row++, 1,0, 3,1, GridBagConstraints.HORIZONTAL);
+			
+			panel.add(createButton(Value.PlayPauseStop.Play    ), 0,row  , 1,0, 1,1, GridBagConstraints.HORIZONTAL);
+			panel.add(createButton(Value.PlayPauseStop.Pause   ), 1,row  , 1,0, 1,1, GridBagConstraints.HORIZONTAL);
+			panel.add(createButton(Value.PlayPauseStop.Stop    ), 2,row++, 1,0, 1,1, GridBagConstraints.HORIZONTAL);
+			
+			GridBagPanel skipPanel = new GridBagPanel();
+			skipPanel.add(createButton(Value.SkipFwdRev.SkipRev,"<<"), 0,0, 1,0, 1,1, GridBagConstraints.HORIZONTAL);
+			skipPanel.add(createButton(Value.SkipFwdRev.SkipFwd,">>"), 1,0, 1,0, 1,1, GridBagConstraints.HORIZONTAL);
+			panel.add(skipPanel, 0,row++, 1,0, 3,1, GridBagConstraints.HORIZONTAL);
+			
+			
+			settingsPanel.addTab("Play Ctrl", panel);
+		}
+
+		private JButton createButton(Value.CursorSelectExt cursor) {
+			JButton button = YamahaControl.createButton(cursor.toString(), e->{
+				if (device!=null) device.mainPlayCtrl.setCursorSelect(cursor);
+			}, true);
+			comps.add(button);
+			return button;
+		}
+
+		private JButton createButton(Value.MainZoneMenuControl menuCtrl) {
+			JButton button = YamahaControl.createButton(menuCtrl.toString(), e->{
+				if (device!=null) device.mainPlayCtrl.setMenuControl(menuCtrl);
+			}, true);
+			comps.add(button);
+			return button;
+		}
+
+		private JButton createButton(Value.PlayPauseStop play) {
+			JButton button = YamahaControl.createButton(play.toString(), e->{
+				if (device!=null) device.mainPlayCtrl.setPlayback(play);
+			}, true);
+			comps.add(button);
+			return button;
+		}
+
+		private JButton createButton(Value.SkipFwdRev skip, String title) {
+			JButton button = YamahaControl.createButton(title, e->{
+				if (device!=null) device.mainPlayCtrl.setPlayback(skip);
+			}, true);
+			comps.add(button);
+			return button;
+		}
+	
+	}
+
+	private static class OnOffBtn implements GuiRegion {
+
+		private Device device;
+		public JButton button;
+		
+		OnOffBtn() {
+			device = null;
+			button = createButton("",e->toggleOnOff(),false);
+			setOnOffButton(false);
+		}
+		@Override public void setEnabledGUI(boolean enabled) {
+			button.setEnabled(enabled);
+		}
+		@Override public void initGUIafterConnect(Device device) {
+			this.device = device;
+			setEnabledGUI(device!=null);
+			frequentlyUpdate();
+		}
+		@Override public void frequentlyUpdate() {
 			setOnOffButton(device==null?(Boolean)false:device.power.isOn());
+		}
+		@Override public EnumSet<UpdateWish> getUpdateWishes(UpdateReason reason) {
+			return EnumSet.of( UpdateWish.Power );
+		}
+
+		private void setOnOffButton(Boolean isOn) {
+			button.setIcon(smallImages.get(isOn==null?SmallImages.IconUnknown:isOn?SmallImages.IconOn:SmallImages.IconOff));
+			button.setText(isOn==null?"??":isOn?"On":"Off");
+		}
+
+		private void toggleOnOff() {
+			if (device!=null) device.power.setOn(!device.power.isOn());
+			setOnOffButton(device==null?false:device.power.isOn());
+		}
+	}
+	
+	private static class VolumeCtrl implements GuiRegion {
+		
+		private Device device;
+		private VolumeControl volumeControl;
+		private VolumeSetter volumeSetter;
+
+		VolumeCtrl() {
+			device = null;
+			volumeControl = null;
+			volumeSetter = new VolumeSetter(10);
+		}
+		
+		@Override public void setEnabledGUI(boolean enabled) {
+			volumeControl.setEnabled(enabled);
+		}
+		@Override public void initGUIafterConnect(Device device) {
+			this.device = device;
+			setEnabledGUI(device!=null);
+			frequentlyUpdate();
+		}
+		@Override public void frequentlyUpdate() {
 			volumeControl.setValue(device==null?null:device.getVolume());
-			selectCurrentInput();
 		}
-
-		private void setScene(Device.Inputs.DeviceSceneInput dsi) {
-			if (device==null) return;
-			device.inputs.setScene(dsi);
-		}
-
-		private void setInput(Device.Inputs.DeviceSceneInput dsi) {
-			if (device==null) return;
-			device.inputs.setInput(dsi);
-		}
-
-		private void selectCurrentInput() {
-			if (inputsPanel!=null) inputsPanel.setSelected(device.inputs.getCurrentInput());
-		}
-
-		public JTabbedPane createScenesInputsPanel() {
-			scenesPanel = new DsiPanel(true);
-			inputsPanel = new DsiPanel(false);
-			
-			JScrollPane scenesScrollPane = new JScrollPane(scenesPanel);
-			JScrollPane inputsScrollPane = new JScrollPane(inputsPanel);
-			scenesScrollPane.setMinimumSize(new Dimension(150,20));
-			inputsScrollPane.setMinimumSize(new Dimension(150,20));
-			
-			JTabbedPane scenesInputsPanel = new JTabbedPane();
-			scenesInputsPanel.add("Scenes", scenesScrollPane);
-			scenesInputsPanel.add("Inputs", inputsScrollPane);
-			
-			return scenesInputsPanel;
+		@Override public EnumSet<UpdateWish> getUpdateWishes(UpdateReason reason) {
+			return EnumSet.of( UpdateWish.BasicStatus );
 		}
 
 		public JPanel createVolumeControlPanel(int width) {
@@ -565,20 +653,77 @@ public class YamahaControl {
 			private synchronized void decCounter() { --counter; }
 			private synchronized void incCounter() { ++counter; }
 		}
-
-		public void createOnOffBtn() {
-			onoffBtn = createButton("", e->toggleOnOff(), false);
-			setOnOffButton(false);
+	}
+	
+	private static class ScenesAndInputs implements GuiRegion {
+		
+		private Device device;
+		private DsiPanel scenesPanel;
+		private DsiPanel inputsPanel;
+		
+		ScenesAndInputs() {
+			device = null;
+			scenesPanel = null;
+			inputsPanel = null;
 		}
 
-		private void setOnOffButton(Boolean isOn) {
-			onoffBtn.setIcon(smallImages.get(isOn==null?SmallImages.IconUnknown:isOn?SmallImages.IconOn:SmallImages.IconOff));
-			onoffBtn.setText(isOn==null?"??":isOn?"On":"Off");
+		@Override public void setEnabledGUI(boolean enabled) {
+			scenesPanel.setEnabled(enabled);
+			inputsPanel.setEnabled(enabled);
 		}
 
-		private void toggleOnOff() {
-			if (device!=null) device.power.setOn(!device.power.isOn());
-			setOnOffButton(device==null?false:device.power.isOn());
+		@Override
+		public EnumSet<UpdateWish> getUpdateWishes(UpdateReason reason) {
+			switch (reason) {
+			case Initial   : return EnumSet.of( UpdateWish.Scenes, UpdateWish.Inputs );
+			case Frequently: return EnumSet.noneOf(UpdateWish.class);
+			}
+			return null;
+		}
+
+		@Override
+		public void initGUIafterConnect(Device _device) {
+			this.device = _device;
+			setEnabledGUI(device!=null);
+			if (device!=null) {
+				scenesPanel.createButtons(device.inputs.getScenes(),this::setScene,dsi->dsi!=null && "W".equals(dsi.rw));
+				inputsPanel.createButtons(device.inputs.getInputs(),this::setInput,null);
+			}
+			frequentlyUpdate();
+		}
+
+		@Override
+		public void frequentlyUpdate() {
+			selectCurrentInput();
+		}
+
+		private void setScene(Device.Inputs.DeviceSceneInput dsi) {
+			if (device==null) return;
+			device.inputs.setScene(dsi);
+		}
+
+		private void setInput(Device.Inputs.DeviceSceneInput dsi) {
+			if (device==null) return;
+			device.inputs.setInput(dsi);
+		}
+
+		private void selectCurrentInput() {
+			if (inputsPanel!=null) inputsPanel.setSelected(device.inputs.getCurrentInput());
+		}
+
+		public void createPanels(JTabbedPane tabbedPane) {
+			scenesPanel = new DsiPanel("Scene", true);
+			inputsPanel = new DsiPanel("Input", false);
+			
+			JScrollPane scenesScrollPane = new JScrollPane(scenesPanel);
+			JScrollPane inputsScrollPane = new JScrollPane(inputsPanel);
+			scenesScrollPane.setMinimumSize(new Dimension(150,20));
+			inputsScrollPane.setMinimumSize(new Dimension(150,20));
+			scenesScrollPane.setBorder(BorderFactory.createEmptyBorder(3,3,3,3));
+			inputsScrollPane.setBorder(BorderFactory.createEmptyBorder(3,3,3,3));
+			
+			tabbedPane.add("Scenes", scenesScrollPane);
+			tabbedPane.add("Inputs", inputsScrollPane);
 		}
 		
 		private class DsiPanel extends GridBagPanel {
@@ -588,9 +733,11 @@ public class YamahaControl {
 			private HashMap<Device.Inputs.DeviceSceneInput,JToggleButton> buttons;
 
 			private boolean createNormalButtons;
+			private String itemName;
 			
-			DsiPanel(boolean createNormalButtons) {
+			DsiPanel(String itemName, boolean createNormalButtons) {
 				super();
+				this.itemName = itemName;
 				this.createNormalButtons = createNormalButtons;
 				bg = null;
 				buttons = null;
@@ -612,6 +759,9 @@ public class YamahaControl {
 					buttons = new HashMap<>();
 				}
 				
+				add(new JLabel(itemName,JLabel.CENTER),0,1,GridBagConstraints.HORIZONTAL);
+				add(new JLabel("ID",JLabel.CENTER),1,GridBagConstraints.REMAINDER,GridBagConstraints.HORIZONTAL);
+				
 				for (Device.Inputs.DeviceSceneInput dsi:dsiArr) {
 					if (filter!=null && !filter.test(dsi)) continue;
 					
@@ -626,8 +776,11 @@ public class YamahaControl {
 						button = tButton;
 					}
 					
+					JTextField textField = new JTextField("["+dsi.ID+"]");
+					textField.setEditable(false);
+					
 					add(button,0,1,GridBagConstraints.HORIZONTAL);
-					add(new JLabel("["+dsi.ID+"]",JLabel.CENTER),1,GridBagConstraints.REMAINDER,GridBagConstraints.BOTH);
+					add(textField,1,GridBagConstraints.REMAINDER,GridBagConstraints.BOTH);
 					//add(new JLabel(dsi.rw),0,GridBagConstraints.REMAINDER,GridBagConstraints.BOTH);
 				}
 				gbc.weighty=1;

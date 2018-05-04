@@ -7,7 +7,6 @@ import java.util.Vector;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 
-import net.schwarzbaer.java.tools.yamahacontrol.Device.Value.IPodMode;
 import net.schwarzbaer.java.tools.yamahacontrol.XML.TagList;
 import net.schwarzbaer.java.tools.yamahacontrol.YamahaControl.Log;
 
@@ -16,6 +15,7 @@ public final class Device {
 	String address;
 	Power  power;
 	Inputs inputs;
+	MainPlayCtrl mainPlayCtrl;
 	private BasicStatus basicStatus;
 	
 	NetRadio netRadio;
@@ -30,6 +30,7 @@ public final class Device {
 		this.basicStatus = null;
 		this.power    = new Power   (this.address);
 		this.inputs   = new Inputs  (this);
+		this.mainPlayCtrl = new MainPlayCtrl(this.address);
 		
 		this.netRadio = new NetRadio(this.address);
 		this.tuner    = new Tuner   (this.address);
@@ -161,19 +162,49 @@ public final class Device {
 		public void setOn(boolean isOn) {
 			// System,Power_Control,Power = On
 			// System,Power_Control,Power = Standby
-			int rc = Ctrl.sendPutCommand(address,KnownCommand.General.GetNSetSystemPower,isOn?"On":"Standby");
+			int rc = Ctrl.sendPutCommand(address,KnownCommand.General.GetNSetSystemPower,isOn?Value.PowerState.On.getLabel():Value.PowerState.Standby.getLabel());
 			if (rc!=Ctrl.RC_OK) return;
 			askOn();
 		}
 
 		private void askOn() {
 			String value = Ctrl.sendGetCommand_String(address,KnownCommand.General.GetNSetSystemPower);
-			if ("On".equals(value)) { isOn = true; return; }
-			if ("Standby".equals(value)) { isOn = false; return; }
+			if (Value.PowerState.On     .getLabel().equals(value)) { isOn = true;  return; }
+			if (Value.PowerState.Standby.getLabel().equals(value)) { isOn = false; return; }
 			isOn = null;
 		}
 	}
 	
+	static class MainPlayCtrl {
+	
+		private String address;
+	
+		public MainPlayCtrl(String address) {
+			this.address = address;
+		}
+
+		public void setPlayback(Value.PlayPauseStop play) {
+			int rc = Ctrl.sendPutCommand(address,KnownCommand.MainZone.Playback,play.getLabel());
+			if (rc!=Ctrl.RC_OK) Log.warning(getClass(), "setPlayback( %s ) -> RC: %d", play.getLabel(), rc);
+		}
+
+		public void setPlayback(Value.SkipFwdRev skip) {
+			int rc = Ctrl.sendPutCommand(address,KnownCommand.MainZone.Playback,skip.getLabel());
+			if (rc!=Ctrl.RC_OK) Log.warning(getClass(), "setPlayback( %s ) -> RC: %d", skip.getLabel(), rc);
+		}
+
+		public void setCursorSelect(Value.CursorSelectExt cursor) {
+			int rc = Ctrl.sendPutCommand(address,KnownCommand.MainZone.Cursor,cursor.getLabel());
+			if (rc!=Ctrl.RC_OK) Log.warning(getClass(), "setCursorSelect( %s ) -> RC: %d", cursor.getLabel(), rc);
+		}
+
+		public void setMenuControl(Value.MainZoneMenuControl menuCtrl) {
+			int rc = Ctrl.sendPutCommand(address,KnownCommand.MainZone.MenuControl,menuCtrl.getLabel());
+			if (rc!=Ctrl.RC_OK) Log.warning(getClass(), "setMenuControl( %s ) -> RC: %d", menuCtrl.getLabel(), rc);
+		}
+	
+	}
+
 	static class Inputs {
 
 		private Device device;
@@ -274,6 +305,17 @@ public final class Device {
 			
 			final private TagList tagList;
 			General(String tagListStr) { tagList = new TagList(tagListStr); }
+			@Override public TagList getTagList() { return tagList; }
+		}
+		
+		enum MainZone implements KnownCommand {
+			Playback   ("Main_Zone,Play_Control,Playback"      ), // P24: Main_Zone,Play_Control,Playback
+			Cursor     ("Main_Zone,Cursor_Control,Cursor"      ), // P18: Main_Zone,Cursor_Control,Cursor
+			MenuControl("Main_Zone,Cursor_Control,Menu_Control"), // P19: Main_Zone,Cursor_Control,Menu_Control
+			;
+			
+			final private TagList tagList;
+			MainZone(String tagListStr) { tagList = new TagList(tagListStr); }
 			@Override public TagList getTagList() { return tagList; }
 		}
 		
@@ -455,6 +497,14 @@ public final class Device {
 			@Override public String getLabel() { return label; }
 		}
 		
+		public enum MainZoneMenuControl implements Value {
+			Setup("On Screen"),Option,Display;
+			private String label;
+			MainZoneMenuControl(String label) { this.label = label; }
+			MainZoneMenuControl() { this.label = toString(); }
+			@Override public String getLabel() { return label; }
+		}
+		
 		public enum CursorSelect implements Value {
 			// [Cursor_Up]        PUT[P4]     NET_RADIO,List_Control,Cursor = Up
 			// [Cursor_Down]        PUT[P4]     NET_RADIO,List_Control,Cursor = Down
@@ -465,6 +515,21 @@ public final class Device {
 			private String label;
 			CursorSelect(String label) { this.label = label; }
 			CursorSelect() { this.label = toString(); }
+			@Override public String getLabel() { return label; }
+		}
+		
+		public enum CursorSelectExt implements Value {
+			// [Cursor_Up]    Layout:5     PUT[P18]     Main_Zone,Cursor_Control,Cursor = Up
+			// [Cursor_Down]    Layout:9     PUT[P18]     Main_Zone,Cursor_Control,Cursor = Down
+			// [Cursor_Left]    Layout:6     PUT[P18]     Main_Zone,Cursor_Control,Cursor = Left
+			// [Cursor_Right]    Layout:8     PUT[P18]     Main_Zone,Cursor_Control,Cursor = Right
+			// [Cursor_Return]    Layout:10     PUT[P18]     Main_Zone,Cursor_Control,Cursor = Return
+			// [Cursor_Sel]    Layout:7     PUT[P18]     Main_Zone,Cursor_Control,Cursor = Sel
+			// [Cursor_Home]        PUT[P18]     Main_Zone,Cursor_Control,Cursor = Return to Home
+			Up,Down,Left,Right,Return,Sel,Home("Return to Home");
+			private String label;
+			CursorSelectExt(String label) { this.label = label; }
+			CursorSelectExt() { this.label = toString(); }
 			@Override public String getLabel() { return label; }
 		}
 		
@@ -544,7 +609,7 @@ public final class Device {
 	
 	static class IPodUSB {
 		
-		IPodMode mode;
+		Value.IPodMode mode;
 		ListInfo listInfo;
 		PlayInfoExt<Value.ShuffleIPod> playInfo;
 		private String address;
@@ -559,7 +624,7 @@ public final class Device {
 			String str = Ctrl.sendGetCommand_String(address,KnownCommand.Special.SetIPodUSBMode);
 			this.mode = null;
 			if (str!=null)
-				for (IPodMode mode:Value.IPodMode.values())
+				for (Value.IPodMode mode:Value.IPodMode.values())
 					if (str.equals(mode.getLabel())) {
 						this.mode = mode;
 						break;
@@ -567,7 +632,7 @@ public final class Device {
 			//Log.info(getClass(), "update mode: %s", mode.getLabel());
 		}
 
-		public void sendSetMode(IPodMode mode) {
+		public void sendSetMode(Value.IPodMode mode) {
 			// Browse Mode   []        PUT[P10]     iPod_USB,Play_Control,iPod_Mode = Extended
 			/*int rc = */Ctrl.sendPutCommand(address,KnownCommand.Special.SetIPodUSBMode, mode.getLabel());
 			//Log.info(getClass(), "set mode: %s -> RC: %d", mode.getLabel(), rc);

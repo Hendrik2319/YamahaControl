@@ -622,7 +622,7 @@ public class CommandList {
 				});
 			}
 			
-			public static HashMap<String, TagList> getCmdListFromParent(ParsedTreeNode_Exp parent) {
+			public static BaseCommandList getCmdListFromParent(ParsedTreeNode_Exp parent) {
 				if (parent instanceof MenuNode) {
 					MenuNode menu = ((MenuNode)parent);
 					if (menu.cmdListNode!=null) return menu.cmdListNode.commands;
@@ -659,10 +659,29 @@ public class CommandList {
 				return str;
 			}
 		}
+		
+		private static class BaseCommandList {
+			private HashMap<String,BaseCommandDefineNode> commandNodes;
+			
+			BaseCommandList() {
+				commandNodes = new HashMap<>();
+			}
 
+			public void put(String cmdID, BaseCommandDefineNode cmdNode) {
+				commandNodes.put(cmdID, cmdNode);
+			}
+
+			public TagList get(String cmdID) {
+				BaseCommandDefineNode cmdNode = commandNodes.get(cmdID);
+				if (cmdNode==null) return null;
+				cmdNode.used = true;
+				return cmdNode.tagList;
+			}
+		}
+		
 		private static class BaseCommandListNode extends ElementNode {
 			
-			private HashMap<String,TagList> commands;
+			private BaseCommandList commands;
 			
 			public BaseCommandListNode(ParsedTreeNode_Exp parent, Element node) {
 				super(parent,node,ParsedTreeIcon.Command);
@@ -676,7 +695,7 @@ public class CommandList {
 			@Override
 			protected void createChildren() {
 				children = new Vector<>();
-				commands = new HashMap<>();
+				commands = new BaseCommandList();
 				NodeList childNodes = node.getChildNodes();
 				for (int i=0; i<childNodes.getLength(); ++i) {
 					Node child = childNodes.item(i);
@@ -694,7 +713,7 @@ public class CommandList {
 					}
 					
 					BaseCommandDefineNode cmdNode = new BaseCommandDefineNode(this, childElement);
-					commands.put(cmdNode.id,cmdNode.tagList);
+					commands.put(cmdNode.id,cmdNode);
 					children.add(cmdNode);
 				}
 			}
@@ -708,6 +727,7 @@ public class CommandList {
 
 		private static class BaseCommandDefineNode extends ElementNode implements CallableGetCommandNode {
 		
+			@SuppressWarnings("unused") public boolean used;
 			public String id;
 			public TagList tagList;
 
@@ -715,6 +735,8 @@ public class CommandList {
 				super(parent,node, ParsedTreeIcon.Command_GET);
 				this.id = null;
 				this.tagList = null;
+				this.used = false;
+				
 				// <Define ID="P7">command</Define>
 				parseAttributes((attrName, attrValue) -> { if ("ID".equals(attrName)) { id=attrValue; return true; } return false; });
 				children = new Vector<>();
@@ -732,7 +754,7 @@ public class CommandList {
 				tagList = new TagList(tagListStr);
 			}
 			
-			@Override public String toString() { return String.format("%s: %s", id, tagList); }
+			@Override public String toString() { return String.format("%s%s: %s", ""/*used?"":"[unused] "*/, id, tagList); }
 			@Override protected void createChildren() { throw new UnsupportedOperationException("Calling CommandNode.createChildren() is not allowed."); }
 
 			@Override
@@ -783,7 +805,7 @@ public class CommandList {
 				
 				children = new Vector<>();
 				
-				HashMap<String, TagList> cmdList = MenuNode.getCmdListFromParent(parent);
+				BaseCommandList cmdList = MenuNode.getCmdListFromParent(parent);
 				if (cmdList==null) reportError("Can't find command list for \"Put_1\" node.");
 				if (cmdID == null) reportError("Found \"Put_1\" node with no ID.");
 				
@@ -943,7 +965,7 @@ public class CommandList {
 					return true;
 				});
 				
-				HashMap<String, TagList> cmdList = MenuNode.getCmdListFromParent(parent);
+				BaseCommandList cmdList = MenuNode.getCmdListFromParent(parent);
 				if (cmdList==null) { reportError("Can't find command list for \"Put_2\" node."); error=true; }
 				if (cmd.cmdID==null) { reportError("Found \"Cmd\" child of \"Put_2\" node with no ID."); error=true; }
 				
@@ -1137,7 +1159,7 @@ public class CommandList {
 					error=true; return null;
 				}
 				
-				HashMap<String, TagList> cmdList = MenuNode.getCmdListFromParent(parent);
+				BaseCommandList cmdList = MenuNode.getCmdListFromParent(parent);
 				if (cmdList==null) reportError("Can't find command list for command node.");
 				if (value.cmdID==null) reportError("Found \"Indirect\" value of param node with no ID.");
 				
@@ -1347,8 +1369,8 @@ public class CommandList {
 			}
 			protected PlainCommandNode(ParsedTreeNode_Exp parent, ParsedTreeIcon icon, String label, String tagList                           ) { this(parent, icon, label, tagList, null, null , false); }
 			protected PlainCommandNode(ParsedTreeNode_Exp parent, ParsedTreeIcon icon, String label, String tagList, String conn, String value) { this(parent, icon, label, tagList, conn, value, true ); }
-			public PlainCommandNode(ParsedTreeNode_Exp parent, String label, String tagList                           ) { this(parent, ParsedTreeIcon.Command, label, tagList); }
-			public PlainCommandNode(ParsedTreeNode_Exp parent, String label, String tagList, String conn, String value) { this(parent, ParsedTreeIcon.Command, label, tagList, conn, value); }
+			public    PlainCommandNode(ParsedTreeNode_Exp parent,                      String label, String tagList                           ) { this(parent, ParsedTreeIcon.Command, label, tagList); }
+			public    PlainCommandNode(ParsedTreeNode_Exp parent,                      String label, String tagList, String conn, String value) { this(parent, ParsedTreeIcon.Command, label, tagList, conn, value); }
 			
 			public void add(ParsedTreeNode_Exp child) { children.add(child); }
 			@Override public String toString() { return label+":    "+tagList+(withValue?("   "+conn+"   "+value):""); }
