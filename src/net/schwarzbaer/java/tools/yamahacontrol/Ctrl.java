@@ -147,18 +147,18 @@ final class Ctrl {
 	
 	static int sendPutCommand(String address, Device.KnownCommand knownCommand, String value) {
 		
-		String command = buildPutCommand(knownCommand.tagList, value);
+		String command = buildPutCommand(knownCommand.getTagList(), value);
 		sendCommand_controlled(address, command);
 		return lastRC;
 	}
 	
 	public static String sendGetCommand_String(String address, Device.KnownCommand knownCommand) {
 		
-		String command = buildGetCommand(knownCommand.tagList);
+		String command = buildGetCommand(knownCommand.getTagList());
 		Document document = sendCommand_controlled(address, command);
 		if (lastRC!=RC_OK) return null;
 		
-		Vector<Node> nodes = XML.getNodes(document, knownCommand.tagList.addBefore("YAMAHA_AV"));
+		Vector<Node> nodes = XML.getNodes(document, knownCommand.getTagList().addBefore("YAMAHA_AV"));
 		if (nodes.isEmpty()) return null;
 		
 		return XML.getSubValue(nodes.get(0));
@@ -166,7 +166,7 @@ final class Ctrl {
 	
 	public static Node sendGetCommand_Node(String address, Device.KnownCommand knownCommand) {
 		
-		String command = buildGetCommand(knownCommand.tagList);
+		String command = buildGetCommand(knownCommand.getTagList());
 		Document document = sendCommand_controlled(address, command);
 		if (lastRC!=RC_OK) return null;
 		if (document==null) return null;
@@ -174,7 +174,7 @@ final class Ctrl {
 //		StringBuilder sb = new StringBuilder();
 //		XML.showXMLformated(sb,"",document);
 		
-		Vector<Node> nodes = XML.getNodes(document, knownCommand.tagList.addBefore("YAMAHA_AV"));
+		Vector<Node> nodes = XML.getNodes(document, knownCommand.getTagList().addBefore("YAMAHA_AV"));
 		if (nodes.isEmpty()) return null;
 		
 		return nodes.get(0);

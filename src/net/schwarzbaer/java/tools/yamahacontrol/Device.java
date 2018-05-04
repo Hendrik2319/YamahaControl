@@ -7,6 +7,7 @@ import java.util.Vector;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 
+import net.schwarzbaer.java.tools.yamahacontrol.Device.Value.IPodMode;
 import net.schwarzbaer.java.tools.yamahacontrol.XML.TagList;
 import net.schwarzbaer.java.tools.yamahacontrol.YamahaControl.Log;
 
@@ -41,7 +42,7 @@ public final class Device {
 	enum UpdateWish {
 		Power, BasicStatus, Scenes, Inputs, TunerConfig, AirPlayConfig,
 		NetRadioPlayInfo, NetRadioListInfo, USBListInfo, USBPlayInfo,
-		DLNAPlayInfo, DLNAListInfo, IPodUSBListInfo, IPodUSBPlayInfo
+		DLNAPlayInfo, DLNAListInfo, IPodUSBListInfo, IPodUSBPlayInfo, IPodUSBMode
 	}
 	
 	public void update(EnumSet<UpdateWish> updateWishes) {
@@ -49,19 +50,20 @@ public final class Device {
 		updateWishes.forEach(uw->{
 			switch (uw) {
 			case Power           : power.askOn(); break;
-			case Inputs          : inputs.inputs     = inputs.getSceneInput(KnownCommand.GetInputItems); break;
-			case Scenes          : inputs.scenes     = inputs.getSceneInput(KnownCommand.GetSceneItems); break;
-			case BasicStatus     : basicStatus       = BasicStatus      .parse(Ctrl.sendGetCommand_Node(address,KnownCommand.GetBasicStatus  )); break;
-			case TunerConfig     : tuner.config      = Tuner   .Config  .parse(Ctrl.sendGetCommand_Node(address,KnownCommand.GetTunerConfig  )); break;
-			case AirPlayConfig   : airPlay.config    = AirPlay .Config  .parse(Ctrl.sendGetCommand_Node(address,KnownCommand.GetAirPlayConfig)); break;
-			case NetRadioListInfo: netRadio.listInfo.parse(Ctrl.sendGetCommand_Node(address,KnownCommand.GetNetRadioListInfo)); break;
-			case NetRadioPlayInfo: netRadio.playInfo.parse(Ctrl.sendGetCommand_Node(address,KnownCommand.GetNetRadioPlayInfo)); break;
-			case USBListInfo     : usb     .listInfo.parse(Ctrl.sendGetCommand_Node(address,KnownCommand.GetUSBListInfo     )); break;
-			case USBPlayInfo     : usb     .playInfo.parse(Ctrl.sendGetCommand_Node(address,KnownCommand.GetUSBPlayInfo     )); break;
-			case DLNAListInfo    : dlna    .listInfo.parse(Ctrl.sendGetCommand_Node(address,KnownCommand.GetDLNAListInfo    )); break;
-			case DLNAPlayInfo    : dlna    .playInfo.parse(Ctrl.sendGetCommand_Node(address,KnownCommand.GetDLNAPlayInfo    )); break;
-			case IPodUSBListInfo : iPodUSB .listInfo.parse(Ctrl.sendGetCommand_Node(address,KnownCommand.GetIPodUSBListInfo )); break;
-			case IPodUSBPlayInfo : iPodUSB .playInfo.parse(Ctrl.sendGetCommand_Node(address,KnownCommand.GetIPodUSBPlayInfo )); break;
+			case Inputs          : inputs.inputs     = inputs.getSceneInput(KnownCommand.General.GetInputItems); break;
+			case Scenes          : inputs.scenes     = inputs.getSceneInput(KnownCommand.General.GetSceneItems); break;
+			case BasicStatus     : basicStatus       = BasicStatus   .parse(Ctrl.sendGetCommand_Node(address,KnownCommand.General.GetBasicStatus  )); break;
+			case TunerConfig     : tuner  .config    = Tuner  .Config.parse(Ctrl.sendGetCommand_Node(address,KnownCommand.Config.GetTunerConfig  )); break;
+			case AirPlayConfig   : airPlay.config    = AirPlay.Config.parse(Ctrl.sendGetCommand_Node(address,KnownCommand.Config.GetAirPlayConfig)); break;
+			case NetRadioListInfo: netRadio.listInfo.update(); break;
+			case NetRadioPlayInfo: netRadio.playInfo.update(); break;
+			case USBListInfo     : usb     .listInfo.update(); break;
+			case USBPlayInfo     : usb     .playInfo.update(); break;
+			case DLNAListInfo    : dlna    .listInfo.update(); break;
+			case DLNAPlayInfo    : dlna    .playInfo.update(); break;
+			case IPodUSBListInfo : iPodUSB .listInfo.update(); break;
+			case IPodUSBPlayInfo : iPodUSB .playInfo.update(); break;
+			case IPodUSBMode     : iPodUSB.updateMode(); break;
 			}
 		});
 	}
@@ -136,9 +138,9 @@ public final class Device {
 			// Value 2:   Unit = "dB"
 			String xmlStr = NumberWithUnit.createXML(newValue/2.0,1,"dB");
 			basicStatus.volume.number = newValue/2.0f;
-			int rc = Ctrl.sendPutCommand(address,KnownCommand.SetVolume,xmlStr);
+			int rc = Ctrl.sendPutCommand(address,KnownCommand.General.SetVolume,xmlStr);
 			if (rc!=Ctrl.RC_OK) {
-				Log.error(getClass(), "setVolume(%f)-> %s %s -> RC:%d", value, KnownCommand.SetVolume.tagList, xmlStr, rc);
+				Log.error(getClass(), "setVolume(%f)-> %s %s -> RC:%d", value, KnownCommand.General.SetVolume.tagList, xmlStr, rc);
 			}
 			
 		}
@@ -159,13 +161,13 @@ public final class Device {
 		public void setOn(boolean isOn) {
 			// System,Power_Control,Power = On
 			// System,Power_Control,Power = Standby
-			int rc = Ctrl.sendPutCommand(address,KnownCommand.GetNSetSystemPower,isOn?"On":"Standby");
+			int rc = Ctrl.sendPutCommand(address,KnownCommand.General.GetNSetSystemPower,isOn?"On":"Standby");
 			if (rc!=Ctrl.RC_OK) return;
 			askOn();
 		}
 
 		private void askOn() {
-			String value = Ctrl.sendGetCommand_String(address,KnownCommand.GetNSetSystemPower);
+			String value = Ctrl.sendGetCommand_String(address,KnownCommand.General.GetNSetSystemPower);
 			if ("On".equals(value)) { isOn = true; return; }
 			if ("Standby".equals(value)) { isOn = false; return; }
 			isOn = null;
@@ -205,12 +207,12 @@ public final class Device {
 
 		public void setScene(DeviceSceneInput dsi) {
 			// PUT[P6]:    Main_Zone,Scene,Scene_Sel   =   Values [GET[G4]:Main_Zone,Scene,Scene_Sel_Item]
-			Ctrl.sendPutCommand(device.address,KnownCommand.SetCurrentScene,dsi.ID);
+			Ctrl.sendPutCommand(device.address,KnownCommand.General.SetCurrentScene,dsi.ID);
 		}
 
 		public void setInput(DeviceSceneInput dsi) {
 			// PUT[P4]:    Main_Zone,Input,Input_Sel   =   Values [GET[G2]:Main_Zone,Input,Input_Sel_Item]
-			Ctrl.sendPutCommand(device.address,KnownCommand.SetCurrentInput,dsi.ID);
+			Ctrl.sendPutCommand(device.address,KnownCommand.General.SetCurrentInput,dsi.ID);
 		}
 
 		public DeviceSceneInput[] getInputs() { return inputs; }
@@ -257,84 +259,158 @@ public final class Device {
 		}
 	}
 
-	enum KnownCommand {
-		GetSceneItems("Main_Zone,Scene,Scene_Sel_Item"), // G4: Main_Zone,Scene,Scene_Sel_Item
-		GetInputItems("Main_Zone,Input,Input_Sel_Item"), // G2: Main_Zone,Input,Input_Sel_Item
-		GetNSetSystemPower("System,Power_Control,Power"),
-		SetCurrentScene("Main_Zone,Scene,Scene_Sel"),
-		SetCurrentInput("Main_Zone,Input,Input_Sel"),
-		GetBasicStatus("Main_Zone,Basic_Status"),
-		SetVolume("Main_Zone,Volume,Lvl"),
+	static interface KnownCommand {
+		public TagList getTagList();
 		
-		GetTunerConfig   (    "Tuner,Config"),
-		GetAirPlayConfig (  "AirPlay,Config"),
-		GetSpotifyConfig (  "Spotify,Config"), 
-		GetIPodUSBConfig ( "iPod_USB,Config"),
-		GetUSBConfig     (      "USB,Config"),
-		GetNetRadioConfig("NET_RADIO,Config"),
-		GetServerConfig  (   "SERVER,Config"),
+		enum General implements KnownCommand {
+			GetSceneItems("Main_Zone,Scene,Scene_Sel_Item"), // G4: Main_Zone,Scene,Scene_Sel_Item
+			GetInputItems("Main_Zone,Input,Input_Sel_Item"), // G2: Main_Zone,Input,Input_Sel_Item
+			GetNSetSystemPower("System,Power_Control,Power"),
+			SetCurrentScene("Main_Zone,Scene,Scene_Sel"),
+			SetCurrentInput("Main_Zone,Input,Input_Sel"),
+			GetBasicStatus("Main_Zone,Basic_Status"),
+			SetVolume("Main_Zone,Volume,Lvl"),
+			;
+			
+			final private TagList tagList;
+			General(String tagListStr) { tagList = new TagList(tagListStr); }
+			@Override public TagList getTagList() { return tagList; }
+		}
 		
+		enum Config implements KnownCommand {
+			GetTunerConfig   (    "Tuner,Config"),
+			GetAirPlayConfig (  "AirPlay,Config"),
+			GetSpotifyConfig (  "Spotify,Config"), 
+			GetIPodUSBConfig ( "iPod_USB,Config"),
+			GetUSBConfig     (      "USB,Config"),
+			GetNetRadioConfig("NET_RADIO,Config"),
+			GetServerConfig  (   "SERVER,Config"),
+			;
+			
+			final private TagList tagList;
+			Config (String tagListStr) { tagList = new TagList(tagListStr); }
+			@Override public TagList getTagList() { return tagList; }
+		}
 		
-		GetNetRadioListInfo("NET_RADIO,List_Info"), // G2: NET_RADIO,List_Info
-		GetNetRadioPlayInfo("NET_RADIO,Play_Info"), // G1: NET_RADIO,Play_Info
+		enum GetListInfo implements KnownCommand {
+			NetRadio("NET_RADIO,List_Info"), // G2: NET_RADIO,List_Info
+			USB     (      "USB,List_Info"), // G2: USB,List_Info
+			DLNA    (   "SERVER,List_Info"), // G2: SERVER,List_Info
+			IPodUSB ( "iPod_USB,List_Info"), // G2: iPod_USB,List_Info
+			;
+			
+			final private TagList tagList;
+			GetListInfo (String tagListStr) { tagList = new TagList(tagListStr); }
+			@Override public TagList getTagList() { return tagList; }
+		}
 		
-		SetNetRadioDirectListSel("NET_RADIO,List_Control,Direct_Sel"),
-		SetNetRadioCursorListSel("NET_RADIO,List_Control,Cursor"    ),
-		SetNetRadioPageListSel  ("NET_RADIO,List_Control,Page"      ),
-		SetNetRadioJumpToLine   ("NET_RADIO,List_Control,Jump_Line" ), // P3: NET_RADIO,List_Control,Jump_Line 
+		enum GetPlayInfo implements KnownCommand {
+			NetRadio("NET_RADIO,Play_Info"), // G1: NET_RADIO,Play_Info
+			USB     (      "USB,Play_Info"), // G1: USB,Play_Info
+			DLNA    (   "SERVER,Play_Info"), // G1: SERVER,Play_Info
+			IPodUSB ( "iPod_USB,Play_Info"), // G1: iPod_USB,Play_Info
+			;
+			
+			final private TagList tagList;
+			GetPlayInfo (String tagListStr) { tagList = new TagList(tagListStr); }
+			@Override public TagList getTagList() { return tagList; }
+		}
 		
-		SetNetRadioPlayback     ("NET_RADIO,Play_Control,Playback"  ),
+		enum SetDirectSel implements KnownCommand {
+			NetRadio("NET_RADIO,List_Control,Direct_Sel"),
+			USB     (      "USB,List_Control,Direct_Sel"), // P5: USB,List_Control,Direct_Sel
+			DLNA    (   "SERVER,List_Control,Direct_Sel"), // P5: SERVER,List_Control,Direct_Sel
+			IPodUSB ( "iPod_USB,List_Control,Direct_Sel"), // P2: iPod_USB,List_Control,Direct_Sel
+			;
+			
+			final private TagList tagList;
+			SetDirectSel (String tagListStr) { tagList = new TagList(tagListStr); }
+			@Override public TagList getTagList() { return tagList; }
+		}
 		
+		enum SetCursorSel implements KnownCommand {
+			NetRadio("NET_RADIO,List_Control,Cursor"),
+			USB     (      "USB,List_Control,Cursor"), // P7: USB,List_Control,Cursor
+			DLNA    (   "SERVER,List_Control,Cursor"), // P7: SERVER,List_Control,Cursor
+			IPodUSB ( "iPod_USB,List_Control,Cursor"), // P5: iPod_USB,List_Control,Cursor
+			;
+			
+			final private TagList tagList;
+			SetCursorSel(String tagListStr) { tagList = new TagList(tagListStr); }
+			@Override public TagList getTagList() { return tagList; }
+		}
 		
-		GetUSBListInfo("USB,List_Info"), // G2: USB,List_Info
-		GetUSBPlayInfo("USB,Play_Info"), // G1: USB,Play_Info
+		enum SetPageSel implements KnownCommand {
+			NetRadio("NET_RADIO,List_Control,Page"),
+			USB     (      "USB,List_Control,Page"), // P8: USB,List_Control,Page
+			DLNA    (   "SERVER,List_Control,Page"), // P8: SERVER,List_Control,Page
+			IPodUSB ( "iPod_USB,List_Control,Page"), // P6: iPod_USB,List_Control,Page
+			;
+			
+			final private TagList tagList;
+			SetPageSel(String tagListStr) { tagList = new TagList(tagListStr); }
+			@Override public TagList getTagList() { return tagList; }
+		}
 		
-		SetUSBDirectListSel("USB,List_Control,Direct_Sel"       ), // P5: USB,List_Control,Direct_Sel
-		SetUSBCursorListSel("USB,List_Control,Cursor"           ), // P7: USB,List_Control,Cursor
-		SetUSBPageListSel  ("USB,List_Control,Page"             ), // P8: USB,List_Control,Page
-		SetUSBJumpToLine   ("USB,List_Control,Jump_Line"        ), // P6: USB,List_Control,Jump_Line
+		enum JumpToLine implements KnownCommand {
+			NetRadio("NET_RADIO,List_Control,Jump_Line"), // P3: NET_RADIO,List_Control,Jump_Line 
+			USB     (      "USB,List_Control,Jump_Line"), // P6: USB,List_Control,Jump_Line
+			DLNA    (   "SERVER,List_Control,Jump_Line"), // P6: SERVER,List_Control,Jump_Line
+			IPodUSB ( "iPod_USB,List_Control,Jump_Line"), // P4: iPod_USB,List_Control,Jump_Line
+			;
+			
+			final private TagList tagList;
+			JumpToLine(String tagListStr) { tagList = new TagList(tagListStr); }
+			@Override public TagList getTagList() { return tagList; }
+		}
 		
-		SetUSBPlayback     ("USB,Play_Control,Playback"         ), // P3: USB,Play_Control,Playback
-		SetUSBRepeat       ("USB,Play_Control,Play_Mode,Repeat" ), // P1: USB,Play_Control,Play_Mode,Repeat
-		SetUSBShuffle      ("USB,Play_Control,Play_Mode,Shuffle"), // P2: USB,Play_Control,Play_Mode,Shuffle
+		enum SetPlayback implements KnownCommand {
+			NetRadio("NET_RADIO,Play_Control,Playback"),
+			USB     (      "USB,Play_Control,Playback"), // P3: USB,Play_Control,Playback
+			DLNA    (   "SERVER,Play_Control,Playback"), // P3: SERVER,Play_Control,Playback
+			IPodUSB ( "iPod_USB,Play_Control,Playback"), // P1: iPod_USB,Play_Control,Playback
+			;
+			
+			final private TagList tagList;
+			SetPlayback(String tagListStr) { tagList = new TagList(tagListStr); }
+			@Override public TagList getTagList() { return tagList; }
+		}
 		
-		GetUSBPresets ("USB,Play_Control,Preset,Preset_Sel_Item"), // G4: USB,Play_Control,Preset,Preset_Sel_Item
-		SetUSBSelectPreset ("USB,Play_Control,Preset,Preset_Sel"), // P4: USB,Play_Control,Preset,Preset_Sel
+		enum SetRepeat implements KnownCommand {
+			USB    (     "USB,Play_Control,Play_Mode,Repeat"), // P1: USB,Play_Control,Play_Mode,Repeat
+			DLNA   (  "SERVER,Play_Control,Play_Mode,Repeat"), // P1: SERVER,Play_Control,Play_Mode,Repeat
+			IPodUSB("iPod_USB,Play_Control,Play_Mode,Repeat"), // P8: iPod_USB,Play_Control,Play_Mode,Repeat
+			;
+			
+			final private TagList tagList;
+			SetRepeat(String tagListStr) { tagList = new TagList(tagListStr); }
+			@Override public TagList getTagList() { return tagList; }
+		}
 		
+		enum SetShuffle implements KnownCommand {
+			USB    (     "USB,Play_Control,Play_Mode,Shuffle"), // P2: USB,Play_Control,Play_Mode,Shuffle
+			DLNA   (  "SERVER,Play_Control,Play_Mode,Shuffle"), // P2: SERVER,Play_Control,Play_Mode,Shuffle
+			IPodUSB("iPod_USB,Play_Control,Play_Mode,Shuffle"), // P9: iPod_USB,Play_Control,Play_Mode,Shuffle
+			;
+			
+			final private TagList tagList;
+			SetShuffle(String tagListStr) { tagList = new TagList(tagListStr); }
+			@Override public TagList getTagList() { return tagList; }
+		}
 		
-		GetDLNAListInfo("SERVER,List_Info"), // G2: SERVER,List_Info
-		GetDLNAPlayInfo("SERVER,Play_Info"), // G1: SERVER,Play_Info
+		enum Special implements KnownCommand {
+			GetUSBPresets ("USB,Play_Control,Preset,Preset_Sel_Item"), // G4: USB,Play_Control,Preset,Preset_Sel_Item
+			SetUSBSelectPreset ("USB,Play_Control,Preset,Preset_Sel"), // P4: USB,Play_Control,Preset,Preset_Sel
+			GetDLNAPresets ("SERVER,Play_Control,Preset,Preset_Sel_Item"), // G4: SERVER,Play_Control,Preset,Preset_Sel_Item
+			SetDLNASelectPreset ("SERVER,Play_Control,Preset,Preset_Sel"), // P4: SERVER,Play_Control,Preset,Preset_Sel
+			SetIPodUSBMode("iPod_USB,Play_Control,iPod_Mode"), // P10: iPod_USB,Play_Control,iPod_Mode
+			;
+			
+			final private TagList tagList;
+			Special(String tagListStr) { tagList = new TagList(tagListStr); }
+			@Override public TagList getTagList() { return tagList; }
+		}
 		
-		SetDLNADirectListSel("SERVER,List_Control,Direct_Sel"), // P5: SERVER,List_Control,Direct_Sel
-		SetDLNACursorListSel("SERVER,List_Control,Cursor"    ), // P7: SERVER,List_Control,Cursor
-		SetDLNAPageListSel  ("SERVER,List_Control,Page"      ), // P8: SERVER,List_Control,Page
-		SetDLNAJumpToLine   ("SERVER,List_Control,Jump_Line" ), // P6: SERVER,List_Control,Jump_Line
-		
-		SetDLNAPlayback("SERVER,Play_Control,Playback"         ), // P3: SERVER,Play_Control,Playback
-		SetDLNARepeat  ("SERVER,Play_Control,Play_Mode,Repeat" ), // P1: SERVER,Play_Control,Play_Mode,Repeat
-		SetDLNAShuffle ("SERVER,Play_Control,Play_Mode,Shuffle"), // P2: SERVER,Play_Control,Play_Mode,Shuffle
-		
-		GetDLNAPresets ("SERVER,Play_Control,Preset,Preset_Sel_Item"), // G4: SERVER,Play_Control,Preset,Preset_Sel_Item
-		SetDLNASelectPreset ("SERVER,Play_Control,Preset,Preset_Sel"), // P4: SERVER,Play_Control,Preset,Preset_Sel
-		
-		
-		GetIPodUSBListInfo("iPod_USB,List_Info"), // G2: iPod_USB,List_Info
-		GetIPodUSBPlayInfo("iPod_USB,Play_Info"), // G1: iPod_USB,Play_Info
-		
-		SetIPodUSBDirectListSel("iPod_USB,List_Control,Direct_Sel"), // P2: iPod_USB,List_Control,Direct_Sel
-		SetIPodUSBCursorListSel("iPod_USB,List_Control,Cursor"    ), // P5: iPod_USB,List_Control,Cursor
-		SetIPodUSBPageListSel  ("iPod_USB,List_Control,Page"      ), // P6: iPod_USB,List_Control,Page
-		SetIPodUSBJumpToLine   ("iPod_USB,List_Control,Jump_Line" ), // P4: iPod_USB,List_Control,Jump_Line
-		
-		SetIPodUSBPlayback("iPod_USB,Play_Control,Playback"         ), // P1: iPod_USB,Play_Control,Playback
-		SetIPodUSBRepeat  ("iPod_USB,Play_Control,Play_Mode,Repeat" ), // P8: iPod_USB,Play_Control,Play_Mode,Repeat
-		SetIPodUSBShuffle ("iPod_USB,Play_Control,Play_Mode,Shuffle"), // P9: iPod_USB,Play_Control,Play_Mode,Shuffle
-		
-		SetIPodUSBMode("iPod_USB,Play_Control,iPod_Mode"), // P10: iPod_USB,Play_Control,iPod_Mode
-		;
-		
-		final TagList tagList;
-		KnownCommand(String tagListStr) { tagList = new TagList(tagListStr); }
 	}
 
 	static interface Value {
@@ -348,6 +424,7 @@ public final class Device {
 		public enum ReadyOrBusy      implements Value { Ready, Busy       ; @Override public String getLabel() { return toString(); }  }
 		public enum OffOneAll        implements Value { Off, One, All     ; @Override public String getLabel() { return toString(); }  } 
 		public enum ShuffleIPod      implements Value { Off, Songs, Albums; @Override public String getLabel() { return toString(); }  } 
+		public enum IPodMode         implements Value { Normal, Extended  ; @Override public String getLabel() { return toString(); }  }
 		
 		public enum SkipFwdRev implements Value {
 			SkipFwd("Skip Fwd"),SkipRev("Skip Rev");
@@ -438,8 +515,8 @@ public final class Device {
 		PlayInfo_NetRadio playInfo;
 		
 		public NetRadio(String address) {
-			this.listInfo = new ListInfo         (             address, KnownCommand.SetNetRadioDirectListSel, KnownCommand.SetNetRadioCursorListSel, KnownCommand.SetNetRadioPageListSel, KnownCommand.SetNetRadioJumpToLine);
-			this.playInfo = new PlayInfo_NetRadio("Net Radio", address, KnownCommand.SetNetRadioPlayback);
+			this.listInfo = new ListInfo         (             address, KnownCommand.GetListInfo.NetRadio, KnownCommand.SetDirectSel.NetRadio, KnownCommand.SetCursorSel.NetRadio, KnownCommand.SetPageSel.NetRadio, KnownCommand.JumpToLine.NetRadio);
+			this.playInfo = new PlayInfo_NetRadio("Net Radio", address, KnownCommand.GetPlayInfo.NetRadio, KnownCommand.SetPlayback.NetRadio);
 		}
 	}
 	
@@ -449,8 +526,8 @@ public final class Device {
 		PlayInfoExt<Value.OnOff> playInfo;
 		
 		public USB(String address) {
-			this.listInfo = new ListInfo           (       address, KnownCommand.SetUSBDirectListSel, KnownCommand.SetUSBCursorListSel, KnownCommand.SetUSBPageListSel, KnownCommand.SetUSBJumpToLine);
-			this.playInfo = new PlayInfoExt<>("USB", address, KnownCommand.SetUSBPlayback, KnownCommand.SetUSBRepeat, KnownCommand.SetUSBShuffle, Value.OnOff.values());
+			this.listInfo = new ListInfo     (       address, KnownCommand.GetListInfo.USB, KnownCommand.SetDirectSel.USB, KnownCommand.SetCursorSel.USB, KnownCommand.SetPageSel.USB, KnownCommand.JumpToLine.USB);
+			this.playInfo = new PlayInfoExt<>("USB", address, KnownCommand.GetPlayInfo.USB, KnownCommand.SetPlayback.USB, KnownCommand.SetRepeat.USB, KnownCommand.SetShuffle.USB, Value.OnOff.values());
 		}
 	}
 	
@@ -460,19 +537,40 @@ public final class Device {
 		PlayInfoExt<Value.OnOff> playInfo;
 		
 		public DLNA(String address) {
-			this.listInfo = new ListInfo           (        address, KnownCommand.SetDLNADirectListSel, KnownCommand.SetDLNACursorListSel, KnownCommand.SetDLNAPageListSel, KnownCommand.SetDLNAJumpToLine);
-			this.playInfo = new PlayInfoExt<>("DLNA", address, KnownCommand.SetDLNAPlayback, KnownCommand.SetDLNARepeat, KnownCommand.SetDLNAShuffle, Value.OnOff.values());
+			this.listInfo = new ListInfo     (        address, KnownCommand.GetListInfo.DLNA, KnownCommand.SetDirectSel.DLNA, KnownCommand.SetCursorSel.DLNA, KnownCommand.SetPageSel.DLNA, KnownCommand.JumpToLine.DLNA);
+			this.playInfo = new PlayInfoExt<>("DLNA", address, KnownCommand.GetPlayInfo.DLNA, KnownCommand.SetPlayback.DLNA, KnownCommand.SetRepeat.DLNA, KnownCommand.SetShuffle.DLNA, Value.OnOff.values());
 		}
 	}
 	
 	static class IPodUSB {
 		
+		IPodMode mode;
 		ListInfo listInfo;
 		PlayInfoExt<Value.ShuffleIPod> playInfo;
+		private String address;
 		
 		public IPodUSB(String address) {
-			this.listInfo = new ListInfo           (            address, KnownCommand.SetIPodUSBDirectListSel, KnownCommand.SetIPodUSBCursorListSel, KnownCommand.SetIPodUSBPageListSel, KnownCommand.SetIPodUSBJumpToLine);
-			this.playInfo = new PlayInfoExt<>("iPod USB", address, KnownCommand.SetIPodUSBPlayback, KnownCommand.SetIPodUSBRepeat, KnownCommand.SetIPodUSBShuffle, Value.ShuffleIPod.values());
+			this.address = address;
+			this.listInfo = new ListInfo     (            address, KnownCommand.GetListInfo.IPodUSB, KnownCommand.SetDirectSel.IPodUSB, KnownCommand.SetCursorSel.IPodUSB, KnownCommand.SetPageSel.IPodUSB, KnownCommand.JumpToLine.IPodUSB);
+			this.playInfo = new PlayInfoExt<>("iPod USB", address, KnownCommand.GetPlayInfo.IPodUSB, KnownCommand.SetPlayback.IPodUSB, KnownCommand.SetRepeat.IPodUSB, KnownCommand.SetShuffle.IPodUSB, Value.ShuffleIPod.values());
+		}
+
+		public void updateMode() {
+			String str = Ctrl.sendGetCommand_String(address,KnownCommand.Special.SetIPodUSBMode);
+			this.mode = null;
+			if (str!=null)
+				for (IPodMode mode:Value.IPodMode.values())
+					if (str.equals(mode.getLabel())) {
+						this.mode = mode;
+						break;
+					}
+			//Log.info(getClass(), "update mode: %s", mode.getLabel());
+		}
+
+		public void sendSetMode(IPodMode mode) {
+			// Browse Mode   []        PUT[P10]     iPod_USB,Play_Control,iPod_Mode = Extended
+			/*int rc = */Ctrl.sendPutCommand(address,KnownCommand.Special.SetIPodUSBMode, mode.getLabel());
+			//Log.info(getClass(), "set mode: %s -> RC: %d", mode.getLabel(), rc);
 		}
 	}
 
@@ -486,20 +584,22 @@ public final class Device {
 		Vector<Line> lines;
 		
 		private String address;
-		private KnownCommand setDirectListSel;
-		private KnownCommand setCursorListSel;
-		private KnownCommand setPageListSel;
-		private KnownCommand setJumpToLine;
+		private KnownCommand.GetListInfo   getListInfoCmd;
+		private KnownCommand.SetDirectSel  setDirectSelCmd;
+		private KnownCommand.SetCursorSel  setCursorSelCmd;
+		private KnownCommand.SetPageSel    setPageSelCmd;
+		private KnownCommand.JumpToLine    setJumpToLineCmd;
 	
-		public ListInfo(String address, KnownCommand setDirectListSel, KnownCommand setCursorListSel, KnownCommand setPageListSel, KnownCommand setJumpToLine) {
+		public ListInfo(String address, KnownCommand.GetListInfo getListInfoCmd, KnownCommand.SetDirectSel setDirectSelCmd, KnownCommand.SetCursorSel setCursorSelCmd, KnownCommand.SetPageSel setPageSelCmd, KnownCommand.JumpToLine setJumpToLineCmd) {
 			this.address = address;
-			this.setDirectListSel = setDirectListSel;
-			this.setCursorListSel = setCursorListSel;
-			this.setPageListSel = setPageListSel;
-			this.setJumpToLine = setJumpToLine;
+			this.getListInfoCmd   = getListInfoCmd;
+			this.setDirectSelCmd  = setDirectSelCmd;
+			this.setCursorSelCmd  = setCursorSelCmd;
+			this.setPageSelCmd    = setPageSelCmd;
+			this.setJumpToLineCmd = setJumpToLineCmd;
 			clearValues();
 		}
-	
+		
 		private void clearValues() {
 			this.menuStatus = null;
 			this.menuLayer = null;
@@ -510,35 +610,40 @@ public final class Device {
 		}
 		
 		public void sendDirectSelect(ListInfo.Line line) {
-			if (setDirectListSel==null) throw new UnsupportedOperationException("DirectSelect not supported");
+			if (setDirectSelCmd==null) throw new UnsupportedOperationException("DirectSelect not supported");
 			// PUT:    #######,List_Control,Direct_Sel   =   Label: Line_% (1..8)
-			Ctrl.sendPutCommand(address,setDirectListSel, "Line_"+line.index);
+			Ctrl.sendPutCommand(address,setDirectSelCmd, "Line_"+line.index);
 		}
 		
 		public void sendJumpToLine(int lineNumber) {
-			if (setJumpToLine==null) throw new UnsupportedOperationException("JumpToLine not supported");
+			if (setJumpToLineCmd==null) throw new UnsupportedOperationException("JumpToLine not supported");
 			// PUT:    #######,List_Control,Jump_Line   =   Number: 1..65536
-			Ctrl.sendPutCommand(address,setJumpToLine, ""+lineNumber);
+			Ctrl.sendPutCommand(address,setJumpToLineCmd, ""+lineNumber);
 		}
 		
 		public void sendCursorSelect(Value.CursorSelect cursorSelect) {
-			if (setCursorListSel==null) throw new UnsupportedOperationException("CursorSelect not supported");
+			if (setCursorSelCmd==null) throw new UnsupportedOperationException("CursorSelect not supported");
 			// [Cursor_Up]      #######,List_Control,Cursor = Up
 			// [Cursor_Down]    #######,List_Control,Cursor = Down
 			// [Cursor_Left]    #######,List_Control,Cursor = Return
 			// [Cursor_Sel]     #######,List_Control,Cursor = Sel
 			// [Cursor_Home]    #######,List_Control,Cursor = Return to Home
-			Ctrl.sendPutCommand(address,setCursorListSel, cursorSelect.getLabel());
+			Ctrl.sendPutCommand(address,setCursorSelCmd, cursorSelect.getLabel());
 		}
 		
 		public void sendPageSelect(Value.PageSelect pageSelect) {
-			if (setPageListSel==null) throw new UnsupportedOperationException("PageSelect not supported");
+			if (setPageSelCmd==null) throw new UnsupportedOperationException("PageSelect not supported");
 			// [Page_Up_1]      #######,List_Control,Page = Up
 			// [Page_Down_1]    #######,List_Control,Page = Down
-			Ctrl.sendPutCommand(address,setPageListSel, pageSelect.getLabel());
+			Ctrl.sendPutCommand(address,setPageSelCmd, pageSelect.getLabel());
 		}
 	
-		public void parse(Node node) {
+		
+		public void update() {
+			parse(Ctrl.sendGetCommand_Node(address,getListInfoCmd));
+		}
+	
+		private void parse(Node node) {
 			clearValues();
 			XML.forEachChild(node, child->{
 				switch (child.getNodeName()) {
@@ -601,7 +706,20 @@ public final class Device {
 			}}
 	}
 
-	static class PlayInfo {
+	static abstract class PlayInfo {
+		protected String name;
+		protected String address;
+		private KnownCommand.GetPlayInfo getPlayInfoCmd;
+		
+		protected PlayInfo(String name, String address, KnownCommand.GetPlayInfo getPlayInfoCmd) {
+			this.name = name;
+			this.address = address;
+			this.getPlayInfoCmd = getPlayInfoCmd;
+		}
+		public void update() {
+			parse(Ctrl.sendGetCommand_Node(address,getPlayInfoCmd));
+		}
+		protected abstract void parse(Node node);
 	}
 
 	static class PlayInfo_NetRadio extends PlayInfo {
@@ -614,13 +732,10 @@ public final class Device {
 		Integer albumCoverID;
 		String albumCoverURL;
 		Value.AlbumCoverFormat albumCoverFormat;
-		private String name;
-		private String address;
-		private KnownCommand setPlayback;
+		private KnownCommand.SetPlayback setPlayback;
 	
-		public PlayInfo_NetRadio(String name, String address, KnownCommand setPlayback) {
-			this.name = name;
-			this.address = address;
+		public PlayInfo_NetRadio(String name, String address, KnownCommand.GetPlayInfo getPlayInfoCmd, KnownCommand.SetPlayback setPlayback) {
+			super(name, address, getPlayInfoCmd);
 			this.setPlayback = setPlayback;
 			clearValues();
 		}
@@ -672,7 +787,8 @@ public final class Device {
 			return sb.toString();
 		}
 		
-		public void parse(Node node) {
+		@Override
+		protected void parse(Node node) {
 			clearValues();
 			XML.forEachChild(node, child->{
 				switch (child.getNodeName()) {
@@ -722,20 +838,17 @@ public final class Device {
 		Integer albumCoverID;
 		Value.AlbumCoverFormat albumCoverFormat;
 		
-		private String address;
-		private KnownCommand setPlayback;
-		private KnownCommand setRepeat;
-		private KnownCommand setShuffle;
-		private String name;
+		private KnownCommand setPlaybackCmd;
+		private KnownCommand setRepeatCmd;
+		private KnownCommand setShuffleCmd;
 		private Shuffle[] shuffleValues;
 	
-		public PlayInfoExt(String name, String address, KnownCommand setPlayback, KnownCommand setRepeat, KnownCommand setShuffle, Shuffle[] shuffleValues) {
-			this.name = name;
-			this.address = address;
-			this.setPlayback = setPlayback;
-			this.setRepeat = setRepeat;
-			this.setShuffle = setShuffle;
-			this.shuffleValues = shuffleValues;
+		public PlayInfoExt(String name, String address, KnownCommand.GetPlayInfo getPlayInfoCmd, KnownCommand setPlaybackCmd, KnownCommand setRepeatCmd, KnownCommand setShuffleCmd, Shuffle[] shuffleValues) {
+			super(name, address, getPlayInfoCmd);
+			this.setPlaybackCmd = setPlaybackCmd;
+			this.setRepeatCmd   = setRepeatCmd;
+			this.setShuffleCmd  = setShuffleCmd;
+			this.shuffleValues  = shuffleValues;
 			clearValues();
 		}
 	
@@ -789,27 +902,28 @@ public final class Device {
 			// [Play]      #######,Play_Control,Playback = Play
 			// [Pause]     #######,Play_Control,Playback = Pause
 			// [Stop]      #######,Play_Control,Playback = Stop
-			Ctrl.sendPutCommand(address,setPlayback, playState.getLabel());
+			Ctrl.sendPutCommand(address,setPlaybackCmd, playState.getLabel());
 		}
 		
 		public void sendPlayback(Value.SkipFwdRev skip) {
 			// [Plus_1]    #######,Play_Control,Playback = Skip Fwd
 			// [Minus_1]   #######,Play_Control,Playback = Skip Rev
-			Ctrl.sendPutCommand(address,setPlayback, skip.getLabel());
+			Ctrl.sendPutCommand(address,setPlaybackCmd, skip.getLabel());
 		}
 		
 		public void sendRepeat(Value.OffOneAll repeatState) {
 			// [Rep_Off]   #######,Play_Control,Play_Mode,Repeat = Off
 			// [Rep_1]     #######,Play_Control,Play_Mode,Repeat = One
 			// [Rep_2]     #######,Play_Control,Play_Mode,Repeat = All
-			Ctrl.sendPutCommand(address,setRepeat, repeatState.getLabel());
+			Ctrl.sendPutCommand(address,setRepeatCmd, repeatState.getLabel());
 		}
 		
 		public void sendShuffle(Shuffle shuffleState) {
-			Ctrl.sendPutCommand(address,setShuffle, shuffleState.getLabel());
+			Ctrl.sendPutCommand(address,setShuffleCmd, shuffleState.getLabel());
 		}
 	
-		public void parse(Node node) {
+		@Override
+		protected void parse(Node node) {
 			clearValues();
 			XML.forEachChild(node, child->{
 				switch (child.getNodeName()) {

@@ -29,7 +29,6 @@ import java.io.PrintWriter;
 import java.io.Reader;
 import java.io.StringWriter;
 import java.nio.charset.StandardCharsets;
-import java.util.Collection;
 import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.HashMap;
@@ -411,7 +410,7 @@ public class YamahaControl {
 		void setEnabledGUI(boolean enabled);
 		void initGUIafterConnect(Device device);
 		void frequentlyUpdate();
-		Collection<Device.UpdateWish> getUpdateWishes(UpdateReason reason);
+		EnumSet<UpdateWish> getUpdateWishes(UpdateReason reason);
 	}
 	
 	private class MainGui implements GuiRegion {
@@ -438,7 +437,7 @@ public class YamahaControl {
 		}
 
 		@Override
-		public Collection<UpdateWish> getUpdateWishes(UpdateReason reason) {
+		public EnumSet<UpdateWish> getUpdateWishes(UpdateReason reason) {
 			switch (reason) {
 			case Initial   : return EnumSet.of( UpdateWish.Power, UpdateWish.BasicStatus, UpdateWish.Scenes, UpdateWish.Inputs );
 			case Frequently: return EnumSet.of( UpdateWish.Power, UpdateWish.BasicStatus );
@@ -640,6 +639,8 @@ public class YamahaControl {
 	private static abstract class AbstractSubUnit extends JPanel implements GuiRegion {
 		private static final long serialVersionUID = 7368584160348326790L;
 		
+		protected boolean disableSubUnitIfNotReady = false;
+		
 		protected Device device;
 		protected boolean isReady;
 		private JLabel readyStateLabel;
@@ -682,14 +683,14 @@ public class YamahaControl {
 		@Override
 		public void initGUIafterConnect(Device device) {
 			this.device = device;
-			setEnabled(this.device!=null);
+			setEnabledGUI(this.device!=null);
 			frequentlyUpdate();
 		}
 
 		@Override
 		public void frequentlyUpdate() {
 			isReady = getReadyState();
-			setEnabled(isReady);
+			if (disableSubUnitIfNotReady) setEnabledGUI(isReady);
 			tabHeaderComp.setOpaque(isReady);
 			tabHeaderComp.setBackground(isReady?Color.GREEN:null);
 //			setTabBackground.accept(isReady?Color.GREEN:null);
@@ -698,7 +699,7 @@ public class YamahaControl {
 		}
 
 		@Override
-		public Collection<UpdateWish> getUpdateWishes(UpdateReason reason) {
+		public EnumSet<UpdateWish> getUpdateWishes(UpdateReason reason) {
 			UpdateWish readyStateUpdateWish = getReadyStateUpdateWish();
 			if (readyStateUpdateWish!=null) return EnumSet.of(readyStateUpdateWish);
 			return EnumSet.noneOf(UpdateWish.class);
@@ -709,8 +710,6 @@ public class YamahaControl {
 		protected UpdateWish getReadyStateUpdateWish() { return null; }
 
 		@Override public void setEnabledGUI(boolean enabled) { setEnabled(enabled); }
-		
-		
 	}
 	
 	private static class SubUnitNetRadio extends AbstractSubUnit_ListPlay {
@@ -727,7 +726,7 @@ public class YamahaControl {
 		protected boolean getReadyState() {
 			if (device==null) return false;
 			// GET[G3]:    NET_RADIO,Config   ->   Feature_Availability -> "Ready" | "Not Ready"
-			Device.Value.ReadyOrNot readyState = device.askValue(Device.KnownCommand.GetNetRadioConfig, Device.Value.ReadyOrNot.values(), "Feature_Availability");
+			Device.Value.ReadyOrNot readyState = device.askValue(Device.KnownCommand.Config.GetNetRadioConfig, Device.Value.ReadyOrNot.values(), "Feature_Availability");
 			return readyState==Device.Value.ReadyOrNot.Ready;
 		}
 
@@ -792,7 +791,7 @@ public class YamahaControl {
 		protected boolean getReadyState() {
 			if (device==null) return false;
 			// GET[G3]:    USB,Config   ->   Feature_Availability -> "Ready" | "Not Ready"
-			Device.Value.ReadyOrNot readyState = device.askValue(Device.KnownCommand.GetUSBConfig, Device.Value.ReadyOrNot.values(), "Feature_Availability");
+			Device.Value.ReadyOrNot readyState = device.askValue(Device.KnownCommand.Config.GetUSBConfig, Device.Value.ReadyOrNot.values(), "Feature_Availability");
 			return readyState==Device.Value.ReadyOrNot.Ready;
 		}
 		
@@ -811,7 +810,7 @@ public class YamahaControl {
 		protected boolean getReadyState() {
 			if (device==null) return false;
 			// GET[G3]:    SERVER,Config   ->   Feature_Availability -> "Ready" | "Not Ready"
-			Device.Value.ReadyOrNot readyState = device.askValue(Device.KnownCommand.GetServerConfig, Device.Value.ReadyOrNot.values(), "Feature_Availability");
+			Device.Value.ReadyOrNot readyState = device.askValue(Device.KnownCommand.Config.GetServerConfig, Device.Value.ReadyOrNot.values(), "Feature_Availability");
 			return readyState==Device.Value.ReadyOrNot.Ready;
 		}
 		
@@ -821,6 +820,7 @@ public class YamahaControl {
 
 	private static class SubUnitIPodUSB extends AbstractSubUnit_PlayInfoExt<Device.Value.ShuffleIPod> {
 		private static final long serialVersionUID = -4180795479139795928L;
+		private JButton modeBtn;
 	
 		public SubUnitIPodUSB() {
 			super("iPod (USB)","IPod USB",UpdateWish.IPodUSBListInfo,UpdateWish.IPodUSBPlayInfo,Device.Value.ShuffleIPod.values());
@@ -830,10 +830,36 @@ public class YamahaControl {
 		protected boolean getReadyState() {
 			if (device==null) return false;
 			// GET[G3]:    iPod_USB,Config   ->   Feature_Availability -> "Ready" | "Not Ready"
-			Device.Value.ReadyOrNot readyState = device.askValue(Device.KnownCommand.GetIPodUSBConfig, Device.Value.ReadyOrNot.values(), "Feature_Availability");
+			Device.Value.ReadyOrNot readyState = device.askValue(Device.KnownCommand.Config.GetIPodUSBConfig, Device.Value.ReadyOrNot.values(), "Feature_Availability");
 			return readyState==Device.Value.ReadyOrNot.Ready;
 		}
 		
+		@Override
+		public EnumSet<UpdateWish> getUpdateWishes(UpdateReason reason) {
+			EnumSet<UpdateWish> updateWishes = super.getUpdateWishes(reason);
+			updateWishes.add(UpdateWish.IPodUSBMode);
+			return updateWishes;
+		}
+
+		@Override
+		protected void createExtraButtons(GridBagPanel secondRow, int nextGridX, int nextGridY) {
+			secondRow.add(modeBtn = createButton("iPod Mode"), nextGridX,nextGridY, 0,1, 1,1, GridBagConstraints.BOTH);
+			
+			modeBtn.addActionListener(e->{
+				if (device==null) return;
+				if (device.iPodUSB.mode==null) return;
+				device.iPodUSB.sendSetMode(YamahaControl.getNext(device.iPodUSB.mode,Value.IPodMode.values()));
+				device.update(EnumSet.of(listInfoUpdateWish, playInfoUpdateWish, UpdateWish.IPodUSBMode));
+				lineList.updateLineList();
+				updatePlayInfo();
+			});
+		}
+
+		@Override
+		protected void updateExtraButtons() {
+			modeBtn.setText(device.iPodUSB.mode==null? "iPod Mode":( "iPod Mode: "+device.iPodUSB.mode.getLabel()));
+		}
+
 		@Override protected Device.PlayInfoExt<Device.Value.ShuffleIPod> getPlayInfoExt()           { return device.iPodUSB.playInfo; }
 		@Override protected Device.ListInfo                              getListInfo(Device device) { return device.iPodUSB.listInfo; }
 	}
@@ -853,10 +879,11 @@ public class YamahaControl {
 			this.shuffleValues = shuffleValues;
 		}
 		
+		@Override protected Device.PlayInfo getPlayInfo() { return getPlayInfoExt(); }
 		protected abstract Device.PlayInfoExt<Shuffle> getPlayInfoExt();
-		
-		@Override
-		protected Device.PlayInfo getPlayInfo() { return getPlayInfoExt(); }
+
+		protected void updateExtraButtons() {}
+		protected void createExtraButtons(GridBagPanel secondRow, int nextGridX, int nextGridY) {}
 
 		@Override
 		protected void updateButtons() {
@@ -876,17 +903,24 @@ public class YamahaControl {
 			} else{
 				playButtons.clearSelection();
 			}
+			updateExtraButtons();
 		}
 
 		@Override
 		protected void createButtons(GridBagPanel buttonsPanel) {
-			buttonsPanel.add(playBtn    = createButton(     Device.Value.PlayPauseStop.Play ), 0,0, 0,1, 1,1, GridBagConstraints.BOTH);
-			buttonsPanel.add(pauseBtn   = createButton(     Device.Value.PlayPauseStop.Pause), 1,0, 0,1, 1,1, GridBagConstraints.BOTH);
-			buttonsPanel.add(stopBtn    = createButton(     Device.Value.PlayPauseStop.Stop ), 2,0, 0,1, 1,1, GridBagConstraints.BOTH);
-			buttonsPanel.add(             createButton("<<",Device.Value.SkipFwdRev.SkipRev ), 3,0, 0,1, 1,1, GridBagConstraints.BOTH);
-			buttonsPanel.add(             createButton(">>",Device.Value.SkipFwdRev.SkipFwd ), 4,0, 0,1, 1,1, GridBagConstraints.BOTH);
-			buttonsPanel.add(repeatBtn  = createButton("Repeat"                             ), 5,0, 0,1, 1,1, GridBagConstraints.BOTH);
-			buttonsPanel.add(shuffleBtn = createButton("Shuffle"                            ), 6,0, 0,1, 1,1, GridBagConstraints.BOTH);
+			GridBagPanel  firstRow = new GridBagPanel();
+			GridBagPanel secondRow = new GridBagPanel();
+			buttonsPanel.add( firstRow, 0,0, 1,1, 1,1, GridBagConstraints.BOTH);
+			buttonsPanel.add(secondRow, 0,1, 1,1, 1,1, GridBagConstraints.BOTH);
+			
+			firstRow .add(playBtn    = createButton(     Device.Value.PlayPauseStop.Play ), 0,0, 0,1, 1,1, GridBagConstraints.BOTH);
+			firstRow .add(pauseBtn   = createButton(     Device.Value.PlayPauseStop.Pause), 1,0, 0,1, 1,1, GridBagConstraints.BOTH);
+			firstRow .add(stopBtn    = createButton(     Device.Value.PlayPauseStop.Stop ), 2,0, 0,1, 1,1, GridBagConstraints.BOTH);
+			firstRow .add(             createButton("<<",Device.Value.SkipFwdRev.SkipRev ), 3,0, 0,1, 1,1, GridBagConstraints.BOTH);
+			firstRow .add(             createButton(">>",Device.Value.SkipFwdRev.SkipFwd ), 4,0, 0,1, 1,1, GridBagConstraints.BOTH);
+			secondRow.add(repeatBtn  = createButton("Repeat"                             ), 0,0, 0,1, 1,1, GridBagConstraints.BOTH);
+			secondRow.add(shuffleBtn = createButton("Shuffle"                            ), 1,0, 0,1, 1,1, GridBagConstraints.BOTH);
+			createExtraButtons(secondRow,2,0);
 			
 			repeatBtn.addActionListener(e->{
 				if (device==null) return;
@@ -930,7 +964,14 @@ public class YamahaControl {
 			return button;
 		}
 		
-		private JButton createButton(String title) {
+		@SuppressWarnings("unused")
+		protected JButton createButton(String title, ActionListener l) {
+			JButton button = YamahaControl.createButton(title, l, true);
+			comps.add(button);
+			return button;
+		}
+		
+		protected JButton createButton(String title) {
 			JButton button = YamahaControl.createButton(title, null, true);
 			comps.add(button);
 			return button;
@@ -961,8 +1002,8 @@ public class YamahaControl {
 		protected abstract void updateButtons();
 
 		@Override
-		public Collection<UpdateWish> getUpdateWishes(UpdateReason reason) {
-			EnumSet<UpdateWish> enumSet = EnumSet.copyOf(super.getUpdateWishes(reason));
+		public EnumSet<UpdateWish> getUpdateWishes(UpdateReason reason) {
+			EnumSet<UpdateWish> enumSet = super.getUpdateWishes(reason);
 			switch (reason) {
 			case Initial:
 			case Frequently:
@@ -988,7 +1029,7 @@ public class YamahaControl {
 
 		@Override
 		public void setEnabledGuiIfPossible(boolean enabled) {
-			setEnabledGUI(isReady && enabled);
+			setEnabledGUI((isReady || !disableSubUnitIfNotReady) && enabled);
 		}
 
 		@Override
@@ -1100,7 +1141,7 @@ public class YamahaControl {
 		protected boolean getReadyState() {
 			if (device==null) return false;
 			// GET[G3]:    Spotify,Config   ->   Feature_Availability -> "Ready" | "Not Ready"
-			Device.Value.ReadyOrNot readyState = device.askValue(Device.KnownCommand.GetSpotifyConfig, Device.Value.ReadyOrNot.values(), "Feature_Availability");
+			Device.Value.ReadyOrNot readyState = device.askValue(Device.KnownCommand.Config.GetSpotifyConfig, Device.Value.ReadyOrNot.values(), "Feature_Availability");
 			return readyState==Device.Value.ReadyOrNot.Ready;
 		}
 	}
