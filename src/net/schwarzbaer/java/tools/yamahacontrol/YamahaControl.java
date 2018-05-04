@@ -978,7 +978,7 @@ public class YamahaControl {
 		protected boolean getReadyState() {
 			if (device==null) return false;
 			// GET[G3]:    NET_RADIO,Config   ->   Feature_Availability -> "Ready" | "Not Ready"
-			Device.Value.ReadyOrNot readyState = device.askValue(Device.KnownCommand.Config.GetNetRadioConfig, Device.Value.ReadyOrNot.values(), "Feature_Availability");
+			Device.Value.ReadyOrNot readyState = device.askValue(Device.KnownCommand.Config.NetRadio, Device.Value.ReadyOrNot.values(), "Feature_Availability");
 			return readyState==Device.Value.ReadyOrNot.Ready;
 		}
 
@@ -1043,7 +1043,7 @@ public class YamahaControl {
 		protected boolean getReadyState() {
 			if (device==null) return false;
 			// GET[G3]:    USB,Config   ->   Feature_Availability -> "Ready" | "Not Ready"
-			Device.Value.ReadyOrNot readyState = device.askValue(Device.KnownCommand.Config.GetUSBConfig, Device.Value.ReadyOrNot.values(), "Feature_Availability");
+			Device.Value.ReadyOrNot readyState = device.askValue(Device.KnownCommand.Config.USB, Device.Value.ReadyOrNot.values(), "Feature_Availability");
 			return readyState==Device.Value.ReadyOrNot.Ready;
 		}
 		
@@ -1062,7 +1062,7 @@ public class YamahaControl {
 		protected boolean getReadyState() {
 			if (device==null) return false;
 			// GET[G3]:    SERVER,Config   ->   Feature_Availability -> "Ready" | "Not Ready"
-			Device.Value.ReadyOrNot readyState = device.askValue(Device.KnownCommand.Config.GetServerConfig, Device.Value.ReadyOrNot.values(), "Feature_Availability");
+			Device.Value.ReadyOrNot readyState = device.askValue(Device.KnownCommand.Config.DLNA, Device.Value.ReadyOrNot.values(), "Feature_Availability");
 			return readyState==Device.Value.ReadyOrNot.Ready;
 		}
 		
@@ -1082,7 +1082,7 @@ public class YamahaControl {
 		protected boolean getReadyState() {
 			if (device==null) return false;
 			// GET[G3]:    iPod_USB,Config   ->   Feature_Availability -> "Ready" | "Not Ready"
-			Device.Value.ReadyOrNot readyState = device.askValue(Device.KnownCommand.Config.GetIPodUSBConfig, Device.Value.ReadyOrNot.values(), "Feature_Availability");
+			Device.Value.ReadyOrNot readyState = device.askValue(Device.KnownCommand.Config.IPodUSB, Device.Value.ReadyOrNot.values(), "Feature_Availability");
 			return readyState==Device.Value.ReadyOrNot.Ready;
 		}
 		
@@ -1307,7 +1307,7 @@ public class YamahaControl {
 			
 			playButtons = new ButtonGroup();
 			GridBagPanel buttonsPanel = new GridBagPanel();
-			buttonsPanel.setInsets(new Insets(3,3,3,3));
+			buttonsPanel.setInsets(new Insets(3,0,3,0));
 			createButtons(buttonsPanel);
 			
 			JPanel playinfoPanel = new JPanel(new BorderLayout(3,3));
@@ -1393,7 +1393,7 @@ public class YamahaControl {
 		protected boolean getReadyState() {
 			if (device==null) return false;
 			// GET[G3]:    Spotify,Config   ->   Feature_Availability -> "Ready" | "Not Ready"
-			Device.Value.ReadyOrNot readyState = device.askValue(Device.KnownCommand.Config.GetSpotifyConfig, Device.Value.ReadyOrNot.values(), "Feature_Availability");
+			Device.Value.ReadyOrNot readyState = device.askValue(Device.KnownCommand.Config.Spotify, Device.Value.ReadyOrNot.values(), "Feature_Availability");
 			return readyState==Device.Value.ReadyOrNot.Ready;
 		}
 	}

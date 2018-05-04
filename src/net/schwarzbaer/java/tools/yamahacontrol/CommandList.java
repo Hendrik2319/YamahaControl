@@ -161,6 +161,7 @@ public class CommandList {
 		contextMenu.add(ContextMenuItemType.NodeFunction, "Copy Path to Clipboard", e->YamahaControl.copyToClipBoard(getClickedNodePath()));
 		contextMenu.addSeparator();
 		contextMenu.add(ContextMenuItemType.TreeFunction, "Expand Full Tree", e->expandFullTree());
+		contextMenu.add(ContextMenuItemType.NodeFunction, "Expand Branch", e->expandBranch());
 		contextMenu.addSeparator();
 		contextMenu.add(ContextMenuItemType.GetCommand, "Test Get Command", e->testCommand(contextMenu.getClickedTreeNode()));
 		contextMenu.add(ContextMenuItemType.PutCommand, "Test Put Command", e->testCommand(contextMenu.getClickedTreeNode()));
@@ -208,6 +209,22 @@ public class CommandList {
 		if (selectedAddress==null) return;
 		if (xmlCommand==null) return;
 		Ctrl.testCommand(selectedAddress, xmlCommand, false);
+	}
+
+	private void expandBranch() {
+		if (contextMenu.clickedTreePath==null) return;
+		int row = tree.getRowForPath(contextMenu.clickedTreePath);
+	
+		while (isParentPath( contextMenu.clickedTreePath, tree.getPathForRow(row) )) {
+			tree.expandRow(row);
+			++row;
+		}
+	}
+
+	private boolean isParentPath(TreePath parentPath, TreePath childPath) {
+		if (childPath==null) return false;
+		if (parentPath.equals(childPath)) return true;
+		return isParentPath(parentPath, childPath.getParentPath());
 	}
 
 	private void expandFullTree() {

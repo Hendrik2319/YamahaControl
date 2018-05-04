@@ -52,8 +52,8 @@ public final class Device {
 			case Inputs          : inputs.inputs     = inputs.getSceneInput(KnownCommand.General.GetInputItems); break;
 			case Scenes          : inputs.scenes     = inputs.getSceneInput(KnownCommand.General.GetSceneItems); break;
 			case BasicStatus     : basicStatus       = BasicStatus   .parse(Ctrl.sendGetCommand_Node(address,KnownCommand.General.GetBasicStatus  )); break;
-			case TunerConfig     : tuner  .config    = Tuner  .Config.parse(Ctrl.sendGetCommand_Node(address,KnownCommand.Config.GetTunerConfig  )); break;
-			case AirPlayConfig   : airPlay.config    = AirPlay.Config.parse(Ctrl.sendGetCommand_Node(address,KnownCommand.Config.GetAirPlayConfig)); break;
+			case TunerConfig     : tuner  .config    = Tuner  .Config.parse(Ctrl.sendGetCommand_Node(address,KnownCommand.Config.Tuner  )); break;
+			case AirPlayConfig   : airPlay.config    = AirPlay.Config.parse(Ctrl.sendGetCommand_Node(address,KnownCommand.Config.AirPlay)); break;
 			case NetRadioListInfo: netRadio.listInfo.update(); break;
 			case NetRadioPlayInfo: netRadio.playInfo.update(); break;
 			case USBListInfo     : usb     .listInfo.update(); break;
@@ -313,13 +313,13 @@ public final class Device {
 		}
 		
 		enum Config implements KnownCommand {
-			GetTunerConfig   (    "Tuner,Config"),
-			GetAirPlayConfig (  "AirPlay,Config"),
-			GetSpotifyConfig (  "Spotify,Config"), 
-			GetIPodUSBConfig ( "iPod_USB,Config"),
-			GetUSBConfig     (      "USB,Config"),
-			GetNetRadioConfig("NET_RADIO,Config"),
-			GetServerConfig  (   "SERVER,Config"),
+			NetRadio("NET_RADIO,Config"),
+			USB     (      "USB,Config"),
+			DLNA    (   "SERVER,Config"),
+			IPodUSB ( "iPod_USB,Config"),
+			Spotify (  "Spotify,Config"), 
+			AirPlay (  "AirPlay,Config"),
+			Tuner   (    "Tuner,Config"),
 			;
 			
 			final private TagList tagList;
@@ -344,6 +344,8 @@ public final class Device {
 			USB     (      "USB,Play_Info"), // G1: USB,Play_Info
 			DLNA    (   "SERVER,Play_Info"), // G1: SERVER,Play_Info
 			IPodUSB ( "iPod_USB,Play_Info"), // G1: iPod_USB,Play_Info
+			Spotify (  "Spotify,Play_Info"), // G1: Spotify,Play_Info
+			AirPlay (  "AirPlay,Play_Info"), // G1: AirPlay,Play_Info
 			;
 			
 			final private TagList tagList;
@@ -404,6 +406,8 @@ public final class Device {
 			USB     (      "USB,Play_Control,Playback"), // P3: USB,Play_Control,Playback
 			DLNA    (   "SERVER,Play_Control,Playback"), // P3: SERVER,Play_Control,Playback
 			IPodUSB ( "iPod_USB,Play_Control,Playback"), // P1: iPod_USB,Play_Control,Playback
+			Spotify (  "Spotify,Play_Control,Playback"), // P1: Spotify,Play_Control,Playback
+			AirPlay (  "AirPlay,Play_Control,Playback"), // P1: AirPlay,Play_Control,Playback
 			;
 			
 			final private TagList tagList;
