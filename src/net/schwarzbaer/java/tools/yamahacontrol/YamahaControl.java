@@ -160,15 +160,13 @@ public class YamahaControl {
 		scenesInputsPanel.setBorder(BorderFactory.createTitledBorder("Scenes/Inputs"));
 		scenesInputsPanel.setPreferredSize(new Dimension(150,520));
 		
-		mainGui.createVolumeControl(200);
-		JPanel volumePanel = new JPanel(new BorderLayout());
-		volumePanel.setBorder(BorderFactory.createTitledBorder("Volume"));
-		volumePanel.add( mainGui.volumeControl, BorderLayout.CENTER );
+		JPanel volumeControlPanel = mainGui.createVolumeControlPanel(200);
+		volumeControlPanel.setBorder(BorderFactory.createTitledBorder("Volume"));
 		
 		JPanel mainControlPanel = new JPanel(new BorderLayout(3,3));
 		mainControlPanel.add(devicePanel,BorderLayout.NORTH);
 		mainControlPanel.add(scenesInputsPanel,BorderLayout.CENTER);
-		mainControlPanel.add(volumePanel,BorderLayout.SOUTH);
+		mainControlPanel.add(volumeControlPanel,BorderLayout.SOUTH);
 		
 		JTabbedPane subUnitPanel = new JTabbedPane();
 		subUnitPanel.setBorder(BorderFactory.createTitledBorder("Sub Units"));
@@ -498,11 +496,14 @@ public class YamahaControl {
 			return scenesInputsPanel;
 		}
 
-		public void createVolumeControl(int width) {
+		public JPanel createVolumeControlPanel(int width) {
 			volumeControl = new VolumeControl(width, 3.0, -90, (value, isAdjusting) -> {
 				if (device==null) return;
 				volumeSetter.set(value,isAdjusting);
 			});
+			JPanel volumePanel = new JPanel(new BorderLayout());
+			volumePanel.add( volumeControl, BorderLayout.CENTER );
+			return volumePanel;
 		}
 		
 		private class VolumeSetter {
