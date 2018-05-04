@@ -83,7 +83,7 @@ class LineList {
 		lineListUser.setEnabledGuiIfPossible(listInfo.menuStatus==Device.Value.ReadyOrBusy.Ready);
 		//System.out.println("updateLineList() -> listInfo.menuStatus: "+listInfo.menuStatus);
 		
-		String lineListLabelStr = String.format("[%s] %s", listInfo.menuLayer, listInfo.menuName==null?"":listInfo.menuName);
+		String lineListLabelStr = String.format("[Layer %s]    %s", listInfo.menuLayer, listInfo.menuName==null?"":listInfo.menuName);
 		if (listInfo.currentLine==null || listInfo.maxLine==null || listInfo.currentLine<listInfo.maxLine)
 			lineListLabelStr += "  "+listInfo.currentLine+"/"+listInfo.maxLine;
 		lineListLabel.setText(lineListLabelStr);

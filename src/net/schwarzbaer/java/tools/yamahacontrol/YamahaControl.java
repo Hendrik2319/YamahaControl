@@ -29,7 +29,6 @@ import java.io.PrintWriter;
 import java.io.Reader;
 import java.io.StringWriter;
 import java.nio.charset.StandardCharsets;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.EnumMap;
 import java.util.EnumSet;
@@ -68,6 +67,7 @@ import javax.swing.filechooser.FileSystemView;
 import net.schwarzbaer.gui.StandardMainWindow;
 import net.schwarzbaer.java.tools.yamahacontrol.Device.Inputs.DeviceSceneInput;
 import net.schwarzbaer.java.tools.yamahacontrol.Device.UpdateWish;
+import net.schwarzbaer.java.tools.yamahacontrol.Device.Value;
 
 public class YamahaControl {
 	
@@ -171,12 +171,13 @@ public class YamahaControl {
 		mainControlPanel.add(volumePanel,BorderLayout.SOUTH);
 		
 		JTabbedPane subUnitPanel = new JTabbedPane();
+		subUnitPanel.setBorder(BorderFactory.createTitledBorder("Sub Units"));
 		new SubUnitNetRadio().addTo(guiRegions,subUnitPanel);
-		new SubUnitUSB     ().addTo(guiRegions,subUnitPanel);
 		new SubUnitDLNA    ().addTo(guiRegions,subUnitPanel);
+		new SubUnitUSB     ().addTo(guiRegions,subUnitPanel);
+		new SubUnitIPodUSB ().addTo(guiRegions,subUnitPanel);
 		new SubUnitTuner   ().addTo(guiRegions,subUnitPanel);
 		new SubUnitSpotify ().addTo(guiRegions,subUnitPanel);
-		new SubUnitIPodUSB ().addTo(guiRegions,subUnitPanel);
 		new SubUnitAirPlay ().addTo(guiRegions,subUnitPanel);
 		
 		JPanel contentPane = new JPanel(new BorderLayout(3,3));
@@ -441,8 +442,8 @@ public class YamahaControl {
 		@Override
 		public Collection<UpdateWish> getUpdateWishes(UpdateReason reason) {
 			switch (reason) {
-			case Initial   : return Arrays.asList( new UpdateWish[] { UpdateWish.Power, UpdateWish.BasicStatus, UpdateWish.Scenes, UpdateWish.Inputs } );
-			case Frequently: return Arrays.asList( new UpdateWish[] { UpdateWish.Power, UpdateWish.BasicStatus } );
+			case Initial   : return EnumSet.of( UpdateWish.Power, UpdateWish.BasicStatus, UpdateWish.Scenes, UpdateWish.Inputs );
+			case Frequently: return EnumSet.of( UpdateWish.Power, UpdateWish.BasicStatus );
 			}
 			return null;
 		}
@@ -697,10 +698,9 @@ public class YamahaControl {
 
 		@Override
 		public Collection<UpdateWish> getUpdateWishes(UpdateReason reason) {
-			Vector<UpdateWish> updateWishes = new Vector<UpdateWish>();
 			UpdateWish readyStateUpdateWish = getReadyStateUpdateWish();
-			if (readyStateUpdateWish!=null) updateWishes.add(readyStateUpdateWish);
-			return updateWishes;
+			if (readyStateUpdateWish!=null) return EnumSet.of(readyStateUpdateWish);
+			return EnumSet.noneOf(UpdateWish.class);
 		}
 
 		protected JPanel createContentPanel() { return new JPanel(); }
@@ -780,11 +780,11 @@ public class YamahaControl {
 		}
 	}
 	
-	private static class SubUnitUSB extends AbstractSubUnit_USBDLNA {
+	private static class SubUnitUSB extends AbstractSubUnit_PlayInfoExt<Device.Value.OnOff> {
 		private static final long serialVersionUID = 2909543552931897755L;
 
 		public SubUnitUSB() {
-			super("USB","USB Device",UpdateWish.USBListInfo,UpdateWish.USBPlayInfo);
+			super("USB","USB Device",UpdateWish.USBListInfo,UpdateWish.USBPlayInfo,Device.Value.OnOff.values());
 		}
 		
 		@Override
@@ -795,15 +795,15 @@ public class YamahaControl {
 			return readyState==Device.Value.ReadyOrNot.Ready;
 		}
 		
-		@Override protected Device.PlayInfo_USB_DLNA getPlayInfo_USB_DLNA()     { return device.usb.playInfo; }
-		@Override protected Device.ListInfo          getListInfo(Device device) { return device.usb.listInfo; }
+		@Override protected Device.PlayInfoExt<Device.Value.OnOff> getPlayInfoExt()           { return device.usb.playInfo; }
+		@Override protected Device.ListInfo                        getListInfo(Device device) { return device.usb.listInfo; }
 	}
 	
-	private static class SubUnitDLNA extends AbstractSubUnit_USBDLNA {
+	private static class SubUnitDLNA extends AbstractSubUnit_PlayInfoExt<Device.Value.OnOff> {
 		private static final long serialVersionUID = -4585259335586086032L;
 
 		public SubUnitDLNA() {
-			super("SERVER","DLNA Server",UpdateWish.DLNAListInfo,UpdateWish.DLNAPlayInfo);
+			super("SERVER","DLNA Server",UpdateWish.DLNAListInfo,UpdateWish.DLNAPlayInfo,Device.Value.OnOff.values());
 		}
 		
 		@Override
@@ -814,11 +814,30 @@ public class YamahaControl {
 			return readyState==Device.Value.ReadyOrNot.Ready;
 		}
 		
-		@Override protected Device.PlayInfo_USB_DLNA getPlayInfo_USB_DLNA()     { return device.dlna.playInfo; }
-		@Override protected Device.ListInfo          getListInfo(Device device) { return device.dlna.listInfo; }
+		@Override protected Device.PlayInfoExt<Device.Value.OnOff> getPlayInfoExt()           { return device.dlna.playInfo; }
+		@Override protected Device.ListInfo                        getListInfo(Device device) { return device.dlna.listInfo; }
 	}
 
-	private static abstract class AbstractSubUnit_USBDLNA extends AbstractSubUnit_ListPlay {
+	private static class SubUnitIPodUSB extends AbstractSubUnit_PlayInfoExt<Device.Value.ShuffleIPod> {
+		private static final long serialVersionUID = -4180795479139795928L;
+	
+		public SubUnitIPodUSB() {
+			super("iPod (USB)","IPod USB",UpdateWish.IPodUSBListInfo,UpdateWish.IPodUSBPlayInfo,Device.Value.ShuffleIPod.values());
+		}
+	
+		@Override
+		protected boolean getReadyState() {
+			if (device==null) return false;
+			// GET[G3]:    iPod_USB,Config   ->   Feature_Availability -> "Ready" | "Not Ready"
+			Device.Value.ReadyOrNot readyState = device.askValue(Device.KnownCommand.GetIPodUSBConfig, Device.Value.ReadyOrNot.values(), "Feature_Availability");
+			return readyState==Device.Value.ReadyOrNot.Ready;
+		}
+		
+		@Override protected Device.PlayInfoExt<Device.Value.ShuffleIPod> getPlayInfoExt()           { return device.iPodUSB.playInfo; }
+		@Override protected Device.ListInfo                              getListInfo(Device device) { return device.iPodUSB.listInfo; }
+	}
+
+	private static abstract class AbstractSubUnit_PlayInfoExt<Shuffle extends Enum<Shuffle>&Value> extends AbstractSubUnit_ListPlay {
 		private static final long serialVersionUID = 8830354607137619068L;
 		
 		private JToggleButton playBtn;
@@ -826,20 +845,22 @@ public class YamahaControl {
 		private JToggleButton stopBtn;
 		private JButton repeatBtn;
 		private JButton shuffleBtn;
+		private Shuffle[] shuffleValues;
 		
-		public AbstractSubUnit_USBDLNA(String inputID, String tabTitle, UpdateWish listInfoUpdateWish, UpdateWish playInfoUpdateWish) {
+		public AbstractSubUnit_PlayInfoExt(String inputID, String tabTitle, UpdateWish listInfoUpdateWish, UpdateWish playInfoUpdateWish, Shuffle[] shuffleValues) {
 			super(inputID, tabTitle, listInfoUpdateWish, playInfoUpdateWish);
+			this.shuffleValues = shuffleValues;
 		}
 		
-		protected abstract Device.PlayInfo_USB_DLNA getPlayInfo_USB_DLNA();
+		protected abstract Device.PlayInfoExt<Shuffle> getPlayInfoExt();
 		
 		@Override
-		protected Device.PlayInfo getPlayInfo() { return getPlayInfo_USB_DLNA(); }
+		protected Device.PlayInfo getPlayInfo() { return getPlayInfoExt(); }
 
 		@Override
 		protected void updateButtons() {
 			if (device!=null && getPlayInfo()!=null) {
-				Device.PlayInfo_USB_DLNA playInfo = getPlayInfo_USB_DLNA();
+				Device.PlayInfoExt<Shuffle> playInfo = getPlayInfoExt();
 				if (playInfo.playState==null || !isReady)
 					playButtons.clearSelection();
 				else
@@ -868,17 +889,17 @@ public class YamahaControl {
 			
 			repeatBtn.addActionListener(e->{
 				if (device==null) return;
-				Device.PlayInfo_USB_DLNA playInfo = getPlayInfo_USB_DLNA();
+				Device.PlayInfoExt<Shuffle> playInfo = getPlayInfoExt();
 				playInfo.sendRepeat(YamahaControl.getNext(playInfo.repeat,Device.Value.OffOneAll.values()));
-				device.update(EnumSet.of(UpdateWish.USBListInfo,UpdateWish.USBPlayInfo));
+				device.update(EnumSet.of(listInfoUpdateWish, playInfoUpdateWish));
 				lineList.updateLineList();
 				updatePlayInfo();
 			});
 			shuffleBtn.addActionListener(e->{
 				if (device==null) return;
-				Device.PlayInfo_USB_DLNA playInfo = getPlayInfo_USB_DLNA();
-				playInfo.sendShuffle(YamahaControl.getNext(playInfo.shuffle,Device.Value.OnOff.values()));
-				device.update(EnumSet.of(UpdateWish.USBListInfo,UpdateWish.USBPlayInfo));
+				Device.PlayInfoExt<Shuffle> playInfo = getPlayInfoExt();
+				playInfo.sendShuffle(YamahaControl.getNext(playInfo.shuffle,shuffleValues));
+				device.update(EnumSet.of(listInfoUpdateWish, playInfoUpdateWish));
 				lineList.updateLineList();
 				updatePlayInfo();
 			});
@@ -886,8 +907,8 @@ public class YamahaControl {
 		
 		private JToggleButton createButton(Device.Value.PlayPauseStop playState) {
 			ActionListener listener = e->{
-				getPlayInfo_USB_DLNA().sendPlayback(playState);
-				device.update(EnumSet.of(UpdateWish.USBListInfo,UpdateWish.USBPlayInfo));
+				getPlayInfoExt().sendPlayback(playState);
+				device.update(EnumSet.of(listInfoUpdateWish, playInfoUpdateWish));
 				lineList.updateLineList();
 				updatePlayInfo();
 			};
@@ -898,8 +919,8 @@ public class YamahaControl {
 		
 		private JButton createButton(String title, Device.Value.SkipFwdRev skip) {
 			ActionListener listener = e->{
-				getPlayInfo_USB_DLNA().sendPlayback(skip);
-				device.update(EnumSet.of(UpdateWish.USBListInfo,UpdateWish.USBPlayInfo));
+				getPlayInfoExt().sendPlayback(skip);
+				device.update(EnumSet.of(listInfoUpdateWish, playInfoUpdateWish));
 				lineList.updateLineList();
 				updatePlayInfo();
 			};
@@ -924,8 +945,8 @@ public class YamahaControl {
 		protected Vector<JComponent> comps;
 		protected ButtonGroup playButtons;
 		
-		private UpdateWish listInfoUpdateWish;
-		private UpdateWish playInfoUpdateWish;
+		protected UpdateWish listInfoUpdateWish;
+		protected UpdateWish playInfoUpdateWish;
 	
 		public AbstractSubUnit_ListPlay(String inputID, String tabTitle, UpdateWish listInfoUpdateWish, UpdateWish playInfoUpdateWish) {
 			super(inputID, tabTitle);
@@ -940,15 +961,15 @@ public class YamahaControl {
 
 		@Override
 		public Collection<UpdateWish> getUpdateWishes(UpdateReason reason) {
-			Vector<UpdateWish> vector = new Vector<>(super.getUpdateWishes(reason));
+			EnumSet<UpdateWish> enumSet = EnumSet.copyOf(super.getUpdateWishes(reason));
 			switch (reason) {
 			case Initial:
 			case Frequently:
-				vector.add(listInfoUpdateWish);
-				vector.add(playInfoUpdateWish);
+				enumSet.add(listInfoUpdateWish);
+				enumSet.add(playInfoUpdateWish);
 				break;
 			}
-			return vector;
+			return enumSet;
 		}
 
 		@Override
@@ -981,8 +1002,9 @@ public class YamahaControl {
 			
 			lineList = new LineList(this,listInfoUpdateWish,playInfoUpdateWish);
 			JPanel lineListPanel = lineList.createGUIelements();
+			lineListPanel.setBorder(BorderFactory.createTitledBorder("Menu"));
 			
-			playinfoOutput = new JTextArea("Play Info");
+			playinfoOutput = new JTextArea("<no data>");
 			playinfoOutput.setEditable(false);
 			comps.add(playinfoOutput);
 			
@@ -995,6 +1017,7 @@ public class YamahaControl {
 			createButtons(buttonsPanel);
 			
 			JPanel playinfoPanel = new JPanel(new BorderLayout(3,3));
+			playinfoPanel.setBorder(BorderFactory.createTitledBorder("Play Info"));
 			playinfoPanel.add(buttonsPanel,BorderLayout.NORTH);
 			playinfoPanel.add(playinfoScrollPane,BorderLayout.CENTER);
 			
@@ -1077,22 +1100,6 @@ public class YamahaControl {
 			if (device==null) return false;
 			// GET[G3]:    Spotify,Config   ->   Feature_Availability -> "Ready" | "Not Ready"
 			Device.Value.ReadyOrNot readyState = device.askValue(Device.KnownCommand.GetSpotifyConfig, Device.Value.ReadyOrNot.values(), "Feature_Availability");
-			return readyState==Device.Value.ReadyOrNot.Ready;
-		}
-	}
-	
-	private static class SubUnitIPodUSB extends AbstractSubUnit {
-		private static final long serialVersionUID = -4180795479139795928L;
-
-		public SubUnitIPodUSB() {
-			super("iPod (USB)","IPod USB");
-		}
-
-		@Override
-		protected boolean getReadyState() {
-			if (device==null) return false;
-			// GET[G3]:    iPod_USB,Config   ->   Feature_Availability -> "Ready" | "Not Ready"
-			Device.Value.ReadyOrNot readyState = device.askValue(Device.KnownCommand.GetIPodUSBConfig, Device.Value.ReadyOrNot.values(), "Feature_Availability");
 			return readyState==Device.Value.ReadyOrNot.Ready;
 		}
 	}
