@@ -7,9 +7,11 @@ import java.util.Vector;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 
-import net.schwarzbaer.java.tools.yamahacontrol.Device.Value.PowerState;
 import net.schwarzbaer.java.tools.yamahacontrol.XML.TagList;
 import net.schwarzbaer.java.tools.yamahacontrol.YamahaControl.Log;
+import net.schwarzbaer.java.tools.yamahacontrol.YamahaControl.PlayInfo_PlayPauseStopSkip;
+import net.schwarzbaer.java.tools.yamahacontrol.YamahaControl.PlayInfo_PlayStop;
+import net.schwarzbaer.java.tools.yamahacontrol.YamahaControl.PlayInfo_RepeatShuffle;
 
 public final class Device {
 	
@@ -156,7 +158,7 @@ public final class Device {
 		Ctrl.sendPutCommand(address,KnownCommand.General.SetMute,volMute.getLabel());
 	}
 	
-	public PowerState getPowerState() {
+	public Value.PowerState getPowerState() {
 		if (basicStatus==null) return null;
 		return basicStatus.power;
 	}
@@ -777,7 +779,7 @@ public final class Device {
 		protected abstract void parse(Node node);
 	}
 
-	static class PlayInfo_NetRadio extends PlayInfo {
+	static class PlayInfo_NetRadio extends PlayInfo implements PlayInfo_PlayStop {
 	
 		Value.ReadyOrNot deviceStatus;
 		Value.PlayStop playState;
@@ -806,6 +808,8 @@ public final class Device {
 			this.albumCoverFormat = null;
 		}
 		
+		@Override public Value.PlayStop getPlayState() { return playState; }
+
 		public void sendPlayback(Value.PlayStop playState) {
 			// [Play]    Visible:No     PUT[P1]     NET_RADIO,Play_Control,Playback = Play
 			// [Stop]    Playable:No     PUT[P1]     NET_RADIO,Play_Control,Playback = Stop
@@ -880,7 +884,7 @@ public final class Device {
 		
 	}
 
-	static class PlayInfoExt<Shuffle extends Enum<Shuffle>&Value> extends PlayInfo {
+	static class PlayInfoExt<Shuffle extends Enum<Shuffle>&Value> extends PlayInfo implements PlayInfo_PlayPauseStopSkip, PlayInfo_RepeatShuffle<Shuffle> {
 	
 		Value.ReadyOrNot deviceStatus;
 		Value.PlayPauseStop playState;
@@ -920,6 +924,10 @@ public final class Device {
 			this.albumCoverFormat = null;
 		}
 	
+		@Override public Value.PlayPauseStop getPlayState() { return playState; }
+		@Override public Value.OffOneAll     getRepeat   () { return repeat; }
+		@Override public Shuffle             getShuffle  () { return shuffle; }
+
 		@Override
 		public String toString() {
 			StringBuilder sb = new StringBuilder();
