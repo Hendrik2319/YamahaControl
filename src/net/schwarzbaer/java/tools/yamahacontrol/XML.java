@@ -131,7 +131,7 @@ final class XML {
 
 	public static Node getSubNode(Node node, String... tagList) {
 		Vector<Node> nodes = XML.getSubNodes(node, tagList);
-		if (nodes.isEmpty()) { Log.warning(XML.class, "Can't find subnode: Node=%s TagList=%s", XML.getPath(node), Arrays.toString(tagList)); return null; }
+		if (nodes.isEmpty()) { Log.error(XML.class, "Can't find subnode: Node=%s TagList=%s", XML.getPath(node), Arrays.toString(tagList)); return null; }
 		if (nodes.size()>1) Log.warning(XML.class, "Found more than one subnode: Node=%s TagList=%s", XML.getPath(node), Arrays.toString(tagList));
 		return nodes.get(0);
 	}

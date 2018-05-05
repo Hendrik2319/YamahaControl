@@ -382,27 +382,27 @@ public class YamahaControl {
 	}
 	// ///////////////////////////////////////////////////////////////////////////////////
 	
-	static class GridBagPanel extends JPanel {
+	public static class GridBagPanel extends JPanel {
 		private static final long serialVersionUID = -344141298780014208L;
 		
 		private GridBagLayout layout;
 		protected GridBagConstraints gbc;
 	
-		GridBagPanel() {
+		public GridBagPanel() {
 			super();
 			resetLayout();
 		}
 	
-		void resetLayout() {
+		public void resetLayout() {
 			setLayout(layout = new GridBagLayout());
 			gbc = new GridBagConstraints();
 		}
 		
-		void setInsets(Insets insets) {
+		public void setInsets(Insets insets) {
 			gbc.insets = insets;
 		}
 		
-		void add(Component comp, double weightx, int gridwidth, int fill) {
+		public void add(Component comp, double weightx, int gridwidth, int fill) {
 			gbc.weightx=weightx;
 			gbc.gridwidth=gridwidth;
 			gbc.fill = fill;
@@ -410,7 +410,7 @@ public class YamahaControl {
 			add(comp);
 		}
 		
-		void add(Component comp, int gridx, int gridy, double weightx, double weighty, int gridwidth, int gridheight, int fill) {
+		public void add(Component comp, int gridx, int gridy, double weightx, double weighty, int gridwidth, int gridheight, int fill) {
 			gbc.gridx=gridx;
 			gbc.gridy=gridy;
 			gbc.weighty=weighty;
@@ -646,6 +646,8 @@ public class YamahaControl {
 				volumeSetter.set(value,isAdjusting);
 			});
 			volumeBar = new JProgressBar(JProgressBar.HORIZONTAL,BAR_MIN,BAR_MAX);
+			volumeBar.setStringPainted(true);
+			volumeBar.setString("");
 			
 			GridBagPanel volumePanel = new GridBagPanel();
 			volumePanel.add(rotaryCtrl , 0,0, 1,1, 3,1, GridBagConstraints.BOTH);
@@ -981,19 +983,12 @@ public class YamahaControl {
 			return readyState==Device.Value.ReadyOrNot.Ready;
 		}
 
-		@Override public  PlayInfo_PlayStop getPlayInfo_PlayStop()     { return device.netRadio.playInfo; }
-		@Override protected Device.PlayInfo getPlayInfo()              { return device.netRadio.playInfo; }
-		@Override protected Device.ListInfo getListInfo(Device device) { return device.netRadio.listInfo; }
+		@Override public    Device.PlayInfo_NetRadio getPlayInfo()     { return device==null?null:device.netRadio.playInfo; }
+		@Override protected Device.ListInfo getListInfo(Device device) { return device==null?null:device.netRadio.listInfo; }
+		
 		@Override public void updateExtraButtons() {}
-
-		@Override
-		public void addExtraButtons(Vector<AbstractButton> buttons) {
-			buttons.add(createButton("Add Song to PreferredSongs",e->addSongToPreferredSongs()));
-		}
-		private JButton createButton(String title, ActionListener l) {
-			JButton button = YamahaControl.createButton(title, l, true);
-			comps.add(button);
-			return button;
+		@Override public void addExtraButtons(Vector<AbstractButton> buttons) {
+			buttons.add(createButton("Add Song to PreferredSongs",e->addSongToPreferredSongs(),true));
 		}
 		private void addSongToPreferredSongs() {
 			if (device!=null && device.netRadio.playInfo.currentSong!=null) {
@@ -1018,8 +1013,8 @@ public class YamahaControl {
 			return readyState==Device.Value.ReadyOrNot.Ready;
 		}
 		
-		@Override protected Device.PlayInfoExt<Device.Value.OnOff> getPlayInfoExt()           { return device.usb.playInfo; }
-		@Override protected Device.ListInfo                        getListInfo(Device device) { return device.usb.listInfo; }
+		@Override public    Device.PlayInfoExt<Device.Value.OnOff> getPlayInfo()              { return device==null?null:device.usb.playInfo; }
+		@Override protected Device.ListInfo                        getListInfo(Device device) { return device==null?null:device.usb.listInfo; }
 	}
 	
 	private static class SubUnitDLNA extends AbstractSubUnit_PlayInfoExt<Device.Value.OnOff> {
@@ -1037,8 +1032,8 @@ public class YamahaControl {
 			return readyState==Device.Value.ReadyOrNot.Ready;
 		}
 		
-		@Override protected Device.PlayInfoExt<Device.Value.OnOff> getPlayInfoExt()           { return device.dlna.playInfo; }
-		@Override protected Device.ListInfo                        getListInfo(Device device) { return device.dlna.listInfo; }
+		@Override public    Device.PlayInfoExt<Device.Value.OnOff> getPlayInfo()              { return device==null?null:device.dlna.playInfo; }
+		@Override protected Device.ListInfo                        getListInfo(Device device) { return device==null?null:device.dlna.listInfo; }
 	}
 
 	private static class SubUnitIPodUSB extends AbstractSubUnit_PlayInfoExt<Device.Value.ShuffleIPod> implements ButtonModule.ExtraButtons {
@@ -1065,29 +1060,23 @@ public class YamahaControl {
 			return updateWishes;
 		}
 
-		@Override
-		public void updateExtraButtons() {
+		@Override public    Device.PlayInfoExt<Device.Value.ShuffleIPod> getPlayInfo()              { return device==null?null:device.iPodUSB.playInfo; }
+		@Override protected Device.ListInfo                              getListInfo(Device device) { return device==null?null:device.iPodUSB.listInfo; }
+
+		@Override public void updateExtraButtons() {
 			modeBtn.setText(device.iPodUSB.mode==null? "iPod Mode":( "iPod Mode: "+device.iPodUSB.mode.getLabel()));
 		}
-
-		@Override
-		public void addExtraButtons(Vector<AbstractButton> buttons) {
+		@Override public void addExtraButtons(Vector<AbstractButton> buttons) {
 			buttons.add(modeBtn = createButton("iPod Mode",true));
-			
 			modeBtn.addActionListener(e->{
-				if (device==null) return;
 				if (device.iPodUSB.mode==null) return;
 				device.iPodUSB.sendSetMode(YamahaControl.getNext(device.iPodUSB.mode,Value.IPodMode.values()));
-				device.update(EnumSet.of(listInfoUpdateWish, playInfoUpdateWish, UpdateWish.IPodUSBMode));
-				lineList.updateLineList();
-				updatePlayInfo();
+				updateDeviceNGui();
 			});
 		}
-
-		@Override protected Device.PlayInfoExt<Device.Value.ShuffleIPod> getPlayInfoExt()           { return device.iPodUSB.playInfo; }
-		@Override protected Device.ListInfo                              getListInfo(Device device) { return device.iPodUSB.listInfo; }
 	}
-
+	
+	
 	private static abstract class AbstractSubUnit_PlayInfoExt<Shuffle extends Enum<Shuffle>&Value> extends AbstractSubUnit_ListPlay implements PlayButtonModuleExt.Caller, ReapeatShuffleButtonModule.Caller<Shuffle> {
 		private static final long serialVersionUID = 8830354607137619068L;
 		private ButtonModule lastModule;
@@ -1102,11 +1091,9 @@ public class YamahaControl {
 			lastModule.extraButtons = extraButtons;
 		}
 
-		@Override public PlayInfo_RepeatShuffle<Shuffle> getPlayInfo_RepeatShuffle    () { return getPlayInfoExt(); }
-		@Override public PlayInfo_PlayPauseStopSkip      getPlayInfo_PlayPauseStopSkip() { return getPlayInfoExt(); }
-		@Override protected Device.PlayInfo getPlayInfo() { return getPlayInfoExt(); }
-		protected abstract Device.PlayInfoExt<Shuffle> getPlayInfoExt();
+		@Override public abstract Device.PlayInfoExt<Shuffle> getPlayInfo();
 	}
+	
 	
 	public interface PlayInfo_PlayStop {
 		public void sendPlayback(Value.PlayStop playState);
@@ -1144,7 +1131,8 @@ public class YamahaControl {
 		public GridBagPanel createButtons() {
 			GridBagPanel  buttonPanel = new GridBagPanel();
 			
-			Vector<AbstractButton> buttons = createStdButtons();
+			Vector<AbstractButton> buttons = new Vector<>();
+			addStdButtons(buttons);
 			if (extraButtons!=null)
 				extraButtons.addExtraButtons(buttons);
 			
@@ -1156,7 +1144,7 @@ public class YamahaControl {
 			return buttonPanel;
 		}
 		public abstract void updateStdButtons();
-		public abstract Vector<AbstractButton> createStdButtons();
+		public abstract void addStdButtons(Vector<AbstractButton> buttons);
 		
 		public static interface ExtraButtons {
 			public void updateExtraButtons();
@@ -1176,17 +1164,14 @@ public class YamahaControl {
 		}
 		
 		public static interface Caller {
-			PlayInfo_PlayStop getPlayInfo_PlayStop();
+			PlayInfo_PlayStop getPlayInfo();
 			void updateDeviceNGui();
-				// device.update(EnumSet.of(listInfoUpdateWish, playInfoUpdateWish));
-				// lineList.updateLineList();
-				// updatePlayInfo();
 			boolean isReady();
 		}
 		
 		@Override
 		public void updateStdButtons() {
-			PlayInfo_PlayStop playInfo = caller.getPlayInfo_PlayStop();
+			PlayInfo_PlayStop playInfo = caller.getPlayInfo();
 			if (playInfo!=null) {
 				Value.PlayStop playState = playInfo.getPlayState();
 				if (playState==null || !caller.isReady())
@@ -1202,21 +1187,20 @@ public class YamahaControl {
 		}
 	
 		@Override
-		public Vector<AbstractButton> createStdButtons() {
+		public void addStdButtons(Vector<AbstractButton> buttons) {
 			playButtons = new ButtonGroup();
-			Vector<AbstractButton> buttons = new Vector<>();
 			buttons.add(playBtn = createButton(Device.Value.PlayStop.Play));
 			buttons.add(stopBtn = createButton(Device.Value.PlayStop.Stop));
-			return buttons;
 		}
 		
 		private JToggleButton createButton(Device.Value.PlayStop playState) {
-			JToggleButton button = YamahaControl.createToggleButton(playState.getLabel(), null, true, playButtons);
-			button.addActionListener(e->{
-				caller.getPlayInfo_PlayStop().sendPlayback(playState);
-				caller.updateDeviceNGui();
-			});
-			return button;
+			return YamahaControl.createToggleButton(playState.getLabel(), e->{
+				PlayInfo_PlayStop playInfo = caller.getPlayInfo();
+				if (playInfo!=null) {
+					playInfo.sendPlayback(playState);
+					caller.updateDeviceNGui();
+				}
+			}, true, playButtons);
 		}
 	}
 
@@ -1233,17 +1217,14 @@ public class YamahaControl {
 		}
 		
 		public static interface Caller {
-			PlayInfo_PlayPauseStopSkip getPlayInfo_PlayPauseStopSkip();
+			PlayInfo_PlayPauseStopSkip getPlayInfo();
 			void updateDeviceNGui();
-				// device.update(EnumSet.of(listInfoUpdateWish, playInfoUpdateWish));
-				// lineList.updateLineList();
-				// updatePlayInfo();
 			boolean isReady();
 		}
 		
 		@Override
 		public void updateStdButtons() {
-			PlayInfo_PlayPauseStopSkip playInfo = caller.getPlayInfo_PlayPauseStopSkip();
+			PlayInfo_PlayPauseStopSkip playInfo = caller.getPlayInfo();
 			if (playInfo!=null) {
 				Device.Value.PlayPauseStop playState = playInfo.getPlayState();
 				if (playState==null || !caller.isReady())
@@ -1260,33 +1241,33 @@ public class YamahaControl {
 		}
 
 		@Override
-		public Vector<AbstractButton> createStdButtons() {
+		public void addStdButtons(Vector<AbstractButton> buttons) {
 			playButtons = new ButtonGroup();
-			Vector<AbstractButton> buttons = new Vector<>();
 			buttons.add(playBtn    = createButton(     Device.Value.PlayPauseStop.Play ));
 			buttons.add(pauseBtn   = createButton(     Device.Value.PlayPauseStop.Pause));
 			buttons.add(stopBtn    = createButton(     Device.Value.PlayPauseStop.Stop ));
 			buttons.add(             createButton("<<",Device.Value.SkipFwdRev.SkipRev ));
 			buttons.add(             createButton(">>",Device.Value.SkipFwdRev.SkipFwd ));
-			return buttons;
 		}
 		
 		private JToggleButton createButton(Device.Value.PlayPauseStop playState) {
-			ActionListener listener = e->{
-				caller.getPlayInfo_PlayPauseStopSkip().sendPlayback(playState);
-				caller.updateDeviceNGui();
-			};
-			JToggleButton button = YamahaControl.createToggleButton(playState.getLabel(), listener, true, playButtons);
-			return button;
+			return YamahaControl.createToggleButton(playState.getLabel(), e->{
+				PlayInfo_PlayPauseStopSkip playInfo = caller.getPlayInfo();
+				if (playInfo!=null) {
+					playInfo.sendPlayback(playState);
+					caller.updateDeviceNGui();
+				}
+			}, true, playButtons);
 		}
 		
 		private JButton createButton(String title, Device.Value.SkipFwdRev skip) {
-			ActionListener listener = e->{
-				caller.getPlayInfo_PlayPauseStopSkip().sendPlayback(skip);
-				caller.updateDeviceNGui();
-			};
-			JButton button = YamahaControl.createButton(title, listener, true);
-			return button;
+			return YamahaControl.createButton(title, e->{
+				PlayInfo_PlayPauseStopSkip playInfo = caller.getPlayInfo();
+				if (playInfo!=null) {
+					playInfo.sendPlayback(skip);
+					caller.updateDeviceNGui();
+				}
+			}, true);
 		}
 		
 	}
@@ -1304,16 +1285,13 @@ public class YamahaControl {
 		}
 		
 		public static interface Caller<Sh extends Enum<Sh>&Value> {
-			PlayInfo_RepeatShuffle<Sh> getPlayInfo_RepeatShuffle();
+			PlayInfo_RepeatShuffle<Sh> getPlayInfo();
 			void updateDeviceNGui();
-				// device.update(EnumSet.of(listInfoUpdateWish, playInfoUpdateWish));
-				// lineList.updateLineList();
-				// updatePlayInfo();
 		}
 	
 		@Override
 		public void updateStdButtons() {
-			PlayInfo_RepeatShuffle<Shuffle> playInfo = caller.getPlayInfo_RepeatShuffle();
+			PlayInfo_RepeatShuffle<Shuffle> playInfo = caller.getPlayInfo();
 			if (playInfo!=null) {
 				Value.OffOneAll repeat = playInfo.getRepeat();
 				Shuffle shuffle = playInfo.getShuffle();
@@ -1323,27 +1301,30 @@ public class YamahaControl {
 		}
 	
 		@Override
-		public Vector<AbstractButton> createStdButtons() {
-			Vector<AbstractButton> buttons = new Vector<>();
+		public void addStdButtons(Vector<AbstractButton> buttons) {
 			buttons.add(repeatBtn  = YamahaControl.createButton("Repeat" ,true));
 			buttons.add(shuffleBtn = YamahaControl.createButton("Shuffle",true));
 			
 			repeatBtn.addActionListener(e->{
-				PlayInfo_RepeatShuffle<Shuffle> playInfo = caller.getPlayInfo_RepeatShuffle();
-				if (playInfo==null) return;
-				Value.OffOneAll repeat = playInfo.getRepeat();
-				playInfo.sendRepeat(YamahaControl.getNext(repeat,Device.Value.OffOneAll.values()));
-				caller.updateDeviceNGui();
+				PlayInfo_RepeatShuffle<Shuffle> playInfo = caller.getPlayInfo();
+				if (playInfo!=null) {
+					Value.OffOneAll repeat = playInfo.getRepeat();
+					if (repeat!=null) {
+						playInfo.sendRepeat(YamahaControl.getNext(repeat,Device.Value.OffOneAll.values()));
+						caller.updateDeviceNGui();
+					}
+				}
 			});
 			shuffleBtn.addActionListener(e->{
-				PlayInfo_RepeatShuffle<Shuffle> playInfo = caller.getPlayInfo_RepeatShuffle();
-				if (playInfo==null) return;
-				Shuffle shuffle = playInfo.getShuffle();
-				playInfo.sendShuffle(YamahaControl.getNext(shuffle,shuffleValues));
-				caller.updateDeviceNGui();
+				PlayInfo_RepeatShuffle<Shuffle> playInfo = caller.getPlayInfo();
+				if (playInfo!=null) {
+					Shuffle shuffle = playInfo.getShuffle();
+					if (shuffle!=null) {
+						playInfo.sendShuffle(YamahaControl.getNext(shuffle,shuffleValues));
+						caller.updateDeviceNGui();
+					}
+				}
 			});
-			
-			return buttons;
 		}
 	}
 

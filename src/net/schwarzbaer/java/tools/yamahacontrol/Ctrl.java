@@ -28,6 +28,7 @@ import org.w3c.dom.Document;
 import org.w3c.dom.Node;
 
 import net.schwarzbaer.java.tools.yamahacontrol.XML.TagList;
+import net.schwarzbaer.java.tools.yamahacontrol.YamahaControl.Log;
 
 final class Ctrl {
 	
@@ -121,6 +122,7 @@ final class Ctrl {
 		}
 	}
 	
+	static final int RC_DEVICE_IN_STANDBY = 4;
 	static final int RC_OK = 0;
 	static final int RC_NO_RESPONSE = -1;
 	static final int RC_CANT_PARSE_XML = -2;
@@ -162,15 +164,9 @@ final class Ctrl {
 	}
 	 
 	public static String sendGetCommand_String(String address, Device.KnownCommand knownCommand) {
-		
-		String command = buildGetCommand(knownCommand.getTagList());
-		Document document = sendCommand_controlled(address, command);
-		if (lastRC!=RC_OK) return null;
-		
-		Vector<Node> nodes = XML.getNodes(document, knownCommand.getTagList().addBefore("YAMAHA_AV"));
-		if (nodes.isEmpty()) return null;
-		
-		return XML.getSubValue(nodes.get(0));
+		Node node = sendGetCommand_Node(address,knownCommand);
+		if (node==null) return null;
+		return XML.getSubValue(node);
 	}
 	
 	public static Node sendGetCommand_Node(String address, Device.KnownCommand knownCommand) {
@@ -183,8 +179,10 @@ final class Ctrl {
 //		StringBuilder sb = new StringBuilder();
 //		XML.showXMLformated(sb,"",document);
 		
-		Vector<Node> nodes = XML.getNodes(document, knownCommand.getTagList().addBefore("YAMAHA_AV"));
-		if (nodes.isEmpty()) return null;
+		TagList tagList = knownCommand.getTagList().addBefore("YAMAHA_AV");
+		Vector<Node> nodes = XML.getNodes(document, tagList);
+		if (nodes.isEmpty()) { Log.error(XML.class, "Can't find subnode in response: TagList=%s", tagList); return null; }
+		if (nodes.size()>1) Log.warning(XML.class, "Found more than one subnode in response: TagList=%s", tagList);
 		
 		return nodes.get(0);
 	}

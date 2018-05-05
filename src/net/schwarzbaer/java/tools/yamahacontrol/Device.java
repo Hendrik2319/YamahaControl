@@ -140,7 +140,7 @@ public final class Device {
 			String xmlStr = NumberWithUnit.createXML(newValue/2.0,1,"dB");
 			basicStatus.volume.number = newValue/2.0f;
 			int rc = Ctrl.sendPutCommand(address,KnownCommand.General.SetVolume,xmlStr);
-			if (rc!=Ctrl.RC_OK)
+			if (rc!=Ctrl.RC_OK && rc!=Ctrl.RC_DEVICE_IN_STANDBY)
 				Log.error(getClass(), "setVolume(%f)-> %s %s -> RC:%d", value, KnownCommand.General.SetVolume.tagList, xmlStr, rc);
 		}
 	}
@@ -810,7 +810,7 @@ public final class Device {
 		
 		@Override public Value.PlayStop getPlayState() { return playState; }
 
-		public void sendPlayback(Value.PlayStop playState) {
+		@Override public void sendPlayback(Value.PlayStop playState) {
 			// [Play]    Visible:No     PUT[P1]     NET_RADIO,Play_Control,Playback = Play
 			// [Stop]    Playable:No     PUT[P1]     NET_RADIO,Play_Control,Playback = Stop
 			Ctrl.sendPutCommand(address,setPlayback, playState.getLabel());
@@ -961,27 +961,27 @@ public final class Device {
 			return sb.toString();
 		}
 		
-		public void sendPlayback(Value.PlayPauseStop playState) {
+		@Override public void sendPlayback(Value.PlayPauseStop playState) {
 			// [Play]      #######,Play_Control,Playback = Play
 			// [Pause]     #######,Play_Control,Playback = Pause
 			// [Stop]      #######,Play_Control,Playback = Stop
 			Ctrl.sendPutCommand(address,setPlaybackCmd, playState.getLabel());
 		}
 		
-		public void sendPlayback(Value.SkipFwdRev skip) {
+		@Override public void sendPlayback(Value.SkipFwdRev skip) {
 			// [Plus_1]    #######,Play_Control,Playback = Skip Fwd
 			// [Minus_1]   #######,Play_Control,Playback = Skip Rev
 			Ctrl.sendPutCommand(address,setPlaybackCmd, skip.getLabel());
 		}
 		
-		public void sendRepeat(Value.OffOneAll repeatState) {
+		@Override public void sendRepeat(Value.OffOneAll repeatState) {
 			// [Rep_Off]   #######,Play_Control,Play_Mode,Repeat = Off
 			// [Rep_1]     #######,Play_Control,Play_Mode,Repeat = One
 			// [Rep_2]     #######,Play_Control,Play_Mode,Repeat = All
 			Ctrl.sendPutCommand(address,setRepeatCmd, repeatState.getLabel());
 		}
 		
-		public void sendShuffle(Shuffle shuffleState) {
+		@Override public void sendShuffle(Shuffle shuffleState) {
 			Ctrl.sendPutCommand(address,setShuffleCmd, shuffleState.getLabel());
 		}
 	
