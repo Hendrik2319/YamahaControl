@@ -67,6 +67,7 @@ import javax.swing.filechooser.FileSystemView;
 
 import net.schwarzbaer.gui.StandardMainWindow;
 import net.schwarzbaer.java.tools.yamahacontrol.Device.Inputs.DeviceSceneInput;
+import net.schwarzbaer.java.tools.yamahacontrol.Device.ListInfo;
 import net.schwarzbaer.java.tools.yamahacontrol.Device.UpdateWish;
 import net.schwarzbaer.java.tools.yamahacontrol.Device.Value;
 
@@ -183,8 +184,8 @@ public class YamahaControl {
 		new SubUnitNetRadio().addTo(guiRegions,subUnitPanel);
 		new SubUnitDLNA    ().addTo(guiRegions,subUnitPanel);
 		new SubUnitUSB     ().addTo(guiRegions,subUnitPanel);
-		new SubUnitIPodUSB ().addTo(guiRegions,subUnitPanel);
 		new SubUnitTuner   ().addTo(guiRegions,subUnitPanel);
+		new SubUnitIPodUSB ().addTo(guiRegions,subUnitPanel);
 		new SubUnitSpotify ().addTo(guiRegions,subUnitPanel);
 		new SubUnitAirPlay ().addTo(guiRegions,subUnitPanel);
 		
@@ -892,7 +893,7 @@ public class YamahaControl {
 	private static abstract class AbstractSubUnit extends JPanel implements GuiRegion {
 		private static final long serialVersionUID = 7368584160348326790L;
 		
-		protected boolean disableSubUnitIfNotReady = false;
+		protected boolean disableSubUnitIfNotReady = true;
 		
 		protected Device device;
 		protected boolean isReady;
@@ -901,6 +902,8 @@ public class YamahaControl {
 
 		private String inputID;
 		private String tabTitle;
+
+		private JButton activateBtn;
 
 		protected AbstractSubUnit(String inputID, String tabTitle) {
 			super(new BorderLayout(3,3));
@@ -912,7 +915,7 @@ public class YamahaControl {
 			tabHeaderComp = new JLabel("  "+tabTitle+"  ");
 			
 			JPanel northPanel = new JPanel(new FlowLayout(FlowLayout.LEFT,3,3));
-			northPanel.add(createButton("Activate", e->{
+			northPanel.add(activateBtn = createButton("Activate", e->{
 				if (device==null) return;
 				DeviceSceneInput dsi = device.inputs.findInput(inputID);
 				if (dsi!=null) device.inputs.setInput(dsi);
@@ -922,6 +925,8 @@ public class YamahaControl {
 			add(northPanel,BorderLayout.NORTH);
 			add(createContentPanel(),BorderLayout.CENTER);
 			setBorder(BorderFactory.createEmptyBorder(3,3,3,3));
+			
+			activateBtn.setEnabled(this.device!=null);
 		}
 
 		public void addTo(Vector<GuiRegion> guiRegions, JTabbedPane subUnitPanel) {
@@ -936,6 +941,7 @@ public class YamahaControl {
 		@Override
 		public void initGUIafterConnect(Device device) {
 			this.device = device;
+			activateBtn.setEnabled(this.device!=null);
 			setEnabledGUI(this.device!=null);
 			frequentlyUpdate();
 		}
@@ -964,7 +970,7 @@ public class YamahaControl {
 		protected abstract boolean getReadyState();
 		protected UpdateWish getReadyStateUpdateWish() { return null; }
 
-		@Override public void setEnabledGUI(boolean enabled) { setEnabled(enabled); }
+		@Override public void setEnabledGUI(boolean enabled) { /*setEnabled(enabled);*/ }
 	}
 	
 	private static class SubUnitNetRadio extends AbstractSubUnit_ListPlay implements PlayButtonModule.Caller, ButtonModule.ExtraButtons {
@@ -972,7 +978,7 @@ public class YamahaControl {
 
 		public SubUnitNetRadio() {
 			super("NET RADIO","Net Radio",UpdateWish.NetRadioListInfo,UpdateWish.NetRadioPlayInfo);
-			modules.add(new PlayButtonModule(comps, this, this));
+			modules.add(new PlayButtonModule(this, this));
 		}
 
 		@Override
@@ -1041,7 +1047,7 @@ public class YamahaControl {
 		private JButton modeBtn;
 	
 		public SubUnitIPodUSB() {
-			super("iPod (USB)","IPod USB",UpdateWish.IPodUSBListInfo,UpdateWish.IPodUSBPlayInfo,Device.Value.ShuffleIPod.values());
+			super("iPod (USB)","iPod (USB) [untested]",UpdateWish.IPodUSBListInfo,UpdateWish.IPodUSBPlayInfo,Device.Value.ShuffleIPod.values());
 			setExtraButtons(this);
 		}
 	
@@ -1077,14 +1083,79 @@ public class YamahaControl {
 	}
 	
 	
+	private static class SubUnitTuner extends AbstractSubUnit {
+		private static final long serialVersionUID = -8583320100311806933L;
+	
+		public SubUnitTuner() {
+			super("TUNER","Tuner");
+		}
+	
+		@Override
+		protected UpdateWish getReadyStateUpdateWish() {
+			return UpdateWish.TunerConfig;
+		}
+	
+		@Override
+		protected boolean getReadyState() {
+			if (device==null) return false;
+			if (device.tuner==null) return false;
+			if (device.tuner.config==null) return false;
+			Device.Value.ReadyOrNot readyState = device.tuner.config.deviceStatus;
+			return readyState==Device.Value.ReadyOrNot.Ready;
+		}
+	}
+
+	private static class SubUnitAirPlay extends AbstractSubUnit_AirPlaySpotify {
+		private static final long serialVersionUID = 8375036678437177239L;
+	
+		// [Source_Device | SD_AirPlay | AirPlay]   
+		public SubUnitAirPlay() {
+			super("AirPlay","AirPlay [untested]",UpdateWish.AirPlayPlayInfo);
+		}
+		
+		@Override public Device.PlayInfo_AirPlaySpotify getPlayInfo() { return device==null?null:device.airPlay.playInfo; }
+	
+		@Override
+		protected UpdateWish getReadyStateUpdateWish() {
+			return UpdateWish.AirPlayConfig;
+		}
+	
+		@Override
+		protected boolean getReadyState() {
+			if (device==null) return false;
+			if (device.airPlay==null) return false;
+			if (device.airPlay.config==null) return false;
+			Device.Value.ReadyOrNot readyState = device.airPlay.config.deviceStatus;
+			return readyState==Device.Value.ReadyOrNot.Ready;
+		}
+	}
+
+	private static class SubUnitSpotify extends AbstractSubUnit_AirPlaySpotify {
+		private static final long serialVersionUID = -869960569061323838L;
+	
+		public SubUnitSpotify() {
+			super("Spotify","Spotify [untested]",UpdateWish.SpotifyPlayInfo);
+		}
+		
+		@Override public Device.PlayInfo_AirPlaySpotify getPlayInfo() { return device==null?null:device.spotify.playInfo; }
+	
+		@Override
+		protected boolean getReadyState() {
+			if (device==null) return false;
+			// GET[G3]:    Spotify,Config   ->   Feature_Availability -> "Ready" | "Not Ready"
+			Device.Value.ReadyOrNot readyState = device.askValue(Device.KnownCommand.Config.Spotify, Device.Value.ReadyOrNot.values(), "Feature_Availability");
+			return readyState==Device.Value.ReadyOrNot.Ready;
+		}
+	}
+
 	private static abstract class AbstractSubUnit_PlayInfoExt<Shuffle extends Enum<Shuffle>&Value> extends AbstractSubUnit_ListPlay implements PlayButtonModuleExt.Caller, ReapeatShuffleButtonModule.Caller<Shuffle> {
 		private static final long serialVersionUID = 8830354607137619068L;
 		private ButtonModule lastModule;
 		
 		public AbstractSubUnit_PlayInfoExt(String inputID, String tabTitle, UpdateWish listInfoUpdateWish, UpdateWish playInfoUpdateWish, Shuffle[] shuffleValues) {
 			super(inputID, tabTitle, listInfoUpdateWish, playInfoUpdateWish);
-			modules.add( new PlayButtonModuleExt(comps, this, null));
-			modules.add( lastModule = new ReapeatShuffleButtonModule<Shuffle>(comps, this, shuffleValues, null));
+			modules.add( new PlayButtonModuleExt(this, null));
+			modules.add( lastModule = new ReapeatShuffleButtonModule<Shuffle>(this, shuffleValues, null));
 		}
 		
 		protected void setExtraButtons(ButtonModule.ExtraButtons extraButtons) {
@@ -1092,6 +1163,24 @@ public class YamahaControl {
 		}
 
 		@Override public abstract Device.PlayInfoExt<Shuffle> getPlayInfo();
+	}
+
+	private static abstract class AbstractSubUnit_AirPlaySpotify extends AbstractSubUnit_ListPlay implements PlayButtonModuleExt.Caller {
+		private static final long serialVersionUID = -1847669703849102028L;
+		private ButtonModule lastModule;
+
+		public AbstractSubUnit_AirPlaySpotify(String inputID, String tabTitle, UpdateWish playInfoUpdateWish) {
+			super(inputID, tabTitle, null, playInfoUpdateWish);
+			modules.add( lastModule = new PlayButtonModuleExt(this, null));
+		}
+		
+		@SuppressWarnings("unused")
+		protected void setExtraButtons(ButtonModule.ExtraButtons extraButtons) {
+			lastModule.extraButtons = extraButtons;
+		}
+		
+		@Override public abstract Device.PlayInfo_AirPlaySpotify getPlayInfo();
+		@Override protected ListInfo getListInfo(Device device) { throw new UnsupportedOperationException("getListInfo() is not supported in AbstractSubUnit_AirPlaySpotify"); }
 	}
 	
 	
@@ -1114,11 +1203,9 @@ public class YamahaControl {
 	}
 
 	private static abstract class ButtonModule {
-		private Vector<JComponent> comps;
 		private ExtraButtons extraButtons;
 		
-		ButtonModule(Vector<JComponent> comps, ExtraButtons extraButtons) {
-			this.comps = comps;
+		ButtonModule(ExtraButtons extraButtons) {
 			this.extraButtons = extraButtons;
 		}
 		
@@ -1128,7 +1215,7 @@ public class YamahaControl {
 				extraButtons.updateExtraButtons();
 		}
 		
-		public GridBagPanel createButtons() {
+		public GridBagPanel createButtonPanel(Vector<JComponent> comps) {
 			GridBagPanel  buttonPanel = new GridBagPanel();
 			
 			Vector<AbstractButton> buttons = new Vector<>();
@@ -1158,8 +1245,8 @@ public class YamahaControl {
 		private JToggleButton playBtn;
 		private JToggleButton stopBtn;
 		
-		PlayButtonModule(Vector<JComponent> comps, Caller caller, ExtraButtons extraButtons) {
-			super(comps, extraButtons);
+		PlayButtonModule(Caller caller, ExtraButtons extraButtons) {
+			super(extraButtons);
 			this.caller = caller;
 		}
 		
@@ -1211,8 +1298,8 @@ public class YamahaControl {
 		private JToggleButton pauseBtn;
 		private JToggleButton stopBtn;
 		
-		PlayButtonModuleExt(Vector<JComponent> comps, Caller caller, ExtraButtons extraButtons) {
-			super(comps, extraButtons);
+		PlayButtonModuleExt(Caller caller, ExtraButtons extraButtons) {
+			super(extraButtons);
 			this.caller = caller;
 		}
 		
@@ -1278,8 +1365,8 @@ public class YamahaControl {
 		private JButton shuffleBtn;
 		private Shuffle[] shuffleValues;
 	
-		ReapeatShuffleButtonModule(Vector<JComponent> comps, Caller<Shuffle> caller, Shuffle[] shuffleValues, ExtraButtons extraButtons) {
-			super(comps, extraButtons);
+		ReapeatShuffleButtonModule(Caller<Shuffle> caller, Shuffle[] shuffleValues, ExtraButtons extraButtons) {
+			super(extraButtons);
 			this.caller = caller;
 			this.shuffleValues = shuffleValues;
 		}
@@ -1335,7 +1422,7 @@ public class YamahaControl {
 		private   JTextArea playinfoOutput;
 		private   JScrollPane playinfoScrollPane;
 		
-		protected Vector<JComponent> comps;
+		private   Vector<JComponent> comps;
 		protected Vector<ButtonModule> modules;
 		
 		protected UpdateWish listInfoUpdateWish;
@@ -1365,6 +1452,12 @@ public class YamahaControl {
 			return enumSet;
 		}
 
+		public void updateDeviceNGui() {
+			device.update(getUpdateWishes(UpdateReason.Frequently));
+			if (lineList!=null) lineList.updateLineList();
+			updatePlayInfo();
+		}
+
 		@Override
 		public void initGUIafterConnect(Device device) {
 			if (lineList!=null) lineList.setDeviceAndListInfo(device,device==null?null:getListInfo(device));
@@ -1387,6 +1480,7 @@ public class YamahaControl {
 		public void setEnabledGUI(boolean enabled) {
 			if (lineList!=null) lineList.setEnabledGUI(enabled);
 			comps.forEach(b->b.setEnabled(enabled));
+			playinfoOutput.setEnabled(enabled);
 		}
 	
 		@Override
@@ -1402,17 +1496,15 @@ public class YamahaControl {
 			
 			playinfoOutput = new JTextArea("<no data>");
 			playinfoOutput.setEditable(false);
-			comps.add(playinfoOutput);
 			
 			playinfoScrollPane = new JScrollPane(playinfoOutput);
 			playinfoScrollPane.setPreferredSize(new Dimension(500, 400));
 			
-//			playButtons = new ButtonGroup();
 			GridBagPanel buttonsPanel = new GridBagPanel();
 			buttonsPanel.setInsets(new Insets(3,0,3,0));
 			for (int i=0; i<modules.size(); ++i) {
 				ButtonModule module = modules.get(i);
-				buttonsPanel.add(module.createButtons(), 0,i, 0,0, 1,1, GridBagConstraints.BOTH);
+				buttonsPanel.add(module.createButtonPanel(comps), 0,i, 0,0, 1,1, GridBagConstraints.BOTH);
 			}
 			
 			JPanel playinfoPanel = new JPanel(new BorderLayout(3,3));
@@ -1427,15 +1519,6 @@ public class YamahaControl {
 				return contentPanel;
 			}
 			return playinfoPanel;
-		}
-
-		public void updateDeviceNGui() {
-			EnumSet<UpdateWish> updateWishes = EnumSet.noneOf(UpdateWish.class);
-			if (listInfoUpdateWish!=null) updateWishes.add(listInfoUpdateWish);
-			if (playInfoUpdateWish!=null) updateWishes.add(playInfoUpdateWish);
-			device.update(updateWishes);
-			if (lineList!=null) lineList.updateLineList();
-			updatePlayInfo();
 		}
 
 		@Override
@@ -1453,67 +1536,6 @@ public class YamahaControl {
 		}
 	}
 
-	private static class SubUnitTuner extends AbstractSubUnit {
-		private static final long serialVersionUID = -8583320100311806933L;
-
-		public SubUnitTuner() {
-			super("TUNER","Tuner");
-		}
-
-		@Override
-		protected UpdateWish getReadyStateUpdateWish() {
-			return UpdateWish.TunerConfig;
-		}
-
-		@Override
-		protected boolean getReadyState() {
-			if (device==null) return false;
-			if (device.tuner==null) return false;
-			if (device.tuner.config==null) return false;
-			Device.Value.ReadyOrNot readyState = device.tuner.config.deviceStatus;
-			return readyState==Device.Value.ReadyOrNot.Ready;
-		}
-	}
-	
-	private static class SubUnitAirPlay extends AbstractSubUnit {
-		private static final long serialVersionUID = 8375036678437177239L;
-
-		// [Source_Device | SD_AirPlay | AirPlay]   
-		public SubUnitAirPlay() {
-			super("AirPlay","AirPlay");
-		}
-
-		@Override
-		protected UpdateWish getReadyStateUpdateWish() {
-			return UpdateWish.AirPlayConfig;
-		}
-
-		@Override
-		protected boolean getReadyState() {
-			if (device==null) return false;
-			if (device.airPlay==null) return false;
-			if (device.airPlay.config==null) return false;
-			Device.Value.ReadyOrNot readyState = device.airPlay.config.deviceStatus;
-			return readyState==Device.Value.ReadyOrNot.Ready;
-		}
-	}
-	
-	private static class SubUnitSpotify extends AbstractSubUnit {
-		private static final long serialVersionUID = -869960569061323838L;
-
-		public SubUnitSpotify() {
-			super("Spotify","Spotify");
-		}
-
-		@Override
-		protected boolean getReadyState() {
-			if (device==null) return false;
-			// GET[G3]:    Spotify,Config   ->   Feature_Availability -> "Ready" | "Not Ready"
-			Device.Value.ReadyOrNot readyState = device.askValue(Device.KnownCommand.Config.Spotify, Device.Value.ReadyOrNot.values(), "Feature_Availability");
-			return readyState==Device.Value.ReadyOrNot.Ready;
-		}
-	}
-	
 	static class Log {
 		public static void info   (Class<?> callerClass,                String format, Object... values) { out(System.out, callerClass, "INFO"   ,         format, values); }
 		public static void warning(Class<?> callerClass,                String format, Object... values) { out(System.err, callerClass, "WARNING",         format, values); }

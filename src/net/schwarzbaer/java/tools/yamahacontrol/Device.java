@@ -21,11 +21,12 @@ public final class Device {
 	private BasicStatus basicStatus;
 	
 	NetRadio netRadio;
-	Tuner    tuner;
-	AirPlay  airPlay;
 	USB      usb;
 	DLNA     dlna;
 	IPodUSB  iPodUSB;
+	Tuner    tuner;
+	AirPlay  airPlay;
+	Spotify  spotify;
 	
 	Device(String address) {
 		this.address = address;
@@ -34,17 +35,18 @@ public final class Device {
 		this.mainPlayCtrl = new MainPlayCtrl(this.address);
 		
 		this.netRadio = new NetRadio(this.address);
-		this.tuner    = new Tuner   (this.address);
-		this.airPlay  = new AirPlay (this.address);
 		this.usb      = new USB     (this.address);
 		this.dlna     = new DLNA    (this.address);
 		this.iPodUSB  = new IPodUSB (this.address);
+		this.airPlay  = new AirPlay (this.address);
+		this.spotify  = new Spotify (this.address);
+		this.tuner    = new Tuner   (this.address);
 	}
 	
 	enum UpdateWish {
 		BasicStatus, Scenes, Inputs, TunerConfig, AirPlayConfig,
 		NetRadioPlayInfo, NetRadioListInfo, USBListInfo, USBPlayInfo,
-		DLNAPlayInfo, DLNAListInfo, IPodUSBListInfo, IPodUSBPlayInfo, IPodUSBMode
+		DLNAPlayInfo, DLNAListInfo, IPodUSBListInfo, IPodUSBPlayInfo, IPodUSBMode, AirPlayPlayInfo, SpotifyPlayInfo
 	}
 	
 	public void update(EnumSet<UpdateWish> updateWishes) {
@@ -56,6 +58,8 @@ public final class Device {
 			case BasicStatus     : basicStatus       = BasicStatus   .parse(Ctrl.sendGetCommand_Node(address,KnownCommand.General.GetBasicStatus  )); break;
 			case TunerConfig     : tuner  .config    = Tuner  .Config.parse(Ctrl.sendGetCommand_Node(address,KnownCommand.Config.Tuner  )); break;
 			case AirPlayConfig   : airPlay.config    = AirPlay.Config.parse(Ctrl.sendGetCommand_Node(address,KnownCommand.Config.AirPlay)); break;
+			case AirPlayPlayInfo : airPlay .playInfo.update(); break;
+			case SpotifyPlayInfo : spotify .playInfo.update(); break;
 			case NetRadioListInfo: netRadio.listInfo.update(); break;
 			case NetRadioPlayInfo: netRadio.playInfo.update(); break;
 			case USBListInfo     : usb     .listInfo.update(); break;
@@ -73,10 +77,6 @@ public final class Device {
 		Node node = Ctrl.sendGetCommand_Node(address,knownCommand);
 		if (node==null) return null;
 		return XML.getSubValue(node,values,tagList);
-	}
-	
-	public int sendPutCommand(Device.KnownCommand knownCommand, String value) {
-		return Ctrl.sendPutCommand(address, knownCommand, value);
 	}
 
 	private static class BasicStatus {
@@ -155,7 +155,7 @@ public final class Device {
 	public void setMute(Value.OnOff volMute) {
 		// [Vol_Mute_On]        PUT[P3]     Main_Zone,Volume,Mute = On
 		// [Vol_Mute_Off]        PUT[P3]     Main_Zone,Volume,Mute = Off
-		Ctrl.sendPutCommand(address,KnownCommand.General.SetMute,volMute.getLabel());
+		Device.sendCommand(getClass(), address, "setMute", KnownCommand.General.SetMute, volMute);
 	}
 	
 	public Value.PowerState getPowerState() {
@@ -166,7 +166,7 @@ public final class Device {
 	public void setPowerState(Value.PowerState power) {
 		// System,Power_Control,Power = On
 		// System,Power_Control,Power = Standby
-		Ctrl.sendPutCommand(address,KnownCommand.General.GetNSetSystemPower,power.getLabel());
+		Device.sendCommand(getClass(), address, "setPowerState", KnownCommand.General.GetNSetSystemPower, power);
 	}
 	
 	static class MainPlayCtrl {
@@ -178,23 +178,19 @@ public final class Device {
 		}
 
 		public void setPlayback(Value.PlayPauseStop play) {
-			int rc = Ctrl.sendPutCommand(address,KnownCommand.MainZone.Playback,play.getLabel());
-			if (rc!=Ctrl.RC_OK) Log.warning(getClass(), "setPlayback( %s ) -> RC: %d", play.getLabel(), rc);
+			Device.sendPlayback(getClass(), address, KnownCommand.SetPlayback.MainZone, play);
 		}
 
 		public void setPlayback(Value.SkipFwdRev skip) {
-			int rc = Ctrl.sendPutCommand(address,KnownCommand.MainZone.Playback,skip.getLabel());
-			if (rc!=Ctrl.RC_OK) Log.warning(getClass(), "setPlayback( %s ) -> RC: %d", skip.getLabel(), rc);
+			Device.sendPlayback(getClass(), address, KnownCommand.SetPlayback.MainZone, skip);
 		}
 
 		public void setCursorSelect(Value.CursorSelectExt cursor) {
-			int rc = Ctrl.sendPutCommand(address,KnownCommand.MainZone.Cursor,cursor.getLabel());
-			if (rc!=Ctrl.RC_OK) Log.warning(getClass(), "setCursorSelect( %s ) -> RC: %d", cursor.getLabel(), rc);
+			Device.sendCursorSelect(getClass(), address, KnownCommand.SetCursorSelExt.MainZone, cursor);
 		}
 
 		public void setMenuControl(Value.MainZoneMenuControl menuCtrl) {
-			int rc = Ctrl.sendPutCommand(address,KnownCommand.MainZone.MenuControl,menuCtrl.getLabel());
-			if (rc!=Ctrl.RC_OK) Log.warning(getClass(), "setMenuControl( %s ) -> RC: %d", menuCtrl.getLabel(), rc);
+			Device.sendMenuControl(getClass(), address, KnownCommand.MenuControl.MainZone, menuCtrl);
 		}
 	
 	}
@@ -232,12 +228,12 @@ public final class Device {
 
 		public void setScene(DeviceSceneInput dsi) {
 			// PUT[P6]:    Main_Zone,Scene,Scene_Sel   =   Values [GET[G4]:Main_Zone,Scene,Scene_Sel_Item]
-			Ctrl.sendPutCommand(device.address,KnownCommand.General.SetCurrentScene,dsi.ID);
+			Device.sendCommand(getClass(), device.address, "setScene", KnownCommand.General.SetCurrentScene, dsi.ID);
 		}
 
 		public void setInput(DeviceSceneInput dsi) {
 			// PUT[P4]:    Main_Zone,Input,Input_Sel   =   Values [GET[G2]:Main_Zone,Input,Input_Sel_Item]
-			Ctrl.sendPutCommand(device.address,KnownCommand.General.SetCurrentInput,dsi.ID);
+			Device.sendCommand(getClass(), device.address, "setInput", KnownCommand.General.SetCurrentInput, dsi.ID);
 		}
 
 		public DeviceSceneInput[] getInputs() { return inputs; }
@@ -286,6 +282,7 @@ public final class Device {
 
 	static interface KnownCommand {
 		public TagList getTagList();
+		public String toFullString();
 		
 		enum General implements KnownCommand {
 			GetSceneItems("Main_Zone,Scene,Scene_Sel_Item"), // G4: Main_Zone,Scene,Scene_Sel_Item
@@ -301,17 +298,16 @@ public final class Device {
 			final private TagList tagList;
 			General(String tagListStr) { tagList = new TagList(tagListStr); }
 			@Override public TagList getTagList() { return tagList; }
+			@Override public String toFullString() { return "KnownCommand."+getClass().getSimpleName()+"."+toString(); }
 		}
 		
-		enum MainZone implements KnownCommand {
-			Playback   ("Main_Zone,Play_Control,Playback"      ), // P24: Main_Zone,Play_Control,Playback
-			Cursor     ("Main_Zone,Cursor_Control,Cursor"      ), // P18: Main_Zone,Cursor_Control,Cursor
-			MenuControl("Main_Zone,Cursor_Control,Menu_Control"), // P19: Main_Zone,Cursor_Control,Menu_Control
+		enum MenuControl implements KnownCommand {
+			MainZone("Main_Zone,Cursor_Control,Menu_Control"), // P19: Main_Zone,Cursor_Control,Menu_Control
 			;
-			
 			final private TagList tagList;
-			MainZone(String tagListStr) { tagList = new TagList(tagListStr); }
+			MenuControl(String tagListStr) { tagList = new TagList(tagListStr); }
 			@Override public TagList getTagList() { return tagList; }
+			@Override public String toFullString() { return "KnownCommand."+getClass().getSimpleName()+"."+toString(); }
 		}
 		
 		enum Config implements KnownCommand {
@@ -323,10 +319,10 @@ public final class Device {
 			AirPlay (  "AirPlay,Config"),
 			Tuner   (    "Tuner,Config"),
 			;
-			
 			final private TagList tagList;
 			Config (String tagListStr) { tagList = new TagList(tagListStr); }
 			@Override public TagList getTagList() { return tagList; }
+			@Override public String toFullString() { return "KnownCommand."+getClass().getSimpleName()+"."+toString(); }
 		}
 		
 		enum GetListInfo implements KnownCommand {
@@ -335,10 +331,10 @@ public final class Device {
 			DLNA    (   "SERVER,List_Info"), // G2: SERVER,List_Info
 			IPodUSB ( "iPod_USB,List_Info"), // G2: iPod_USB,List_Info
 			;
-			
 			final private TagList tagList;
 			GetListInfo (String tagListStr) { tagList = new TagList(tagListStr); }
 			@Override public TagList getTagList() { return tagList; }
+			@Override public String toFullString() { return "KnownCommand."+getClass().getSimpleName()+"."+toString(); }
 		}
 		
 		enum GetPlayInfo implements KnownCommand {
@@ -349,10 +345,10 @@ public final class Device {
 			Spotify (  "Spotify,Play_Info"), // G1: Spotify,Play_Info
 			AirPlay (  "AirPlay,Play_Info"), // G1: AirPlay,Play_Info
 			;
-			
 			final private TagList tagList;
 			GetPlayInfo (String tagListStr) { tagList = new TagList(tagListStr); }
 			@Override public TagList getTagList() { return tagList; }
+			@Override public String toFullString() { return "KnownCommand."+getClass().getSimpleName()+"."+toString(); }
 		}
 		
 		enum SetDirectSel implements KnownCommand {
@@ -361,10 +357,19 @@ public final class Device {
 			DLNA    (   "SERVER,List_Control,Direct_Sel"), // P5: SERVER,List_Control,Direct_Sel
 			IPodUSB ( "iPod_USB,List_Control,Direct_Sel"), // P2: iPod_USB,List_Control,Direct_Sel
 			;
-			
 			final private TagList tagList;
 			SetDirectSel (String tagListStr) { tagList = new TagList(tagListStr); }
 			@Override public TagList getTagList() { return tagList; }
+			@Override public String toFullString() { return "KnownCommand."+getClass().getSimpleName()+"."+toString(); }
+		}
+		
+		enum SetCursorSelExt implements KnownCommand {
+			MainZone  ("Main_Zone,Cursor_Control,Cursor"), // P18: Main_Zone,Cursor_Control,Cursor
+			;
+			final private TagList tagList;
+			SetCursorSelExt(String tagListStr) { tagList = new TagList(tagListStr); }
+			@Override public TagList getTagList() { return tagList; }
+			@Override public String toFullString() { return "KnownCommand."+getClass().getSimpleName()+"."+toString(); }
 		}
 		
 		enum SetCursorSel implements KnownCommand {
@@ -373,10 +378,10 @@ public final class Device {
 			DLNA    (   "SERVER,List_Control,Cursor"), // P7: SERVER,List_Control,Cursor
 			IPodUSB ( "iPod_USB,List_Control,Cursor"), // P5: iPod_USB,List_Control,Cursor
 			;
-			
 			final private TagList tagList;
 			SetCursorSel(String tagListStr) { tagList = new TagList(tagListStr); }
 			@Override public TagList getTagList() { return tagList; }
+			@Override public String toFullString() { return "KnownCommand."+getClass().getSimpleName()+"."+toString(); }
 		}
 		
 		enum SetPageSel implements KnownCommand {
@@ -385,10 +390,10 @@ public final class Device {
 			DLNA    (   "SERVER,List_Control,Page"), // P8: SERVER,List_Control,Page
 			IPodUSB ( "iPod_USB,List_Control,Page"), // P6: iPod_USB,List_Control,Page
 			;
-			
 			final private TagList tagList;
 			SetPageSel(String tagListStr) { tagList = new TagList(tagListStr); }
 			@Override public TagList getTagList() { return tagList; }
+			@Override public String toFullString() { return "KnownCommand."+getClass().getSimpleName()+"."+toString(); }
 		}
 		
 		enum JumpToLine implements KnownCommand {
@@ -397,13 +402,14 @@ public final class Device {
 			DLNA    (   "SERVER,List_Control,Jump_Line"), // P6: SERVER,List_Control,Jump_Line
 			IPodUSB ( "iPod_USB,List_Control,Jump_Line"), // P4: iPod_USB,List_Control,Jump_Line
 			;
-			
 			final private TagList tagList;
 			JumpToLine(String tagListStr) { tagList = new TagList(tagListStr); }
 			@Override public TagList getTagList() { return tagList; }
+			@Override public String toFullString() { return "KnownCommand."+getClass().getSimpleName()+"."+toString(); }
 		}
 		
 		enum SetPlayback implements KnownCommand {
+			MainZone("Main_Zone,Play_Control,Playback"), // P24: Main_Zone,Play_Control,Playback
 			NetRadio("NET_RADIO,Play_Control,Playback"),
 			USB     (      "USB,Play_Control,Playback"), // P3: USB,Play_Control,Playback
 			DLNA    (   "SERVER,Play_Control,Playback"), // P3: SERVER,Play_Control,Playback
@@ -411,10 +417,10 @@ public final class Device {
 			Spotify (  "Spotify,Play_Control,Playback"), // P1: Spotify,Play_Control,Playback
 			AirPlay (  "AirPlay,Play_Control,Playback"), // P1: AirPlay,Play_Control,Playback
 			;
-			
 			final private TagList tagList;
 			SetPlayback(String tagListStr) { tagList = new TagList(tagListStr); }
 			@Override public TagList getTagList() { return tagList; }
+			@Override public String toFullString() { return "KnownCommand."+getClass().getSimpleName()+"."+toString(); }
 		}
 		
 		enum SetRepeat implements KnownCommand {
@@ -422,10 +428,10 @@ public final class Device {
 			DLNA   (  "SERVER,Play_Control,Play_Mode,Repeat"), // P1: SERVER,Play_Control,Play_Mode,Repeat
 			IPodUSB("iPod_USB,Play_Control,Play_Mode,Repeat"), // P8: iPod_USB,Play_Control,Play_Mode,Repeat
 			;
-			
 			final private TagList tagList;
 			SetRepeat(String tagListStr) { tagList = new TagList(tagListStr); }
 			@Override public TagList getTagList() { return tagList; }
+			@Override public String toFullString() { return "KnownCommand."+getClass().getSimpleName()+"."+toString(); }
 		}
 		
 		enum SetShuffle implements KnownCommand {
@@ -433,10 +439,10 @@ public final class Device {
 			DLNA   (  "SERVER,Play_Control,Play_Mode,Shuffle"), // P2: SERVER,Play_Control,Play_Mode,Shuffle
 			IPodUSB("iPod_USB,Play_Control,Play_Mode,Shuffle"), // P9: iPod_USB,Play_Control,Play_Mode,Shuffle
 			;
-			
 			final private TagList tagList;
 			SetShuffle(String tagListStr) { tagList = new TagList(tagListStr); }
 			@Override public TagList getTagList() { return tagList; }
+			@Override public String toFullString() { return "KnownCommand."+getClass().getSimpleName()+"."+toString(); }
 		}
 		
 		enum Special implements KnownCommand {
@@ -446,10 +452,10 @@ public final class Device {
 			SetDLNASelectPreset ("SERVER,Play_Control,Preset,Preset_Sel"), // P4: SERVER,Play_Control,Preset,Preset_Sel
 			SetIPodUSBMode("iPod_USB,Play_Control,iPod_Mode"), // P10: iPod_USB,Play_Control,iPod_Mode
 			;
-			
 			final private TagList tagList;
 			Special(String tagListStr) { tagList = new TagList(tagListStr); }
 			@Override public TagList getTagList() { return tagList; }
+			@Override public String toFullString() { return "KnownCommand."+getClass().getSimpleName()+"."+toString(); }
 		}
 		
 	}
@@ -626,8 +632,126 @@ public final class Device {
 
 		public void sendSetMode(Value.IPodMode mode) {
 			// Browse Mode   []        PUT[P10]     iPod_USB,Play_Control,iPod_Mode = Extended
-			/*int rc = */Ctrl.sendPutCommand(address,KnownCommand.Special.SetIPodUSBMode, mode.getLabel());
-			//Log.info(getClass(), "set mode: %s -> RC: %d", mode.getLabel(), rc);
+			Device.sendCommand(getClass(), address, "sendSetMode", KnownCommand.Special.SetIPodUSBMode, mode);
+		}
+	}
+	
+	static class AirPlay {
+		
+		PlayInfo_AirPlaySpotify playInfo;
+		Config config;
+		
+		public AirPlay(String address) {
+			this.config   = null;
+			this.playInfo = new PlayInfo_AirPlaySpotify("AirPlay", address, KnownCommand.GetPlayInfo.AirPlay, KnownCommand.SetPlayback.AirPlay);
+		}
+		
+		static class Config {
+			Value.ReadyOrNot deviceStatus;
+			String volumeInterlock;
+	
+			public static Config parse(Node node) {
+				Config config = new Config();
+				XML.forEachChild(node, child->{
+					switch (child.getNodeName()) {
+					case "Feature_Availability":
+						// GET[G3]:    AirPlay,Config   ->   Feature_Availability -> "Ready" | "Not Ready"
+						config.deviceStatus =  XML.getSubValue(child, Value.ReadyOrNot.values());
+						break;
+						
+					case "Volume_Interlock":
+						config.volumeInterlock =  XML.getSubValue(child);
+						break;
+					}
+				});
+				return config;
+			}
+		}
+	}
+
+	static class Spotify {
+		
+		PlayInfo_AirPlaySpotify playInfo;
+		
+		public Spotify(String address) {
+			this.playInfo = new PlayInfo_AirPlaySpotify("Spotify", address, KnownCommand.GetPlayInfo.Spotify, KnownCommand.SetPlayback.Spotify);
+		}
+	}
+
+	static class Tuner {
+		@SuppressWarnings("unused")
+		private String address;
+		Config config;
+	
+		public Tuner(String address) {
+			this.address = address;
+			this.config = null;
+		}
+	
+		static class Config {
+	
+			Value.ReadyOrNot deviceStatus;
+			String RDS;
+			BandRange FM;
+			BandRange AM;
+	
+			public Config() {
+				deviceStatus = null;
+				RDS = null;
+				FM = null;
+				AM = null;
+			}
+	
+			static Config parse(Node node) {
+				Config config = new Config();
+				XML.forEachChild(node, child->{
+					switch (child.getNodeName()) {
+					case "Feature_Availability":
+						// GET[G2]:    Tuner,Config   ->   Feature_Availability -> "Ready" | "Not Ready"
+						config.deviceStatus =  XML.getSubValue(child, Value.ReadyOrNot.values());
+						break;
+						
+					case "RDS":
+						config.RDS =  XML.getSubValue(child);
+						break;
+					case "Range_and_Step":
+						XML.forEachChild(child, band->{
+							switch (child.getNodeName()) {
+							case "FM": config.FM = (BandRange)BandRange.parse(child); break;
+							case "AM": config.AM = (BandRange)BandRange.parse(child); break;
+							}
+						});
+						break;
+					}
+				});
+				return config;
+			}
+			
+			static class BandRange {
+	
+				NumberWithUnit min;
+				NumberWithUnit max;
+				NumberWithUnit step;
+	
+				public BandRange() {
+					this.min = null;
+					this.max = null;
+					this.step = null;
+				}
+	
+				private static BandRange parse(Node node) {
+					BandRange bandRange = new BandRange();
+					XML.forEachChild(node, child->{
+						switch (child.getNodeName()) {
+						case "Min" : bandRange.min  = NumberWithUnit.parse(child); break;
+						case "Max" : bandRange.max  = NumberWithUnit.parse(child); break;
+						case "Step": bandRange.step = NumberWithUnit.parse(child); break;
+						}
+					});
+					return bandRange;
+				}
+				
+			}
 		}
 	}
 
@@ -669,13 +793,13 @@ public final class Device {
 		public void sendDirectSelect(ListInfo.Line line) {
 			if (setDirectSelCmd==null) throw new UnsupportedOperationException("DirectSelect not supported");
 			// PUT:    #######,List_Control,Direct_Sel   =   Label: Line_% (1..8)
-			Ctrl.sendPutCommand(address,setDirectSelCmd, "Line_"+line.index);
+			Device.sendDirectSelect(getClass(),address,setDirectSelCmd, "Line_"+line.index);
 		}
 		
 		public void sendJumpToLine(int lineNumber) {
 			if (setJumpToLineCmd==null) throw new UnsupportedOperationException("JumpToLine not supported");
 			// PUT:    #######,List_Control,Jump_Line   =   Number: 1..65536
-			Ctrl.sendPutCommand(address,setJumpToLineCmd, ""+lineNumber);
+			Device.sendJumpToLine(getClass(),address,setJumpToLineCmd, lineNumber);
 		}
 		
 		public void sendCursorSelect(Value.CursorSelect cursorSelect) {
@@ -685,14 +809,14 @@ public final class Device {
 			// [Cursor_Left]    #######,List_Control,Cursor = Return
 			// [Cursor_Sel]     #######,List_Control,Cursor = Sel
 			// [Cursor_Home]    #######,List_Control,Cursor = Return to Home
-			Ctrl.sendPutCommand(address,setCursorSelCmd, cursorSelect.getLabel());
+			Device.sendCursorSelect(getClass(),address,setCursorSelCmd, cursorSelect);
 		}
 		
 		public void sendPageSelect(Value.PageSelect pageSelect) {
 			if (setPageSelCmd==null) throw new UnsupportedOperationException("PageSelect not supported");
 			// [Page_Up_1]      #######,List_Control,Page = Up
 			// [Page_Down_1]    #######,List_Control,Page = Down
-			Ctrl.sendPutCommand(address,setPageSelCmd, pageSelect.getLabel());
+			Device.sendPageSelect(getClass(),address,setPageSelCmd, pageSelect);
 		}
 	
 		
@@ -813,7 +937,7 @@ public final class Device {
 		@Override public void sendPlayback(Value.PlayStop playState) {
 			// [Play]    Visible:No     PUT[P1]     NET_RADIO,Play_Control,Playback = Play
 			// [Stop]    Playable:No     PUT[P1]     NET_RADIO,Play_Control,Playback = Stop
-			Ctrl.sendPutCommand(address,setPlayback, playState.getLabel());
+			Device.sendPlayback(getClass(), address,setPlayback, playState);
 		}
 	
 		@Override
@@ -884,6 +1008,118 @@ public final class Device {
 		
 	}
 
+	static class PlayInfo_AirPlaySpotify extends PlayInfo implements PlayInfo_PlayPauseStopSkip {
+		
+		Value.ReadyOrNot deviceStatus;
+		Value.PlayPauseStop playState;
+		String currentArtist;
+		String currentAlbum;
+		String currentSong;
+		String inputLogoURL_S;
+		String inputLogoURL_M;
+		String inputLogoURL_L;
+		
+		private KnownCommand.SetPlayback setPlaybackCmd;
+		public PlayInfo_AirPlaySpotify(String name, String address, KnownCommand.GetPlayInfo getPlayInfoCmd, KnownCommand.SetPlayback setPlaybackCmd) {
+			super(name, address, getPlayInfoCmd);
+			this.setPlaybackCmd = setPlaybackCmd;
+			clearValues();
+		}
+		
+		private void clearValues() {
+			this.deviceStatus = null;
+			this.playState = null;
+			this.currentArtist = null;
+			this.currentAlbum = null;
+			this.currentSong = null;
+			this.inputLogoURL_S = null;
+			this.inputLogoURL_M = null;
+			this.inputLogoURL_L = null;
+		}
+		
+		@Override public Value.PlayPauseStop getPlayState() { return playState; }
+		
+		@Override public void sendPlayback(Value.PlayPauseStop playState) {
+			// [Play]      #######,Play_Control,Playback = Play
+			// [Pause]     #######,Play_Control,Playback = Pause
+			// [Stop]      #######,Play_Control,Playback = Stop
+			Device.sendPlayback(getClass(),address,setPlaybackCmd,playState);
+		}
+		
+		@Override public void sendPlayback(Value.SkipFwdRev skip) {
+			// [Plus_1]    #######,Play_Control,Playback = Skip Fwd
+			// [Minus_1]   #######,Play_Control,Playback = Skip Rev
+			Device.sendPlayback(getClass(),address,setPlaybackCmd,skip);
+		}
+
+		@Override
+		public String toString() {
+			StringBuilder sb = new StringBuilder();
+			sb.append(name+": ").append(deviceStatus==null?"???":deviceStatus.getLabel());
+			if (playState==null)
+				sb.append("\r\n");
+			else
+				switch (playState) {
+				case Play : sb.append(" & is playing\r\n"); break;
+				case Pause: sb.append(" & was paused\r\n"); break;
+				case Stop : sb.append(" & was stopped\r\n"); break;
+				}
+			sb.append("\r\n");
+			
+			sb.append("Artist: ").append(currentArtist==null?"":("\""+currentArtist+"\"")).append("\r\n");
+			sb.append(" Album: ").append(currentAlbum ==null?"":("\""+currentAlbum +"\"")).append("\r\n");
+			sb.append("  Song: ").append(currentSong  ==null?"":("\""+currentSong  +"\"")).append("\r\n");
+			sb.append("\r\n");
+			
+			sb.append("Input Logo:\r\n");
+			if (inputLogoURL_S!=null) sb.append("    [S] "+inputLogoURL_S+"\r\n");
+			if (inputLogoURL_M!=null) sb.append("    [M] "+inputLogoURL_M+"\r\n");
+			if (inputLogoURL_L!=null) sb.append("    [L] "+inputLogoURL_L+"\r\n");
+			
+			return sb.toString();
+		}
+	
+		@Override
+		protected void parse(Node node) {
+			clearValues();
+			XML.forEachChild(node, child->{
+				switch (child.getNodeName()) {
+				case "Feature_Availability":
+					// GET:    #######,Play_Info   ->   Feature_Availability -> "Ready" | "Not Ready"
+					deviceStatus = XML.getSubValue(child, Value.ReadyOrNot.values());
+					break;
+					
+				case "Playback_Info":
+					// GET:    #######,Play_Info   ->   Playback_Info -> "Play" | "Pause" | "Stop"
+					playState = XML.getSubValue(child, Value.PlayPauseStop.values());
+					break;
+					
+				case "Meta_Info":
+					// GET[G1]:    AirPlay,Play_Info   ->   Meta_Info,Artist -> Text: 0..128 (UTF-8)
+					// GET[G1]:    Spotify,Play_Info   ->   Meta_Info,Artist -> Text: 0..128 (UTF-8)
+					// GET[G1]:    AirPlay,Play_Info   ->   Meta_Info,Album -> Text: 0..128 (UTF-8)
+					// GET[G1]:    Spotify,Play_Info   ->   Meta_Info,Album -> Text: 0..128 (UTF-8)
+					// GET[G1]:    AirPlay,Play_Info   ->   Meta_Info,Song -> Text: 0..128 (UTF-8)
+					// GET[G1]:    Spotify,Play_Info   ->   Meta_Info,Track -> Text: 0..128 (UTF-8)
+					currentArtist = XML.getSubValue(child, "Artist"); 
+					currentAlbum  = XML.getSubValue(child, "Album");
+					if (XML.hasChild(child,"Song" )) currentSong = XML.getSubValue(child,"Song" );
+					if (XML.hasChild(child,"Track")) currentSong = XML.getSubValue(child,"Track"); 
+					break;
+					
+				case "Input_Logo":
+					// GET:    #######,Play_Info   ->   Input_Logo,URL_S -> Text: 0..128 (UTF-8)
+					// GET:    #######,Play_Info   ->   Input_Logo,URL_M -> Text: 0..128 (UTF-8)
+					// GET:    #######,Play_Info   ->   Input_Logo,URL_L -> Text: 0..128 (UTF-8)
+					inputLogoURL_S = XML.getSubValue(child, "URL_S"); 
+					inputLogoURL_M = XML.getSubValue(child, "URL_M"); 
+					inputLogoURL_L = XML.getSubValue(child, "URL_L"); 
+					break;
+				}
+			});
+		}
+	}
+
 	static class PlayInfoExt<Shuffle extends Enum<Shuffle>&Value> extends PlayInfo implements PlayInfo_PlayPauseStopSkip, PlayInfo_RepeatShuffle<Shuffle> {
 	
 		Value.ReadyOrNot deviceStatus;
@@ -897,12 +1133,12 @@ public final class Device {
 		Integer albumCoverID;
 		Value.AlbumCoverFormat albumCoverFormat;
 		
-		private KnownCommand setPlaybackCmd;
-		private KnownCommand setRepeatCmd;
-		private KnownCommand setShuffleCmd;
+		private KnownCommand.SetPlayback setPlaybackCmd;
+		private KnownCommand.SetRepeat   setRepeatCmd;
+		private KnownCommand.SetShuffle  setShuffleCmd;
 		private Shuffle[] shuffleValues;
 	
-		public PlayInfoExt(String name, String address, KnownCommand.GetPlayInfo getPlayInfoCmd, KnownCommand setPlaybackCmd, KnownCommand setRepeatCmd, KnownCommand setShuffleCmd, Shuffle[] shuffleValues) {
+		public PlayInfoExt(String name, String address, KnownCommand.GetPlayInfo getPlayInfoCmd, KnownCommand.SetPlayback setPlaybackCmd, KnownCommand.SetRepeat setRepeatCmd, KnownCommand.SetShuffle setShuffleCmd, Shuffle[] shuffleValues) {
 			super(name, address, getPlayInfoCmd);
 			this.setPlaybackCmd = setPlaybackCmd;
 			this.setRepeatCmd   = setRepeatCmd;
@@ -927,6 +1163,30 @@ public final class Device {
 		@Override public Value.PlayPauseStop getPlayState() { return playState; }
 		@Override public Value.OffOneAll     getRepeat   () { return repeat; }
 		@Override public Shuffle             getShuffle  () { return shuffle; }
+		
+		@Override public void sendPlayback(Value.PlayPauseStop playState) {
+			// [Play]      #######,Play_Control,Playback = Play
+			// [Pause]     #######,Play_Control,Playback = Pause
+			// [Stop]      #######,Play_Control,Playback = Stop
+			Device.sendPlayback(getClass(),address,setPlaybackCmd,playState);
+		}
+		
+		@Override public void sendPlayback(Value.SkipFwdRev skip) {
+			// [Plus_1]    #######,Play_Control,Playback = Skip Fwd
+			// [Minus_1]   #######,Play_Control,Playback = Skip Rev
+			Device.sendPlayback(getClass(),address,setPlaybackCmd,skip);
+		}
+		
+		@Override public void sendRepeat(Value.OffOneAll repeatState) {
+			// [Rep_Off]   #######,Play_Control,Play_Mode,Repeat = Off
+			// [Rep_1]     #######,Play_Control,Play_Mode,Repeat = One
+			// [Rep_2]     #######,Play_Control,Play_Mode,Repeat = All
+			Device.sendRepeat(getClass(),address,setRepeatCmd,repeatState);
+		}
+		
+		@Override public void sendShuffle(Shuffle shuffleState) {
+			Device.sendShuffle(getClass(),address,setShuffleCmd,shuffleState);
+		}
 
 		@Override
 		public String toString() {
@@ -959,30 +1219,6 @@ public final class Device {
 			sb.append("\r\n");
 			
 			return sb.toString();
-		}
-		
-		@Override public void sendPlayback(Value.PlayPauseStop playState) {
-			// [Play]      #######,Play_Control,Playback = Play
-			// [Pause]     #######,Play_Control,Playback = Pause
-			// [Stop]      #######,Play_Control,Playback = Stop
-			Ctrl.sendPutCommand(address,setPlaybackCmd, playState.getLabel());
-		}
-		
-		@Override public void sendPlayback(Value.SkipFwdRev skip) {
-			// [Plus_1]    #######,Play_Control,Playback = Skip Fwd
-			// [Minus_1]   #######,Play_Control,Playback = Skip Rev
-			Ctrl.sendPutCommand(address,setPlaybackCmd, skip.getLabel());
-		}
-		
-		@Override public void sendRepeat(Value.OffOneAll repeatState) {
-			// [Rep_Off]   #######,Play_Control,Play_Mode,Repeat = Off
-			// [Rep_1]     #######,Play_Control,Play_Mode,Repeat = One
-			// [Rep_2]     #######,Play_Control,Play_Mode,Repeat = All
-			Ctrl.sendPutCommand(address,setRepeatCmd, repeatState.getLabel());
-		}
-		
-		@Override public void sendShuffle(Shuffle shuffleState) {
-			Ctrl.sendPutCommand(address,setShuffleCmd, shuffleState.getLabel());
 		}
 	
 		@Override
@@ -1030,116 +1266,68 @@ public final class Device {
 		
 	}
 
-	static class Tuner {
-		@SuppressWarnings("unused")
-		private String address;
-		Config config;
-	
-		public Tuner(String address) {
-			this.address = address;
-			this.config = null;
-		}
-	
-		static class Config {
-	
-			Value.ReadyOrNot deviceStatus;
-			String RDS;
-			BandRange FM;
-			BandRange AM;
-
-			public Config() {
-				deviceStatus = null;
-				RDS = null;
-				FM = null;
-				AM = null;
-			}
-
-			static Config parse(Node node) {
-				Config config = new Config();
-				XML.forEachChild(node, child->{
-					switch (child.getNodeName()) {
-					case "Feature_Availability":
-						// GET[G2]:    Tuner,Config   ->   Feature_Availability -> "Ready" | "Not Ready"
-						config.deviceStatus =  XML.getSubValue(child, Value.ReadyOrNot.values());
-						break;
-						
-					case "RDS":
-						config.RDS =  XML.getSubValue(child);
-						break;
-					case "Range_and_Step":
-						XML.forEachChild(child, band->{
-							switch (child.getNodeName()) {
-							case "FM": config.FM = (BandRange)BandRange.parse(child); break;
-							case "AM": config.AM = (BandRange)BandRange.parse(child); break;
-							}
-						});
-						break;
-					}
-				});
-				return config;
-			}
-			
-			static class BandRange {
-
-				NumberWithUnit min;
-				NumberWithUnit max;
-				NumberWithUnit step;
-
-				public BandRange() {
-					this.min = null;
-					this.max = null;
-					this.step = null;
-				}
-
-				private static BandRange parse(Node node) {
-					BandRange bandRange = new BandRange();
-					XML.forEachChild(node, child->{
-						switch (child.getNodeName()) {
-						case "Min" : bandRange.min  = NumberWithUnit.parse(child); break;
-						case "Max" : bandRange.max  = NumberWithUnit.parse(child); break;
-						case "Step": bandRange.step = NumberWithUnit.parse(child); break;
-						}
-					});
-					return bandRange;
-				}
-				
-			}
-		}
+	private static void sendCommand(Class<?> callerClass, String address, String function, KnownCommand cmd, String value) {
+		int rc = Ctrl.sendPutCommand(address, cmd, value);
+		if (rc!=Ctrl.RC_OK) Log.error(callerClass, "%s(%s): %s -> RC: %d", function, value, cmd.toFullString(), rc);
 	}
-	
-	static class AirPlay {
-		
-		@SuppressWarnings("unused")
-		private String address;
 
-		public AirPlay(String address) {
-			this.address = address;
-		}
+	private static void sendCommand(Class<?> callerClass, String address, String function, KnownCommand cmd, Value value) {
+		int rc = Ctrl.sendPutCommand(address, cmd, value.getLabel());
+		if (rc!=Ctrl.RC_OK) Log.error(callerClass, "%s(%s): %s -> RC: %d", function, value, cmd.toFullString(), rc);
+	}
 
-		public Config config;
+	private static void sendMenuControl(Class<?> callerClass, String address, KnownCommand.MenuControl cmd, Value.MainZoneMenuControl value) {
+		int rc = Ctrl.sendPutCommand(address, cmd, value.getLabel());
+		if (rc!=Ctrl.RC_OK) Log.error(callerClass, "sendMenuControl(%s): %s -> RC: %d", value, cmd.toFullString(), rc);
+	}
 
-		static class Config {
+	private static void sendDirectSelect(Class<?> callerClass, String address, KnownCommand.SetDirectSel cmd, String value) {
+		int rc = Ctrl.sendPutCommand(address, cmd, value);
+		if (rc!=Ctrl.RC_OK) Log.error(callerClass, "sendDirectSelect(%s): %s -> RC: %d", value, cmd.toFullString(), rc);
+	}
 
-			Value.ReadyOrNot deviceStatus;
-			String volumeInterlock;
+	private static void sendJumpToLine(Class<?> callerClass, String address, KnownCommand.JumpToLine cmd, int value) {
+		int rc = Ctrl.sendPutCommand(address, cmd, ""+value);
+		if (rc!=Ctrl.RC_OK) Log.error(callerClass, "sendJumpToLine(%d): %s -> RC: %d", value, cmd.toFullString(), rc);
+	}
 
-			public static Config parse(Node node) {
-				Config config = new Config();
-				XML.forEachChild(node, child->{
-					switch (child.getNodeName()) {
-					case "Feature_Availability":
-						// GET[G3]:    AirPlay,Config   ->   Feature_Availability -> "Ready" | "Not Ready"
-						config.deviceStatus =  XML.getSubValue(child, Value.ReadyOrNot.values());
-						break;
-						
-					case "Volume_Interlock":
-						config.volumeInterlock =  XML.getSubValue(child);
-						break;
-					}
-				});
-				return config;
-			}
-			
-		}
+	private static void sendCursorSelect(Class<?> callerClass, String address, KnownCommand.SetCursorSelExt cmd, Value.CursorSelectExt value) {
+		int rc = Ctrl.sendPutCommand(address, cmd, value.getLabel());
+		if (rc!=Ctrl.RC_OK) Log.error(callerClass, "sendCursorSelect(%s): %s -> RC: %d", value, cmd.toFullString(), rc);
+	}
+
+	private static void sendCursorSelect(Class<?> callerClass, String address, KnownCommand.SetCursorSel cmd, Value.CursorSelect value) {
+		int rc = Ctrl.sendPutCommand(address, cmd, value.getLabel());
+		if (rc!=Ctrl.RC_OK) Log.error(callerClass, "sendCursorSelect(%s): %s -> RC: %d", value, cmd.toFullString(), rc);
+	}
+
+	private static void sendPageSelect(Class<?> callerClass, String address, KnownCommand.SetPageSel cmd, Value.PageSelect value) {
+		int rc = Ctrl.sendPutCommand(address, cmd, value.getLabel());
+		if (rc!=Ctrl.RC_OK) Log.error(callerClass, "sendPageSelect(%s): %s -> RC: %d", value, cmd.toFullString(), rc);
+	}
+
+	private static void sendPlayback(Class<?> callerClass, String address, KnownCommand.SetPlayback cmd, Value.PlayStop value) {
+		int rc = Ctrl.sendPutCommand(address, cmd, value.getLabel());
+		if (rc!=Ctrl.RC_OK) Log.error(callerClass, "sendPlayback(%s): %s -> RC: %d", value, cmd.toFullString(), rc);
+	}
+
+	private static void sendPlayback(Class<?> callerClass, String address, KnownCommand.SetPlayback cmd, Value.PlayPauseStop value) {
+		int rc = Ctrl.sendPutCommand(address, cmd, value.getLabel());
+		if (rc!=Ctrl.RC_OK) Log.error(callerClass, "sendPlayback(%s): %s -> RC: %d", value, cmd.toFullString(), rc);
+	}
+
+	private static void sendPlayback(Class<?> callerClass, String address, KnownCommand.SetPlayback cmd, Value.SkipFwdRev value) {
+		int rc = Ctrl.sendPutCommand(address, cmd, value.getLabel());
+		if (rc!=Ctrl.RC_OK) Log.error(callerClass, "sendPlayback(%s): %s -> RC: %d", value, cmd.toFullString(), rc);
+	}
+
+	private static void sendRepeat(Class<?> callerClass, String address, KnownCommand.SetRepeat cmd, Value.OffOneAll value) {
+		int rc = Ctrl.sendPutCommand(address, cmd, value.getLabel());
+		if (rc!=Ctrl.RC_OK) Log.error(callerClass, "sendRepeat(%s): %s -> RC: %d", value, cmd.toFullString(), rc);
+	}
+
+	private static <Shuffle extends Enum<Shuffle>&Value> void sendShuffle(Class<?> callerClass, String address, KnownCommand.SetShuffle cmd, Shuffle value) {
+		int rc = Ctrl.sendPutCommand(address, cmd, value.getLabel());
+		if (rc!=Ctrl.RC_OK) Log.error(callerClass, "sendShuffle(%s): %s -> RC: %d", value, cmd.toFullString(), rc);
 	}
 }

@@ -129,6 +129,10 @@ final class XML {
 		}
 	}
 
+	public static boolean hasChild(Node node, String nodeName) {
+		return !getChildNodesByNodeName(node,nodeName).isEmpty();
+	}
+
 	public static Node getSubNode(Node node, String... tagList) {
 		Vector<Node> nodes = XML.getSubNodes(node, tagList);
 		if (nodes.isEmpty()) { Log.error(XML.class, "Can't find subnode: Node=%s TagList=%s", XML.getPath(node), Arrays.toString(tagList)); return null; }

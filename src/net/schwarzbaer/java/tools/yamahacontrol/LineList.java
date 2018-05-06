@@ -11,8 +11,8 @@ import java.util.EnumSet;
 import java.util.Vector;
 
 import javax.swing.JButton;
-import javax.swing.JLabel;
 import javax.swing.JList;
+import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTextField;
@@ -83,7 +83,7 @@ class LineList {
 		lineListUser.setEnabledGuiIfPossible(listInfo.menuStatus==Device.Value.ReadyOrBusy.Ready);
 		//System.out.println("updateLineList() -> listInfo.menuStatus: "+listInfo.menuStatus);
 		
-		String lineListLabelStr = String.format("[Layer %s]    %s", listInfo.menuLayer, listInfo.menuName==null?"":listInfo.menuName);
+		String lineListLabelStr = String.format("[Level %s]    %s", listInfo.menuLayer, listInfo.menuName==null?"":listInfo.menuName);
 		if (listInfo.currentLine==null || listInfo.maxLine==null || listInfo.currentLine<listInfo.maxLine)
 			lineListLabelStr += "  "+listInfo.currentLine+"/"+listInfo.maxLine;
 		lineListLabel.setText(lineListLabelStr);
@@ -132,16 +132,8 @@ class LineList {
 		
 		buttons.clear();
 		GridBagPanel buttonsPanel = new GridBagPanel();
-		buttonsPanel.setInsets(new Insets(3,3,3,3));
-		buttonsPanel.add(new JLabel(""), 0,0, 1,1, 1,3, GridBagConstraints.BOTH);
-		buttonsPanel.add(new JLabel(""), 5,0, 1,1, 1,3, GridBagConstraints.BOTH);
-		buttonsPanel.add(createButton(ButtonID.Up      ), 2,0, 0,1, 1,1, GridBagConstraints.BOTH);
-		buttonsPanel.add(createButton(ButtonID.Home    ), 4,0, 0,1, 1,1, GridBagConstraints.BOTH);
-		buttonsPanel.add(createButton(ButtonID.Return  ), 1,1, 0,1, 1,1, GridBagConstraints.BOTH);
-		buttonsPanel.add(createButton(ButtonID.Select  ), 3,1, 0,1, 1,1, GridBagConstraints.BOTH);
-		buttonsPanel.add(createButton(ButtonID.PageUp  ), 4,1, 0,1, 1,1, GridBagConstraints.BOTH);
-		buttonsPanel.add(createButton(ButtonID.Down    ), 2,2, 0,1, 1,1, GridBagConstraints.BOTH);
-		buttonsPanel.add(createButton(ButtonID.PageDown), 4,2, 0,1, 1,1, GridBagConstraints.BOTH);
+		//createButtons_Cross(buttonsPanel);
+		createButtons_2Rows(buttonsPanel);
 		
 		JPanel lineListPanel = new JPanel(new BorderLayout(3,3));
 		lineListPanel.add(lineListLabel      ,BorderLayout.NORTH);
@@ -150,9 +142,34 @@ class LineList {
 		
 		return lineListPanel;
 	}
+
+	private void createButtons_2Rows(GridBagPanel buttonsPanel) {
+		buttonsPanel.setInsets(new Insets(0,3,0,3));
+		buttonsPanel.add(createButton(ButtonID.Home    ), 0,0, 0,0, 1,1, GridBagConstraints.BOTH);
+		buttonsPanel.add(createButton(ButtonID.Jump    ), 0,1, 0,0, 1,1, GridBagConstraints.BOTH);
+		buttonsPanel.add(createButton(ButtonID.Return  ), 1,0, 0,0, 1,1, GridBagConstraints.BOTH);
+		buttonsPanel.add(createButton(ButtonID.Select  ), 1,1, 0,0, 1,1, GridBagConstraints.BOTH);
+		buttonsPanel.add(createButton(ButtonID.Up      ), 2,0, 0,0, 1,1, GridBagConstraints.BOTH);
+		buttonsPanel.add(createButton(ButtonID.Down    ), 2,1, 0,0, 1,1, GridBagConstraints.BOTH);
+		buttonsPanel.add(createButton(ButtonID.PageUp  ), 3,0, 0,0, 1,1, GridBagConstraints.BOTH);
+		buttonsPanel.add(createButton(ButtonID.PageDown), 3,1, 0,0, 1,1, GridBagConstraints.BOTH);
+	}
+
+	@SuppressWarnings("unused")
+	private void createButtons_Cross(GridBagPanel buttonsPanel) {
+		buttonsPanel.setInsets(new Insets(3,3,3,3));
+		buttonsPanel.add(createButton(ButtonID.Up      ), 1,0, 0,0, 1,1, GridBagConstraints.BOTH);
+		buttonsPanel.add(createButton(ButtonID.Home    ), 3,0, 0,0, 1,1, GridBagConstraints.BOTH);
+		buttonsPanel.add(createButton(ButtonID.Return  ), 0,1, 0,0, 1,1, GridBagConstraints.BOTH);
+		buttonsPanel.add(createButton(ButtonID.Jump    ), 1,1, 0,0, 1,1, GridBagConstraints.BOTH);
+		buttonsPanel.add(createButton(ButtonID.Select  ), 2,1, 0,0, 1,1, GridBagConstraints.BOTH);
+		buttonsPanel.add(createButton(ButtonID.PageUp  ), 3,1, 0,0, 1,1, GridBagConstraints.BOTH);
+		buttonsPanel.add(createButton(ButtonID.Down    ), 1,2, 0,0, 1,1, GridBagConstraints.BOTH);
+		buttonsPanel.add(createButton(ButtonID.PageDown), 3,2, 0,0, 1,1, GridBagConstraints.BOTH);
+	}
 	
 	enum ButtonID {
-		Up, Home, Return, Select, PageUp("Page Up"), Down, PageDown("Page Down");
+		Up, Home, Return, Select, PageUp("Page Up"), Down, PageDown("Page Down"), Jump("Jump to Line");
 
 		String label;
 		ButtonID() { label = toString(); }
@@ -173,11 +190,25 @@ class LineList {
 		case Return: return createCursorSelectListener(Device.Value.CursorSelect.Return);
 		case Select: return createCursorSelectListener(Device.Value.CursorSelect.Sel);
 		case Home  : return createCursorSelectListener(Device.Value.CursorSelect.ReturnToHome);
-			
+		
+		case Jump  : return createJumpToLineListener();
+		
 		case PageUp  : return createPageSelectListener(Device.Value.PageSelect.Up);
 		case PageDown: return createPageSelectListener(Device.Value.PageSelect.Down);
 		}
 		return e->{};
+	}
+
+	private ActionListener createJumpToLineListener() {
+		return e->{
+			String valurStr = JOptionPane.showInputDialog(lineList, "Enter line number:", listInfo.currentLine);
+			int lineNumber;
+			try { lineNumber = Integer.parseInt(valurStr); }
+			catch (NumberFormatException e1) { return; }
+			listInfo.sendJumpToLine(lineNumber);
+			device.update(EnumSet.of(listInfoUpdateWish));
+			updateLineList();
+		};
 	}
 
 	private ActionListener createPageSelectListener(Device.Value.PageSelect pageSelect) {
