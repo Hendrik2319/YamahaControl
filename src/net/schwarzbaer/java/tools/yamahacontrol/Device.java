@@ -53,8 +53,8 @@ public final class Device {
 		//System.out.println("Device.update("+updateWishes+")");
 		updateWishes.forEach(uw->{
 			switch (uw) {
-			case Inputs          : inputs.inputs     = inputs.getSceneInput(KnownCommand.General.GetInputItems); break;
-			case Scenes          : inputs.scenes     = inputs.getSceneInput(KnownCommand.General.GetSceneItems); break;
+			case Inputs          : inputs.askInputs(); break;
+			case Scenes          : inputs.askScenes(); break;
 			case BasicStatus     : basicStatus       = BasicStatus   .parse(Ctrl.sendGetCommand_Node(address,KnownCommand.General.GetBasicStatus  )); break;
 			case TunerConfig     : tuner  .config    = Tuner  .Config.parse(Ctrl.sendGetCommand_Node(address,KnownCommand.Config.Tuner  )); break;
 			case AirPlayConfig   : airPlay.config    = AirPlay.Config.parse(Ctrl.sendGetCommand_Node(address,KnownCommand.Config.AirPlay)); break;
@@ -207,6 +207,21 @@ public final class Device {
 			this.inputs = null;
 		}
 
+		public boolean hasScenes() { return scenes!=null; }
+		public boolean hasInputs() { return inputs!=null; }
+		public void askScenes() { scenes = getSceneInput(KnownCommand.General.GetSceneItems); }
+		public void askInputs() { inputs = getSceneInput(KnownCommand.General.GetInputItems); }
+		public DeviceSceneInput[] getScenes() { return scenes; }
+		public DeviceSceneInput[] getInputs() { return inputs; }
+		public void setScene(DeviceSceneInput dsi) {
+			// PUT[P6]:    Main_Zone,Scene,Scene_Sel   =   Values [GET[G4]:Main_Zone,Scene,Scene_Sel_Item]
+			Device.sendCommand(getClass(), device.address, "setScene", KnownCommand.General.SetCurrentScene, dsi.ID);
+		}
+		public void setInput(DeviceSceneInput dsi) {
+			// PUT[P4]:    Main_Zone,Input,Input_Sel   =   Values [GET[G2]:Main_Zone,Input,Input_Sel_Item]
+			Device.sendCommand(getClass(), device.address, "setInput", KnownCommand.General.SetCurrentInput, dsi.ID);
+		}
+
 		public DeviceSceneInput findInput(String inputID) {
 			if (inputID==null) return null;
 			if (inputs==null) return null;
@@ -225,19 +240,6 @@ public final class Device {
 					return dsi;
 			return null;
 		}
-
-		public void setScene(DeviceSceneInput dsi) {
-			// PUT[P6]:    Main_Zone,Scene,Scene_Sel   =   Values [GET[G4]:Main_Zone,Scene,Scene_Sel_Item]
-			Device.sendCommand(getClass(), device.address, "setScene", KnownCommand.General.SetCurrentScene, dsi.ID);
-		}
-
-		public void setInput(DeviceSceneInput dsi) {
-			// PUT[P4]:    Main_Zone,Input,Input_Sel   =   Values [GET[G2]:Main_Zone,Input,Input_Sel_Item]
-			Device.sendCommand(getClass(), device.address, "setInput", KnownCommand.General.SetCurrentInput, dsi.ID);
-		}
-
-		public DeviceSceneInput[] getInputs() { return inputs; }
-		public DeviceSceneInput[] getScenes() { return scenes; }
 
 		private DeviceSceneInput[] getSceneInput(KnownCommand knownCommand) {
 			Node node = Ctrl.sendGetCommand_Node(device.address,knownCommand);
@@ -793,7 +795,8 @@ public final class Device {
 		public void sendDirectSelect(ListInfo.Line line) {
 			if (setDirectSelCmd==null) throw new UnsupportedOperationException("DirectSelect not supported");
 			// PUT:    #######,List_Control,Direct_Sel   =   Label: Line_% (1..8)
-			Device.sendDirectSelect(getClass(),address,setDirectSelCmd, "Line_"+line.index);
+			if (line.index>=0)
+				Device.sendDirectSelect(getClass(),address,setDirectSelCmd, "Line_"+line.index);
 		}
 		
 		public void sendJumpToLine(int lineNumber) {
@@ -852,7 +855,9 @@ public final class Device {
 						String nodeName = line.getNodeName();
 						if (nodeName==null || !nodeName.startsWith("Line_")) return;
 						
-						int index = Integer.parseInt(nodeName.substring("Line_".length()));
+						int index;
+						try { index = Integer.parseInt(nodeName.substring("Line_".length())); }
+						catch (NumberFormatException e) { index=-1; }
 						String txt = XML.getSubValue(line,"Txt");
 						Value.LineAttribute attr = XML.getSubValue(line,Value.LineAttribute.values(), "Attribute");
 						lines.add(new Line(index,txt,attr));

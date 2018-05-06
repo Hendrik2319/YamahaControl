@@ -36,19 +36,18 @@ class LineList {
 	
 	private boolean ignoreListSelection;
 	
-	private LineList.LineRenderer lineRenderer;
+	private LineRenderer lineRenderer;
 	private FrequentlyTask lineListUpdater;
 	
 	private Device device;
 	private ListInfo listInfo;
 	
-	private LineList.LineListUser lineListUser;
+	private LineListUser lineListUser;
 	private UpdateWish listInfoUpdateWish;
 	private UpdateWish playInfoUpdateWish;
 	
-	LineList(LineList.LineListUser lineListUser, UpdateWish listInfoUpdateWish, UpdateWish playInfoUpdateWish) {
-		this.device = null;
-		this.listInfo = null;
+	LineList(LineListUser lineListUser, UpdateWish listInfoUpdateWish, UpdateWish playInfoUpdateWish) {
+		setDeviceAndListInfo(null,null);
 		this.lineListUser = lineListUser;
 		this.listInfoUpdateWish = listInfoUpdateWish;
 		this.playInfoUpdateWish = playInfoUpdateWish;
@@ -168,7 +167,7 @@ class LineList {
 		buttonsPanel.add(createButton(ButtonID.PageDown), 3,2, 0,0, 1,1, GridBagConstraints.BOTH);
 	}
 	
-	enum ButtonID {
+	private enum ButtonID {
 		Up, Home, Return, Select, PageUp("Page Up"), Down, PageDown("Page Down"), Jump("Jump to Line");
 
 		String label;

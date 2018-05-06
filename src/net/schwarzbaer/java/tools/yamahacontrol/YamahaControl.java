@@ -66,8 +66,6 @@ import javax.swing.UnsupportedLookAndFeelException;
 import javax.swing.filechooser.FileSystemView;
 
 import net.schwarzbaer.gui.StandardMainWindow;
-import net.schwarzbaer.java.tools.yamahacontrol.Device.Inputs.DeviceSceneInput;
-import net.schwarzbaer.java.tools.yamahacontrol.Device.ListInfo;
 import net.schwarzbaer.java.tools.yamahacontrol.Device.UpdateWish;
 import net.schwarzbaer.java.tools.yamahacontrol.Device.Value;
 
@@ -559,7 +557,7 @@ public class YamahaControl {
 			return EnumSet.of( UpdateWish.BasicStatus );
 		}
 
-		private void setOnOffButton(Device.Value.PowerState power) {
+		private void setOnOffButton(Value.PowerState power) {
 			SmallImages icon = SmallImages.IconUnknown;
 			String title = "???";
 			if (power!=null)
@@ -573,9 +571,9 @@ public class YamahaControl {
 
 		private void toggleOnOff() {
 			if (device!=null) {
-				Device.Value.PowerState powerState = device.getPowerState();
-				if (powerState==null) device.setPowerState(Device.Value.PowerState.On);
-				else device.setPowerState(getNext(powerState,Device.Value.PowerState.values()));
+				Value.PowerState powerState = device.getPowerState();
+				if (powerState==null) device.setPowerState(Value.PowerState.On);
+				else device.setPowerState(getNext(powerState,Value.PowerState.values()));
 				device.update(EnumSet.of( UpdateWish.BasicStatus ));
 			}
 			setOnOffButton(device==null?null:device.getPowerState());
@@ -896,7 +894,7 @@ public class YamahaControl {
 		protected boolean disableSubUnitIfNotReady = true;
 		
 		protected Device device;
-		protected boolean isReady;
+		protected Boolean isReady;
 		private JLabel readyStateLabel;
 		private JLabel tabHeaderComp;
 
@@ -904,29 +902,25 @@ public class YamahaControl {
 		private String tabTitle;
 
 		private JButton activateBtn;
+		private Device.Inputs.DeviceSceneInput activateInput;
 
 		protected AbstractSubUnit(String inputID, String tabTitle) {
 			super(new BorderLayout(3,3));
 			this.inputID = inputID;
 			this.tabTitle = tabTitle;
+			this.activateInput = null;
 		}
 
 		private void createPanel() {
 			tabHeaderComp = new JLabel("  "+tabTitle+"  ");
 			
 			JPanel northPanel = new JPanel(new FlowLayout(FlowLayout.LEFT,3,3));
-			northPanel.add(activateBtn = createButton("Activate", e->{
-				if (device==null) return;
-				DeviceSceneInput dsi = device.inputs.findInput(inputID);
-				if (dsi!=null) device.inputs.setInput(dsi);
-			}, true));
+			northPanel.add(activateBtn = createButton("Activate", e->{ if (activateInput!=null) device.inputs.setInput(activateInput); }, false));
 			northPanel.add(readyStateLabel = new JLabel("???",smallImages.get(SmallImages.IconUnknown),JLabel.LEFT));
 			
 			add(northPanel,BorderLayout.NORTH);
 			add(createContentPanel(),BorderLayout.CENTER);
 			setBorder(BorderFactory.createEmptyBorder(3,3,3,3));
-			
-			activateBtn.setEnabled(this.device!=null);
 		}
 
 		public void addTo(Vector<GuiRegion> guiRegions, JTabbedPane subUnitPanel) {
@@ -941,34 +935,43 @@ public class YamahaControl {
 		@Override
 		public void initGUIafterConnect(Device device) {
 			this.device = device;
-			activateBtn.setEnabled(this.device!=null);
 			setEnabledGUI(this.device!=null);
 			frequentlyUpdate();
 		}
 
 		@Override
 		public void frequentlyUpdate() {
+			if (activateInput==null && device!=null && device.inputs.hasInputs()) {
+				activateInput = device.inputs.findInput(inputID);
+				activateBtn.setEnabled(activateInput!=null);
+			}
 			isReady = getReadyState();
-			if (disableSubUnitIfNotReady) setEnabledGUI(isReady);
-			tabHeaderComp.setOpaque(isReady);
-			tabHeaderComp.setBackground(isReady?Color.GREEN:null);
-//			setTabBackground.accept(isReady?Color.GREEN:null);
-			readyStateLabel.setText(tabTitle+" is "+(isReady?"Ready":"Not Ready"));
-			readyStateLabel.setIcon(isReady?smallImages.get(SmallImages.IconOn):smallImages.get(SmallImages.IconOff));
+			if (disableSubUnitIfNotReady) setEnabledGUI(isReady());
+			tabHeaderComp.setOpaque(isReady());
+			tabHeaderComp.setBackground(isReady()?Color.GREEN:null);
+			readyStateLabel.setText(tabTitle+" is "+(isReady==null?"not answering":(isReady?"Ready":"Not Ready")));
+			readyStateLabel.setIcon(smallImages.get(isReady==null?SmallImages.IconUnknown:(isReady?SmallImages.IconOn:SmallImages.IconOff)));
 		}
 		
-		public boolean isReady() { return isReady; }
+		public boolean isReady() { return isReady!=null && (boolean)isReady; }
 
 		@Override
 		public EnumSet<UpdateWish> getUpdateWishes(UpdateReason reason) {
-			UpdateWish readyStateUpdateWish = getReadyStateUpdateWish();
-			if (readyStateUpdateWish!=null) return EnumSet.of(readyStateUpdateWish);
+			UpdateWish updateWish = getReadyStateUpdateWish();
+			if (updateWish!=null) return EnumSet.of(updateWish);
 			return EnumSet.noneOf(UpdateWish.class);
 		}
 
 		protected JPanel createContentPanel() { return new JPanel(); }
-		protected abstract boolean getReadyState();
 		protected UpdateWish getReadyStateUpdateWish() { return null; }
+
+		protected abstract Boolean getReadyState();
+		protected Boolean askReadyState(Device.KnownCommand.Config cmd) {
+			if (device==null) return null;
+			// GET:    #######,Config   ->   Feature_Availability -> "Ready" | "Not Ready"
+			Value.ReadyOrNot readyState = device.askValue(cmd, Value.ReadyOrNot.values(), "Feature_Availability");
+			return readyState==null?null:(readyState==Value.ReadyOrNot.Ready);
+		}
 
 		@Override public void setEnabledGUI(boolean enabled) { /*setEnabled(enabled);*/ }
 	}
@@ -982,15 +985,13 @@ public class YamahaControl {
 		}
 
 		@Override
-		protected boolean getReadyState() {
-			if (device==null) return false;
+		protected Boolean getReadyState() {
 			// GET[G3]:    NET_RADIO,Config   ->   Feature_Availability -> "Ready" | "Not Ready"
-			Device.Value.ReadyOrNot readyState = device.askValue(Device.KnownCommand.Config.NetRadio, Device.Value.ReadyOrNot.values(), "Feature_Availability");
-			return readyState==Device.Value.ReadyOrNot.Ready;
+			return askReadyState(Device.KnownCommand.Config.NetRadio);
 		}
 
-		@Override public    Device.PlayInfo_NetRadio getPlayInfo()     { return device==null?null:device.netRadio.playInfo; }
-		@Override protected Device.ListInfo getListInfo(Device device) { return device==null?null:device.netRadio.listInfo; }
+		@Override public    Device.PlayInfo_NetRadio getPlayInfo()              { return device==null?null:device.netRadio.playInfo; }
+		@Override protected Device.ListInfo          getListInfo(Device device) { return device==null?null:device.netRadio.listInfo; }
 		
 		@Override public void updateExtraButtons() {}
 		@Override public void addExtraButtons(Vector<AbstractButton> buttons) {
@@ -1004,59 +1005,53 @@ public class YamahaControl {
 		}
 	}
 	
-	private static class SubUnitUSB extends AbstractSubUnit_PlayInfoExt<Device.Value.OnOff> {
+	private static class SubUnitUSB extends AbstractSubUnit_PlayInfoExt<Value.OnOff> {
 		private static final long serialVersionUID = 2909543552931897755L;
 
 		public SubUnitUSB() {
-			super("USB","USB Device",UpdateWish.USBListInfo,UpdateWish.USBPlayInfo,Device.Value.OnOff.values());
+			super("USB","USB Device",UpdateWish.USBListInfo,UpdateWish.USBPlayInfo,Value.OnOff.values());
 		}
 		
 		@Override
-		protected boolean getReadyState() {
-			if (device==null) return false;
+		protected Boolean getReadyState() {
 			// GET[G3]:    USB,Config   ->   Feature_Availability -> "Ready" | "Not Ready"
-			Device.Value.ReadyOrNot readyState = device.askValue(Device.KnownCommand.Config.USB, Device.Value.ReadyOrNot.values(), "Feature_Availability");
-			return readyState==Device.Value.ReadyOrNot.Ready;
+			return askReadyState(Device.KnownCommand.Config.USB);
 		}
 		
-		@Override public    Device.PlayInfoExt<Device.Value.OnOff> getPlayInfo()              { return device==null?null:device.usb.playInfo; }
-		@Override protected Device.ListInfo                        getListInfo(Device device) { return device==null?null:device.usb.listInfo; }
+		@Override public    Device.PlayInfoExt<Value.OnOff> getPlayInfo()              { return device==null?null:device.usb.playInfo; }
+		@Override protected Device.ListInfo                 getListInfo(Device device) { return device==null?null:device.usb.listInfo; }
 	}
 	
-	private static class SubUnitDLNA extends AbstractSubUnit_PlayInfoExt<Device.Value.OnOff> {
+	private static class SubUnitDLNA extends AbstractSubUnit_PlayInfoExt<Value.OnOff> {
 		private static final long serialVersionUID = -4585259335586086032L;
 
 		public SubUnitDLNA() {
-			super("SERVER","DLNA Server",UpdateWish.DLNAListInfo,UpdateWish.DLNAPlayInfo,Device.Value.OnOff.values());
+			super("SERVER","DLNA Server",UpdateWish.DLNAListInfo,UpdateWish.DLNAPlayInfo,Value.OnOff.values());
 		}
 		
 		@Override
-		protected boolean getReadyState() {
-			if (device==null) return false;
+		protected Boolean getReadyState() {
 			// GET[G3]:    SERVER,Config   ->   Feature_Availability -> "Ready" | "Not Ready"
-			Device.Value.ReadyOrNot readyState = device.askValue(Device.KnownCommand.Config.DLNA, Device.Value.ReadyOrNot.values(), "Feature_Availability");
-			return readyState==Device.Value.ReadyOrNot.Ready;
+			return askReadyState(Device.KnownCommand.Config.DLNA);
 		}
 		
-		@Override public    Device.PlayInfoExt<Device.Value.OnOff> getPlayInfo()              { return device==null?null:device.dlna.playInfo; }
-		@Override protected Device.ListInfo                        getListInfo(Device device) { return device==null?null:device.dlna.listInfo; }
+		@Override public    Device.PlayInfoExt<Value.OnOff> getPlayInfo()              { return device==null?null:device.dlna.playInfo; }
+		@Override protected Device.ListInfo                 getListInfo(Device device) { return device==null?null:device.dlna.listInfo; }
 	}
 
-	private static class SubUnitIPodUSB extends AbstractSubUnit_PlayInfoExt<Device.Value.ShuffleIPod> implements ButtonModule.ExtraButtons {
+	private static class SubUnitIPodUSB extends AbstractSubUnit_PlayInfoExt<Value.ShuffleIPod> implements ButtonModule.ExtraButtons {
 		private static final long serialVersionUID = -4180795479139795928L;
 		private JButton modeBtn;
 	
 		public SubUnitIPodUSB() {
-			super("iPod (USB)","iPod (USB) [untested]",UpdateWish.IPodUSBListInfo,UpdateWish.IPodUSBPlayInfo,Device.Value.ShuffleIPod.values());
+			super("iPod (USB)","iPod (USB) [untested]",UpdateWish.IPodUSBListInfo,UpdateWish.IPodUSBPlayInfo,Value.ShuffleIPod.values());
 			setExtraButtons(this);
 		}
 	
 		@Override
-		protected boolean getReadyState() {
-			if (device==null) return false;
+		protected Boolean getReadyState() {
 			// GET[G3]:    iPod_USB,Config   ->   Feature_Availability -> "Ready" | "Not Ready"
-			Device.Value.ReadyOrNot readyState = device.askValue(Device.KnownCommand.Config.IPodUSB, Device.Value.ReadyOrNot.values(), "Feature_Availability");
-			return readyState==Device.Value.ReadyOrNot.Ready;
+			return askReadyState(Device.KnownCommand.Config.IPodUSB);
 		}
 		
 		@Override
@@ -1066,8 +1061,8 @@ public class YamahaControl {
 			return updateWishes;
 		}
 
-		@Override public    Device.PlayInfoExt<Device.Value.ShuffleIPod> getPlayInfo()              { return device==null?null:device.iPodUSB.playInfo; }
-		@Override protected Device.ListInfo                              getListInfo(Device device) { return device==null?null:device.iPodUSB.listInfo; }
+		@Override public    Device.PlayInfoExt<Value.ShuffleIPod> getPlayInfo()              { return device==null?null:device.iPodUSB.playInfo; }
+		@Override protected Device.ListInfo                       getListInfo(Device device) { return device==null?null:device.iPodUSB.listInfo; }
 
 		@Override public void updateExtraButtons() {
 			modeBtn.setText(device.iPodUSB.mode==null? "iPod Mode":( "iPod Mode: "+device.iPodUSB.mode.getLabel()));
@@ -1096,12 +1091,12 @@ public class YamahaControl {
 		}
 	
 		@Override
-		protected boolean getReadyState() {
-			if (device==null) return false;
-			if (device.tuner==null) return false;
-			if (device.tuner.config==null) return false;
-			Device.Value.ReadyOrNot readyState = device.tuner.config.deviceStatus;
-			return readyState==Device.Value.ReadyOrNot.Ready;
+		protected Boolean getReadyState() {
+			if (device==null) return null;
+			if (device.tuner==null) return null;
+			if (device.tuner.config==null) return null;
+			Value.ReadyOrNot readyState = device.tuner.config.deviceStatus;
+			return readyState==null?null:(readyState==Value.ReadyOrNot.Ready);
 		}
 	}
 
@@ -1121,12 +1116,12 @@ public class YamahaControl {
 		}
 	
 		@Override
-		protected boolean getReadyState() {
-			if (device==null) return false;
-			if (device.airPlay==null) return false;
-			if (device.airPlay.config==null) return false;
-			Device.Value.ReadyOrNot readyState = device.airPlay.config.deviceStatus;
-			return readyState==Device.Value.ReadyOrNot.Ready;
+		protected Boolean getReadyState() {
+			if (device==null) return null;
+			if (device.airPlay==null) return null;
+			if (device.airPlay.config==null) return null;
+			Value.ReadyOrNot readyState = device.airPlay.config.deviceStatus;
+			return readyState==null?null:(readyState==Value.ReadyOrNot.Ready);
 		}
 	}
 
@@ -1140,11 +1135,9 @@ public class YamahaControl {
 		@Override public Device.PlayInfo_AirPlaySpotify getPlayInfo() { return device==null?null:device.spotify.playInfo; }
 	
 		@Override
-		protected boolean getReadyState() {
-			if (device==null) return false;
+		protected Boolean getReadyState() {
 			// GET[G3]:    Spotify,Config   ->   Feature_Availability -> "Ready" | "Not Ready"
-			Device.Value.ReadyOrNot readyState = device.askValue(Device.KnownCommand.Config.Spotify, Device.Value.ReadyOrNot.values(), "Feature_Availability");
-			return readyState==Device.Value.ReadyOrNot.Ready;
+			return askReadyState(Device.KnownCommand.Config.Spotify);
 		}
 	}
 
@@ -1180,7 +1173,9 @@ public class YamahaControl {
 		}
 		
 		@Override public abstract Device.PlayInfo_AirPlaySpotify getPlayInfo();
-		@Override protected ListInfo getListInfo(Device device) { throw new UnsupportedOperationException("getListInfo() is not supported in AbstractSubUnit_AirPlaySpotify"); }
+		@Override protected       Device.ListInfo getListInfo(Device device) {
+			throw new UnsupportedOperationException("getListInfo() is not supported in AbstractSubUnit_AirPlaySpotify");
+		}
 	}
 	
 	
@@ -1276,11 +1271,11 @@ public class YamahaControl {
 		@Override
 		public void addStdButtons(Vector<AbstractButton> buttons) {
 			playButtons = new ButtonGroup();
-			buttons.add(playBtn = createButton(Device.Value.PlayStop.Play));
-			buttons.add(stopBtn = createButton(Device.Value.PlayStop.Stop));
+			buttons.add(playBtn = createButton(Value.PlayStop.Play));
+			buttons.add(stopBtn = createButton(Value.PlayStop.Stop));
 		}
 		
-		private JToggleButton createButton(Device.Value.PlayStop playState) {
+		private JToggleButton createButton(Value.PlayStop playState) {
 			return YamahaControl.createToggleButton(playState.getLabel(), e->{
 				PlayInfo_PlayStop playInfo = caller.getPlayInfo();
 				if (playInfo!=null) {
@@ -1313,7 +1308,7 @@ public class YamahaControl {
 		public void updateStdButtons() {
 			PlayInfo_PlayPauseStopSkip playInfo = caller.getPlayInfo();
 			if (playInfo!=null) {
-				Device.Value.PlayPauseStop playState = playInfo.getPlayState();
+				Value.PlayPauseStop playState = playInfo.getPlayState();
 				if (playState==null || !caller.isReady())
 					playButtons.clearSelection();
 				else
@@ -1330,14 +1325,14 @@ public class YamahaControl {
 		@Override
 		public void addStdButtons(Vector<AbstractButton> buttons) {
 			playButtons = new ButtonGroup();
-			buttons.add(playBtn    = createButton(     Device.Value.PlayPauseStop.Play ));
-			buttons.add(pauseBtn   = createButton(     Device.Value.PlayPauseStop.Pause));
-			buttons.add(stopBtn    = createButton(     Device.Value.PlayPauseStop.Stop ));
-			buttons.add(             createButton("<<",Device.Value.SkipFwdRev.SkipRev ));
-			buttons.add(             createButton(">>",Device.Value.SkipFwdRev.SkipFwd ));
+			buttons.add(playBtn    = createButton(     Value.PlayPauseStop.Play ));
+			buttons.add(pauseBtn   = createButton(     Value.PlayPauseStop.Pause));
+			buttons.add(stopBtn    = createButton(     Value.PlayPauseStop.Stop ));
+			buttons.add(             createButton("<<",Value.SkipFwdRev.SkipRev ));
+			buttons.add(             createButton(">>",Value.SkipFwdRev.SkipFwd ));
 		}
 		
-		private JToggleButton createButton(Device.Value.PlayPauseStop playState) {
+		private JToggleButton createButton(Value.PlayPauseStop playState) {
 			return YamahaControl.createToggleButton(playState.getLabel(), e->{
 				PlayInfo_PlayPauseStopSkip playInfo = caller.getPlayInfo();
 				if (playInfo!=null) {
@@ -1347,7 +1342,7 @@ public class YamahaControl {
 			}, true, playButtons);
 		}
 		
-		private JButton createButton(String title, Device.Value.SkipFwdRev skip) {
+		private JButton createButton(String title, Value.SkipFwdRev skip) {
 			return YamahaControl.createButton(title, e->{
 				PlayInfo_PlayPauseStopSkip playInfo = caller.getPlayInfo();
 				if (playInfo!=null) {
@@ -1397,7 +1392,7 @@ public class YamahaControl {
 				if (playInfo!=null) {
 					Value.OffOneAll repeat = playInfo.getRepeat();
 					if (repeat!=null) {
-						playInfo.sendRepeat(YamahaControl.getNext(repeat,Device.Value.OffOneAll.values()));
+						playInfo.sendRepeat(YamahaControl.getNext(repeat,Value.OffOneAll.values()));
 						caller.updateDeviceNGui();
 					}
 				}
@@ -1415,10 +1410,11 @@ public class YamahaControl {
 		}
 	}
 
-	private static abstract class AbstractSubUnit_ListPlay extends AbstractSubUnit implements LineList.LineListUser {
+	private static abstract class AbstractSubUnit_ListPlay extends AbstractSubUnit implements LineList.LineListUser, LineList2.LineListUser  {
 		private static final long serialVersionUID = 3773609643258015474L;
 		
-		protected LineList lineList;
+		private   LineList lineList1;
+		private   LineList2 lineList2;
 		private   JTextArea playinfoOutput;
 		private   JScrollPane playinfoScrollPane;
 		
@@ -1427,6 +1423,7 @@ public class YamahaControl {
 		
 		protected UpdateWish listInfoUpdateWish;
 		protected UpdateWish playInfoUpdateWish;
+
 	
 		public AbstractSubUnit_ListPlay(String inputID, String tabTitle, UpdateWish listInfoUpdateWish, UpdateWish playInfoUpdateWish) {
 			super(inputID, tabTitle);
@@ -1452,22 +1449,27 @@ public class YamahaControl {
 			return enumSet;
 		}
 
-		public void updateDeviceNGui() {
-			device.update(getUpdateWishes(UpdateReason.Frequently));
-			if (lineList!=null) lineList.updateLineList();
-			updatePlayInfo();
-		}
-
 		@Override
 		public void initGUIafterConnect(Device device) {
-			if (lineList!=null) lineList.setDeviceAndListInfo(device,device==null?null:getListInfo(device));
+			if (lineList1!=null) lineList1.setDeviceAndListInfo(device,device==null?null:getListInfo(device));
+			if (lineList2!=null) lineList2.setDeviceAndListInfo(device,device==null?null:getListInfo(device));
 			super.initGUIafterConnect(device);
 		}
 
 		@Override
 		public void frequentlyUpdate() {
 			super.frequentlyUpdate();
-			if (lineList!=null) lineList.updateLineList();
+			updateGui();
+		}
+
+		public void updateDeviceNGui() {
+			device.update(getUpdateWishes(UpdateReason.Frequently));
+			updateGui();
+		}
+
+		private void updateGui() {
+			if (lineList1!=null) lineList1.updateLineList();
+			if (lineList2!=null) lineList2.updateLineList();
 			updatePlayInfo();
 		}
 
@@ -1478,7 +1480,8 @@ public class YamahaControl {
 
 		@Override
 		public void setEnabledGUI(boolean enabled) {
-			if (lineList!=null) lineList.setEnabledGUI(enabled);
+			if (lineList1!=null) lineList1.setEnabledGUI(enabled);
+			if (lineList2!=null) lineList2.setEnabledGUI(enabled);
 			comps.forEach(b->b.setEnabled(enabled));
 			playinfoOutput.setEnabled(enabled);
 		}
@@ -1487,10 +1490,13 @@ public class YamahaControl {
 		protected JPanel createContentPanel() {
 			comps.clear();
 			
-			JPanel lineListPanel = null;
+			JTabbedPane lineListPanel = null;
 			if (listInfoUpdateWish!=null) {
-				lineList = new LineList(this,listInfoUpdateWish,playInfoUpdateWish);
-				lineListPanel = lineList.createGUIelements();
+				lineList1 = new LineList (this,listInfoUpdateWish,playInfoUpdateWish);
+				lineList2 = new LineList2(this,listInfoUpdateWish,playInfoUpdateWish);
+				lineListPanel = new JTabbedPane();
+				lineListPanel.add("LineList 1", lineList1.createGUIelements());
+				lineListPanel.add("LineList 2", lineList2.createGUIelements());
 				lineListPanel.setBorder(BorderFactory.createTitledBorder("Menu"));
 			}
 			
