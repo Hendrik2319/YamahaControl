@@ -31,7 +31,7 @@ class LineList2 {
 
 	private Device device;
 	private Device.ListInfo listInfo;
-	private LineListUser lineListUser;
+	private LineList2User lineListUser;
 	private Device.UpdateWish listInfoUpdateWish;
 	private Device.UpdateWish playInfoUpdateWish;
 	private Vector<JButton> buttons;
@@ -40,11 +40,11 @@ class LineList2 {
 	private JList<Device.ListInfo.Line> lineList;
 	private JScrollPane lineListScrollPane;
 	
-	private LineListModel lineListModel;
+	private LineList2Model lineListModel;
 	private LineRenderer lineRenderer;
 	private boolean ignoreListSelection;
 
-	LineList2(LineListUser lineListUser, Device.UpdateWish listInfoUpdateWish, Device.UpdateWish playInfoUpdateWish) {
+	LineList2(LineList2User lineListUser, Device.UpdateWish listInfoUpdateWish, Device.UpdateWish playInfoUpdateWish) {
 		setDeviceAndListInfo(null,null);
 		this.lineListUser = lineListUser;
 		this.listInfoUpdateWish = listInfoUpdateWish;
@@ -64,7 +64,7 @@ class LineList2 {
 		this.listInfo = listInfo;
 	}
 
-	static interface LineListUser {
+	static interface LineList2User {
 //		void setEnabledGuiIfPossible(boolean enabled);
 		void updatePlayInfo();
 	}
@@ -77,8 +77,8 @@ class LineList2 {
 
 	public void updateLineList() {
 		if (!equals(lineListModel.lines.length,listInfo.maxLine) || !equals(lineListModel.menuName,listInfo.menuName) || !equals(lineListModel.menuLayer,listInfo.menuLayer)) {
-			if (listInfo.maxLine==null) lineListModel = new LineListModel();
-			else lineListModel = new LineListModel((int)listInfo.maxLine,listInfo.menuName,listInfo.menuLayer);
+			if (listInfo.maxLine==null) lineListModel = new LineList2Model();
+			else lineListModel = new LineList2Model((int)listInfo.maxLine,listInfo.menuName,listInfo.menuLayer);
 			lineList.setModel(lineListModel);
 			Log.info(getClass(), "change LineListModel: %s", lineListModel);
 			// TODO: start data acquisition
@@ -111,7 +111,7 @@ class LineList2 {
 		
 		ignoreListSelection = false;
 		lineRenderer = new LineRenderer();
-		lineListModel = new LineListModel();
+		lineListModel = new LineList2Model();
 		lineList = new JList<Device.ListInfo.Line>(lineListModel);
 		lineList.setCellRenderer(lineRenderer);
 		lineList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
@@ -227,18 +227,18 @@ class LineList2 {
 		};
 	}
 
-	private static class LineListModel implements ListModel<Device.ListInfo.Line> {
+	private static class LineList2Model implements ListModel<Device.ListInfo.Line> {
 		
 		public Integer menuLayer;
 		public String menuName;
 		Vector<ListDataListener> listDataListeners;
 		Device.ListInfo.Line[] lines;
 		
-		public LineListModel() {
+		public LineList2Model() {
 			this(0,null,null);
 		}
 
-		LineListModel(int numberOfLines, String menuName, Integer menuLayer) {
+		LineList2Model(int numberOfLines, String menuName, Integer menuLayer) {
 			this.menuName = menuName;
 			this.menuLayer = menuLayer;
 			listDataListeners = new Vector<>();
@@ -259,7 +259,8 @@ class LineList2 {
 					lines[i] = line;
 				}
 			});
-			ListDataEvent listDataEvent = new ListDataEvent(LineListModel.this, ListDataEvent.CONTENTS_CHANGED, blockStartIndex, blockStartIndex+8);
+			Log.info(getClass(), "data updated: %d..%d", blockStartIndex, blockStartIndex+8);
+			ListDataEvent listDataEvent = new ListDataEvent(LineList2Model.this, ListDataEvent.CONTENTS_CHANGED, blockStartIndex, blockStartIndex+8);
 			listDataListeners.forEach(listener->listener.contentsChanged(listDataEvent));
 		}
 

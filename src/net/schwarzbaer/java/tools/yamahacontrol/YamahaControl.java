@@ -1410,7 +1410,7 @@ public class YamahaControl {
 		}
 	}
 
-	private static abstract class AbstractSubUnit_ListPlay extends AbstractSubUnit implements LineList.LineListUser, LineList2.LineListUser  {
+	private static abstract class AbstractSubUnit_ListPlay extends AbstractSubUnit implements LineList.LineListUser, LineList2.LineList2User  {
 		private static final long serialVersionUID = 3773609643258015474L;
 		
 		private   LineList lineList1;
