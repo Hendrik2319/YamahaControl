@@ -53,10 +53,10 @@ class LineList {
 		this.playInfoUpdateWish = playInfoUpdateWish;
 		this.buttons = new Vector<>();
 		
-		lineListUpdater = new FrequentlyTask(200,()->{
+		lineListUpdater = new FrequentlyTask(200,false,()->{
 			device.update(EnumSet.of(listInfoUpdateWish));
 			updateLineList();
-			if (listInfo!=null && listInfo.menuStatus==Device.Value.ReadyOrBusy.Ready)
+			if (listInfo.menuStatus==Device.Value.ReadyOrBusy.Ready)
 				lineListUpdater.stop();
 		});
 	}
@@ -79,26 +79,30 @@ class LineList {
 	
 
 	void updateLineList() {
-		lineListUser.setEnabledGuiIfPossible(listInfo.menuStatus==Device.Value.ReadyOrBusy.Ready);
-		//System.out.println("updateLineList() -> listInfo.menuStatus: "+listInfo.menuStatus);
+		if (listInfo==null) return;
 		
-		String lineListLabelStr = String.format("[Level %s]    %s", listInfo.menuLayer, listInfo.menuName==null?"":listInfo.menuName);
-		if (listInfo.currentLine==null || listInfo.maxLine==null || listInfo.currentLine<listInfo.maxLine)
-			lineListLabelStr += "  "+listInfo.currentLine+"/"+listInfo.maxLine;
-		lineListLabel.setText(lineListLabelStr);
-		lineList.setListData(listInfo.lines);
-		
-		if (listInfo.currentLine!=null) {
-			int lineIndex = ((listInfo.currentLine-1)&0x7);
-			//ignoreListSelection=true;
-			//lineList.setSelectedIndex(lineIndex);
-			//ignoreListSelection=false;
-			lineRenderer.setSelected(lineIndex+1);
-		}
-		
-		if (listInfo.menuStatus!=Device.Value.ReadyOrBusy.Ready && !lineListUpdater.isRunning()) {
-			//System.out.println("updateLineList() -> start lineListUpdater");
-			lineListUpdater.start();
+		synchronized (listInfo) {
+			lineListUser.setEnabledGuiIfPossible(listInfo.menuStatus==Device.Value.ReadyOrBusy.Ready);
+			//System.out.println("updateLineList() -> listInfo.menuStatus: "+listInfo.menuStatus);
+			
+			String lineListLabelStr = String.format("[Level %s]    %s", listInfo.menuLayer, listInfo.menuName==null?"":listInfo.menuName);
+			if (listInfo.currentLine==null || listInfo.maxLine==null || listInfo.currentLine<listInfo.maxLine)
+				lineListLabelStr += "  "+listInfo.currentLine+"/"+listInfo.maxLine;
+			lineListLabel.setText(lineListLabelStr);
+			lineList.setListData(listInfo.lines);
+			
+			if (listInfo.currentLine!=null) {
+				int lineIndex = ((listInfo.currentLine-1)&0x7);
+				//ignoreListSelection=true;
+				//lineList.setSelectedIndex(lineIndex);
+				//ignoreListSelection=false;
+				lineRenderer.setSelected(lineIndex+1);
+			}
+			
+			if (listInfo.menuStatus!=Device.Value.ReadyOrBusy.Ready && !lineListUpdater.isRunning()) {
+				//System.out.println("updateLineList() -> start lineListUpdater");
+				lineListUpdater.start();
+			}
 		}
 	}
 	
@@ -204,6 +208,7 @@ class LineList {
 			int lineNumber;
 			try { lineNumber = Integer.parseInt(valurStr); }
 			catch (NumberFormatException e1) { return; }
+			if (lineNumber<1 || 65536<lineNumber) return;
 			listInfo.sendJumpToLine(lineNumber);
 			device.update(EnumSet.of(listInfoUpdateWish));
 			updateLineList();

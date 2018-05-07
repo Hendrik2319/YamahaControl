@@ -135,7 +135,7 @@ public class YamahaControl {
 		mainWindow = null;
 		device = null;
 		guiRegions = new Vector<>();
-		frequentlyUpdater = new FrequentlyTask(2000,()->{
+		frequentlyUpdater = new FrequentlyTask(2000,false,()->{
 			updateDevice(UpdateReason.Frequently);
 			SwingUtilities.invokeLater(()->guiRegions.forEach(gr->gr.frequentlyUpdate()));
 		});
@@ -237,9 +237,11 @@ public class YamahaControl {
 		private boolean stop;
 		private Runnable task;
 		private boolean isRunning;
+		private boolean skipFirstWait;
 
-		public FrequentlyTask(int interval_ms, Runnable task) {
+		public FrequentlyTask(int interval_ms, boolean skipFirstWait, Runnable task) {
 			this.interval_ms = interval_ms;
+			this.skipFirstWait = skipFirstWait;
 			this.task = task;
 			this.stop = false;
 			this.isRunning = false;
@@ -263,6 +265,8 @@ public class YamahaControl {
 		public void run() {
 			isRunning = true;
 			synchronized (this) {
+				if (skipFirstWait)
+					task.run();
 				while (!stop) {
 					long startTime = System.currentTimeMillis();
 					while (!stop && System.currentTimeMillis()-startTime<interval_ms)
@@ -1490,13 +1494,17 @@ public class YamahaControl {
 		protected JPanel createContentPanel() {
 			comps.clear();
 			
-			JTabbedPane lineListPanel = null;
+			JComponent lineListPanel = null;
 			if (listInfoUpdateWish!=null) {
-				lineList1 = new LineList (this,listInfoUpdateWish,playInfoUpdateWish);
+				lineList1 = null; // new LineList (this,listInfoUpdateWish,playInfoUpdateWish);
 				lineList2 = new LineList2(this,listInfoUpdateWish,playInfoUpdateWish);
-				lineListPanel = new JTabbedPane();
-				lineListPanel.add("LineList 1", lineList1.createGUIelements());
-				lineListPanel.add("LineList 2", lineList2.createGUIelements());
+//				JTabbedPane tabbedPanel = new JTabbedPane();
+//				tabbedPanel.add("LineList 1", lineList1.createGUIelements());
+//				tabbedPanel.add("LineList 2", lineList2.createGUIelements());
+//				tabbedPanel.setSelectedIndex(1);
+//				lineListPanel = tabbedPanel;
+				lineListPanel = lineList2.createGUIelements();
+				
 				lineListPanel.setBorder(BorderFactory.createTitledBorder("Menu"));
 			}
 			
@@ -1543,6 +1551,15 @@ public class YamahaControl {
 	}
 
 	static class Log {
+		enum Type { INFO, WARNING, ERROR }
+		public static void log (Type type, Class<?> callerClass, String format, Object... values) {
+			switch (type) {
+			case INFO   : info   (callerClass, format, values); break;
+			case WARNING: warning(callerClass, format, values); break;
+			case ERROR  : error  (callerClass, format, values); break;
+			}
+		}
+		
 		public static void info   (Class<?> callerClass,                String format, Object... values) { out(System.out, callerClass, "INFO"   ,         format, values); }
 		public static void warning(Class<?> callerClass,                String format, Object... values) { out(System.err, callerClass, "WARNING",         format, values); }
 		public static void error  (Class<?> callerClass,                String format, Object... values) { out(System.err, callerClass, "ERROR"  ,         format, values); }

@@ -793,10 +793,15 @@ public final class Device {
 		}
 		
 		public void sendDirectSelect(ListInfo.Line line) {
+			sendDirectSelect(line.index);
+		}
+		
+		public void sendDirectSelect(int lineIndex) {
 			if (setDirectSelCmd==null) throw new UnsupportedOperationException("DirectSelect not supported");
 			// PUT:    #######,List_Control,Direct_Sel   =   Label: Line_% (1..8)
-			if (line.index>=0)
-				Device.sendDirectSelect(getClass(),address,setDirectSelCmd, "Line_"+line.index);
+			if (lineIndex>0) {
+				Device.sendDirectSelect(getClass(),address,setDirectSelCmd, "Line_"+lineIndex);
+			}
 		}
 		
 		public void sendJumpToLine(int lineNumber) {
@@ -823,11 +828,11 @@ public final class Device {
 		}
 	
 		
-		public void update() {
+		public synchronized void update() {
 			parse(Ctrl.sendGetCommand_Node(address,getListInfoCmd));
 		}
 	
-		private void parse(Node node) {
+		private synchronized void parse(Node node) {
 			clearValues();
 			XML.forEachChild(node, child->{
 				switch (child.getNodeName()) {
@@ -1270,69 +1275,74 @@ public final class Device {
 		}
 		
 	}
-
+	
+//	private static boolean debug_verbose = true;
+//	private static Log.Type logType = Log.Type.INFO;
+	private static boolean debug_verbose = false;
+	private static Log.Type logType = Log.Type.ERROR;
+	
 	private static void sendCommand(Class<?> callerClass, String address, String function, KnownCommand cmd, String value) {
 		int rc = Ctrl.sendPutCommand(address, cmd, value);
-		if (rc!=Ctrl.RC_OK) Log.error(callerClass, "%s(%s): %s -> RC: %d", function, value, cmd.toFullString(), rc);
+		if (rc!=Ctrl.RC_OK || debug_verbose) Log.log( logType, callerClass, "%s( %s ): %s -> RC: %d", function, value, cmd.toFullString(), rc);
 	}
 
 	private static void sendCommand(Class<?> callerClass, String address, String function, KnownCommand cmd, Value value) {
 		int rc = Ctrl.sendPutCommand(address, cmd, value.getLabel());
-		if (rc!=Ctrl.RC_OK) Log.error(callerClass, "%s(%s): %s -> RC: %d", function, value, cmd.toFullString(), rc);
+		if (rc!=Ctrl.RC_OK || debug_verbose) Log.log( logType, callerClass, "%s( %s ): %s -> RC: %d", function, value, cmd.toFullString(), rc);
 	}
 
 	private static void sendMenuControl(Class<?> callerClass, String address, KnownCommand.MenuControl cmd, Value.MainZoneMenuControl value) {
 		int rc = Ctrl.sendPutCommand(address, cmd, value.getLabel());
-		if (rc!=Ctrl.RC_OK) Log.error(callerClass, "sendMenuControl(%s): %s -> RC: %d", value, cmd.toFullString(), rc);
+		if (rc!=Ctrl.RC_OK || debug_verbose) Log.log( logType, callerClass, "sendMenuControl( %s ): %s -> RC: %d", value, cmd.toFullString(), rc);
 	}
 
 	private static void sendDirectSelect(Class<?> callerClass, String address, KnownCommand.SetDirectSel cmd, String value) {
 		int rc = Ctrl.sendPutCommand(address, cmd, value);
-		if (rc!=Ctrl.RC_OK) Log.error(callerClass, "sendDirectSelect(%s): %s -> RC: %d", value, cmd.toFullString(), rc);
+		if (rc!=Ctrl.RC_OK || debug_verbose) Log.log( logType, callerClass, "sendDirectSelect( %s ): %s -> RC: %d", value, cmd.toFullString(), rc);
 	}
 
 	private static void sendJumpToLine(Class<?> callerClass, String address, KnownCommand.JumpToLine cmd, int value) {
 		int rc = Ctrl.sendPutCommand(address, cmd, ""+value);
-		if (rc!=Ctrl.RC_OK) Log.error(callerClass, "sendJumpToLine(%d): %s -> RC: %d", value, cmd.toFullString(), rc);
+		if (rc!=Ctrl.RC_OK || debug_verbose) Log.log( logType, callerClass, "sendJumpToLine( %d ): %s -> RC: %d", value, cmd.toFullString(), rc);
 	}
 
 	private static void sendCursorSelect(Class<?> callerClass, String address, KnownCommand.SetCursorSelExt cmd, Value.CursorSelectExt value) {
 		int rc = Ctrl.sendPutCommand(address, cmd, value.getLabel());
-		if (rc!=Ctrl.RC_OK) Log.error(callerClass, "sendCursorSelect(%s): %s -> RC: %d", value, cmd.toFullString(), rc);
+		if (rc!=Ctrl.RC_OK || debug_verbose) Log.log( logType, callerClass, "sendCursorSelect( %s ): %s -> RC: %d", value, cmd.toFullString(), rc);
 	}
 
 	private static void sendCursorSelect(Class<?> callerClass, String address, KnownCommand.SetCursorSel cmd, Value.CursorSelect value) {
 		int rc = Ctrl.sendPutCommand(address, cmd, value.getLabel());
-		if (rc!=Ctrl.RC_OK) Log.error(callerClass, "sendCursorSelect(%s): %s -> RC: %d", value, cmd.toFullString(), rc);
+		if (rc!=Ctrl.RC_OK || debug_verbose) Log.log( logType, callerClass, "sendCursorSelect( %s ): %s -> RC: %d", value, cmd.toFullString(), rc);
 	}
 
 	private static void sendPageSelect(Class<?> callerClass, String address, KnownCommand.SetPageSel cmd, Value.PageSelect value) {
 		int rc = Ctrl.sendPutCommand(address, cmd, value.getLabel());
-		if (rc!=Ctrl.RC_OK) Log.error(callerClass, "sendPageSelect(%s): %s -> RC: %d", value, cmd.toFullString(), rc);
+		if (rc!=Ctrl.RC_OK || debug_verbose) Log.log( logType, callerClass, "sendPageSelect( %s ): %s -> RC: %d", value, cmd.toFullString(), rc);
 	}
 
 	private static void sendPlayback(Class<?> callerClass, String address, KnownCommand.SetPlayback cmd, Value.PlayStop value) {
 		int rc = Ctrl.sendPutCommand(address, cmd, value.getLabel());
-		if (rc!=Ctrl.RC_OK) Log.error(callerClass, "sendPlayback(%s): %s -> RC: %d", value, cmd.toFullString(), rc);
+		if (rc!=Ctrl.RC_OK || debug_verbose) Log.log( logType, callerClass, "sendPlayback(%s): %s -> RC: %d", value, cmd.toFullString(), rc);
 	}
 
 	private static void sendPlayback(Class<?> callerClass, String address, KnownCommand.SetPlayback cmd, Value.PlayPauseStop value) {
 		int rc = Ctrl.sendPutCommand(address, cmd, value.getLabel());
-		if (rc!=Ctrl.RC_OK) Log.error(callerClass, "sendPlayback(%s): %s -> RC: %d", value, cmd.toFullString(), rc);
+		if (rc!=Ctrl.RC_OK || debug_verbose) Log.log( logType, callerClass, "sendPlayback(%s): %s -> RC: %d", value, cmd.toFullString(), rc);
 	}
 
 	private static void sendPlayback(Class<?> callerClass, String address, KnownCommand.SetPlayback cmd, Value.SkipFwdRev value) {
 		int rc = Ctrl.sendPutCommand(address, cmd, value.getLabel());
-		if (rc!=Ctrl.RC_OK) Log.error(callerClass, "sendPlayback(%s): %s -> RC: %d", value, cmd.toFullString(), rc);
+		if (rc!=Ctrl.RC_OK || debug_verbose) Log.log( logType, callerClass, "sendPlayback(%s): %s -> RC: %d", value, cmd.toFullString(), rc);
 	}
 
 	private static void sendRepeat(Class<?> callerClass, String address, KnownCommand.SetRepeat cmd, Value.OffOneAll value) {
 		int rc = Ctrl.sendPutCommand(address, cmd, value.getLabel());
-		if (rc!=Ctrl.RC_OK) Log.error(callerClass, "sendRepeat(%s): %s -> RC: %d", value, cmd.toFullString(), rc);
+		if (rc!=Ctrl.RC_OK || debug_verbose) Log.log( logType, callerClass, "sendRepeat(%s): %s -> RC: %d", value, cmd.toFullString(), rc);
 	}
 
 	private static <Shuffle extends Enum<Shuffle>&Value> void sendShuffle(Class<?> callerClass, String address, KnownCommand.SetShuffle cmd, Shuffle value) {
 		int rc = Ctrl.sendPutCommand(address, cmd, value.getLabel());
-		if (rc!=Ctrl.RC_OK) Log.error(callerClass, "sendShuffle(%s): %s -> RC: %d", value, cmd.toFullString(), rc);
+		if (rc!=Ctrl.RC_OK || debug_verbose) Log.log( logType, callerClass, "sendShuffle(%s): %s -> RC: %d", value, cmd.toFullString(), rc);
 	}
 }

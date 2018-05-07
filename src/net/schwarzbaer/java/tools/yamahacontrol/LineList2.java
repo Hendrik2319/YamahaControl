@@ -11,6 +11,7 @@ import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.Vector;
 
+import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JList;
 import javax.swing.JPanel;
@@ -19,16 +20,17 @@ import javax.swing.JTextField;
 import javax.swing.ListCellRenderer;
 import javax.swing.ListModel;
 import javax.swing.ListSelectionModel;
+import javax.swing.border.Border;
 import javax.swing.event.ListDataEvent;
 import javax.swing.event.ListDataListener;
 
 import net.schwarzbaer.gui.Tables.LabelRendererComponent;
+import net.schwarzbaer.java.tools.yamahacontrol.YamahaControl.FrequentlyTask;
 import net.schwarzbaer.java.tools.yamahacontrol.YamahaControl.GridBagPanel;
-import net.schwarzbaer.java.tools.yamahacontrol.YamahaControl.Log;
 import net.schwarzbaer.java.tools.yamahacontrol.YamahaControl.SmallImages;
 
 class LineList2 {
-
+	
 	private Device device;
 	private Device.ListInfo listInfo;
 	private LineList2User lineListUser;
@@ -43,6 +45,8 @@ class LineList2 {
 	private LineList2Model lineListModel;
 	private LineRenderer lineRenderer;
 	private boolean ignoreListSelection;
+	private LineListLoader lineListLoader;
+	private FrequentlyTask waitUntilListReady;
 
 	LineList2(LineList2User lineListUser, Device.UpdateWish listInfoUpdateWish, Device.UpdateWish playInfoUpdateWish) {
 		setDeviceAndListInfo(null,null);
@@ -57,11 +61,52 @@ class LineList2 {
 		this.lineListModel = null;
 		this.lineRenderer = null;
 		this.ignoreListSelection = false;
+		
+		this.lineListLoader = null;
+		this.lineListLoader = new LineListLoader();
+		this.waitUntilListReady = new YamahaControl.FrequentlyTask(200,true,()->{
+			device.update(EnumSet.of(listInfoUpdateWish));
+			if (listInfo.menuStatus==Device.Value.ReadyOrBusy.Ready)
+				waitUntilListReady.stop();
+		});
 	}
 
 	public void setDeviceAndListInfo(Device device, Device.ListInfo listInfo) {
 		this.device = device;
 		this.listInfo = listInfo;
+	}
+	
+	private class LineListLoader implements Runnable {
+		
+		private FrequentlyTask repeater;
+		private boolean isInStep;
+		
+		LineListLoader() {
+			repeater = new YamahaControl.FrequentlyTask(100,true,this);
+			isInStep = false;
+		}
+		
+		@Override
+		public void run() {
+			isInStep = true;
+			device.update(EnumSet.of(listInfoUpdateWish));
+			while (listInfo.menuStatus==Device.Value.ReadyOrBusy.Ready) {
+				updateLineList();
+				int blockIndex = lineListModel.getNextBlockToLoad();
+				if (blockIndex<0) {
+					repeater.stop();
+					break;
+				}
+				listInfo.sendJumpToLine(1+blockIndex*8);
+				device.update(EnumSet.of(listInfoUpdateWish));
+			}
+			isInStep = false;
+		}
+
+		public void start() {
+			if (isInStep) return;
+			repeater.start();
+		}
 	}
 
 	static interface LineList2User {
@@ -76,21 +121,27 @@ class LineList2 {
 	}
 
 	public void updateLineList() {
-		if (!equals(lineListModel.lines.length,listInfo.maxLine) || !equals(lineListModel.menuName,listInfo.menuName) || !equals(lineListModel.menuLayer,listInfo.menuLayer)) {
-			if (listInfo.maxLine==null) lineListModel = new LineList2Model();
-			else lineListModel = new LineList2Model((int)listInfo.maxLine,listInfo.menuName,listInfo.menuLayer);
-			lineList.setModel(lineListModel);
-			Log.info(getClass(), "change LineListModel: %s", lineListModel);
-			// TODO: start data acquisition
+		if (listInfo==null) return;
+		
+		synchronized (listInfo) {
+			if (listInfo.menuStatus!=Device.Value.ReadyOrBusy.Ready) return;
+			
+			if (!equals(lineListModel.lines.length,listInfo.maxLine) || !equals(lineListModel.menuName,listInfo.menuName) || !equals(lineListModel.menuLayer,listInfo.menuLayer)) {
+				if (listInfo.maxLine==null) lineListModel = new LineList2Model();
+				else lineListModel = new LineList2Model((int)listInfo.maxLine,listInfo.menuName,listInfo.menuLayer);
+				lineList.setModel(lineListModel);
+//				Log.info(getClass(), "change LineListModel: %s", lineListModel);
+				lineListLoader.start();
+			}
+			
+			lineListLabel.setText(String.format("[Level %s]    %s   %s",
+					listInfo.menuLayer,
+					(listInfo.menuName==null?"":listInfo.menuName),
+					(listInfo.maxLine ==null?"":("("+listInfo.maxLine+")"))));
+			
+			if (listInfo.currentLine!=null)
+				lineListModel.updateData(listInfo.currentLine,listInfo.lines);
 		}
-		
-		lineListLabel.setText(String.format("[Level %s]    %s   %s",
-				listInfo.menuLayer,
-				(listInfo.menuName==null?"":listInfo.menuName),
-				(listInfo.maxLine ==null?"":("("+listInfo.maxLine+")"))));
-		
-		if (listInfo.currentLine!=null)
-			lineListModel.updateData(listInfo.currentLine,listInfo.lines);
 	}
 
 	private boolean equals(String str1, String str2) {
@@ -119,16 +170,38 @@ class LineList2 {
 			if (e.getValueIsAdjusting()) return;
 			if (ignoreListSelection) return;
 			
-//			if (listInfo.menuStatus==Device.Value.ReadyOrBusy.Busy) return;
-//			
-//			ListInfo.Line line = lineList.getSelectedValue();
-//			if (line==null) return;
-//			if (line.attr==Device.Value.LineAttribute.Unselectable) return;
-//			
-//			listInfo.sendDirectSelect(line);
-//			device.update(EnumSet.of(listInfoUpdateWish,playInfoUpdateWish));
-//			updateLineList();
-//			lineListUser.updatePlayInfo();
+			int index = lineList.getSelectedIndex();
+			if (index<0) return;
+			
+			Device.ListInfo.Line line = lineListModel.getElementAt(index);
+			if (line==null || line.attr==null) return;
+			
+			switch(line.attr) {
+			
+			case UnplayableItem:
+			case Unselectable: return;
+			
+			case Container:
+				lineListLabel.setText("loading ...");			
+				lineList.setModel(lineListModel = new LineList2Model());
+				
+				listInfo.sendJumpToLine(index+1);
+				//waitUntilListReady.start();
+				//listInfo.sendDirectSelect((index&0x7)+1);
+				listInfo.sendCursorSelect(Device.Value.CursorSelect.Sel);
+				break;
+				
+			case Item:
+				listInfo.sendJumpToLine(index+1);
+				//waitUntilListReady.start();
+				//listInfo.sendDirectSelect((index&0x7)+1);
+				listInfo.sendCursorSelect(Device.Value.CursorSelect.Sel);
+				break;
+			}
+			
+			device.update(EnumSet.of(listInfoUpdateWish,playInfoUpdateWish));
+			updateLineList();
+			lineListUser.updatePlayInfo();
 		});
 		
 		lineListScrollPane = new JScrollPane(lineList);
@@ -251,16 +324,24 @@ class LineList2 {
 			return "LineListModel [ menuLayer=" + menuLayer + ", menuName=" + menuName + ", lines[" + lines.length + "] ]";
 		}
 
+		public int getNextBlockToLoad() {
+			for (int i=0; i<lines.length; ++i)
+				if (lines[i]==null)
+					return i>>3;
+			return -1;
+		}
+
 		public void updateData(int currentLine, Vector<Device.ListInfo.Line> newLines) {
-			int blockStartIndex = ((currentLine-1)&(~0x7));
+			int blockStartLineIndex = ((currentLine-1)&(~0x7));
 			newLines.forEach(line->{
-				int i = blockStartIndex+line.index-1;
+				int i = blockStartLineIndex+line.index-1;
 				if (line.index>0 && 0<=i && i<lines.length) {
 					lines[i] = line;
 				}
 			});
-			Log.info(getClass(), "data updated: %d..%d", blockStartIndex, blockStartIndex+8);
-			ListDataEvent listDataEvent = new ListDataEvent(LineList2Model.this, ListDataEvent.CONTENTS_CHANGED, blockStartIndex, blockStartIndex+8);
+//			if (lines.length>0)
+//				Log.info(getClass(), "data updated: %d..%d", blockStartLineIndex, blockStartLineIndex+8);
+			ListDataEvent listDataEvent = new ListDataEvent(LineList2Model.this, ListDataEvent.CONTENTS_CHANGED, blockStartLineIndex, blockStartLineIndex+8);
 			listDataListeners.forEach(listener->listener.contentsChanged(listDataEvent));
 		}
 
@@ -278,10 +359,14 @@ class LineList2 {
 	private static class LineRenderer implements ListCellRenderer<Device.ListInfo.Line>{
 		
 		private LabelRendererComponent rendererComponent;
+		private Border focusBorder;
+		private Border emptyBorder;
 	
 		LineRenderer() {
 			rendererComponent = new LabelRendererComponent();
 			rendererComponent.setPreferredSize(new Dimension(10,20));
+			emptyBorder = BorderFactory.createEmptyBorder(1, 1, 1, 1);
+			focusBorder = BorderFactory.createDashedBorder(Color.DARK_GRAY);
 		}
 	
 		@Override
@@ -306,6 +391,7 @@ class LineList2 {
 				rendererComponent.setBackground(isSelected?list.getSelectionBackground():list.getBackground());
 				rendererComponent.setForeground(isSelected?list.getSelectionForeground():list.getForeground());
 			}
+			rendererComponent.setBorder(cellHasFocus?focusBorder:emptyBorder);
 			
 			return rendererComponent;
 		}
