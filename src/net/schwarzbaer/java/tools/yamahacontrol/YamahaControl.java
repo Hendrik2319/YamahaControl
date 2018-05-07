@@ -1535,7 +1535,7 @@ public class YamahaControl {
 			playinfoOutput.addMouseListener(createPlayInfoContextMenu());
 			
 			playinfoScrollPane = new JScrollPane(playinfoOutput);
-			playinfoScrollPane.setPreferredSize(new Dimension(500, 400));
+			playinfoScrollPane.setPreferredSize(new Dimension(500, 200));
 			
 			GridBagPanel buttonsPanel = new GridBagPanel();
 			buttonsPanel.setInsets(new Insets(3,0,3,0));
