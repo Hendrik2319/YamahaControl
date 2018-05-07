@@ -6,6 +6,10 @@ import java.awt.Dimension;
 import java.awt.event.ActionListener;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.StandardOpenOption;
 import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.Map.Entry;
@@ -15,6 +19,7 @@ import java.util.function.Predicate;
 import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
 import javax.swing.JComboBox;
+import javax.swing.JFileChooser;
 import javax.swing.JFrame;
 import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
@@ -38,6 +43,7 @@ import org.w3c.dom.Text;
 
 import net.schwarzbaer.gui.Disabler;
 import net.schwarzbaer.gui.IconSource;
+import net.schwarzbaer.java.tools.yamahacontrol.Ctrl.HttpResponse;
 import net.schwarzbaer.java.tools.yamahacontrol.XML.TagList;
 
 public class CommandList {
@@ -81,6 +87,7 @@ public class CommandList {
 	private ContextMenuHandler contextMenu;
 	private DefaultTreeModel treeModel;
 	private JTree tree;
+	private JFileChooser fileChooser;
 
 	CommandList(String selectedAddress) {
 		document = null;
@@ -89,6 +96,7 @@ public class CommandList {
 		contextMenu = null;
 		treeModel = null;
 		tree = null;
+		fileChooser = null;
 	}
 	
 	private enum TreeViewType { DOM, Parsed } 
@@ -96,8 +104,9 @@ public class CommandList {
 	private enum ContextMenuItemType {
 		TreeFunction(node->true),
 		NodeFunction(node->(node!=null)),
-		PutCommand(node->(node instanceof ParsedTreeNode_Exp.CallablePutCommandNode)),
-		GetCommand(node->(node instanceof ParsedTreeNode_Exp.CallableGetCommandNode));
+		PutCommand    (node->(node instanceof ParsedTreeNode_Exp.CallablePutCommandNode)),
+		GetCommand    (node->(node instanceof ParsedTreeNode_Exp.CallableGetCommandNode)),
+		GetCommandSave(node->(node instanceof ParsedTreeNode_Exp.CallableGetCommandNode));
 		
 		private Predicate<Object> checkClickedNode;
 		ContextMenuItemType( Predicate<Object> checkClickedNode ) {
@@ -149,6 +158,9 @@ public class CommandList {
 	}
 	
 	private void createGUI() {
+		fileChooser = new JFileChooser("./");
+		fileChooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
+		fileChooser.setMultiSelectionEnabled(false);
 		
 		treeModel = new DefaultTreeModel(null);
 		tree = new JTree(treeModel);
@@ -163,8 +175,9 @@ public class CommandList {
 		contextMenu.add(ContextMenuItemType.TreeFunction, "Expand Full Tree", e->expandFullTree());
 		contextMenu.add(ContextMenuItemType.NodeFunction, "Expand Branch", e->expandBranch());
 		contextMenu.addSeparator();
-		contextMenu.add(ContextMenuItemType.GetCommand, "Test Get Command", e->testCommand(contextMenu.getClickedTreeNode()));
-		contextMenu.add(ContextMenuItemType.PutCommand, "Test Put Command", e->testCommand(contextMenu.getClickedTreeNode()));
+		contextMenu.add(ContextMenuItemType.GetCommand    , "Test Get Command", e->testCommand(contextMenu.getClickedTreeNode(),false));
+		contextMenu.add(ContextMenuItemType.GetCommandSave, "Test Get Command (Save Response)", e->testCommand(contextMenu.getClickedTreeNode(),true));
+		contextMenu.add(ContextMenuItemType.PutCommand    , "Test Put Command", e->testCommand(contextMenu.getClickedTreeNode(),false));
 
 		selectedTreeViewType = TreeViewType.Parsed;
 		JComboBox<TreeViewType> treeViewTypeComboBox = YamahaControl.createComboBox(TreeViewType.values(),null);
@@ -202,13 +215,18 @@ public class CommandList {
 		mainWindow.setVisible(true);
 	}
 
-	private void testCommand(Object clickedTreeNode) {
+	private void testCommand(Object clickedTreeNode, boolean saveResponse) {
 		if (!(clickedTreeNode instanceof ParsedTreeNode_Exp.CallableCommandNode)) return;
 		ParsedTreeNode_Exp.CallableCommandNode commandNode = (ParsedTreeNode_Exp.CallableCommandNode)clickedTreeNode;
 		String xmlCommand = commandNode.buildXmlCommand();
 		if (selectedAddress==null) return;
 		if (xmlCommand==null) return;
-		Ctrl.testCommand(selectedAddress, xmlCommand, false);
+		HttpResponse response = Ctrl.testCommand(selectedAddress, xmlCommand, false);
+		if (response!=null && saveResponse && fileChooser.showSaveDialog(mainWindow)==JFileChooser.APPROVE_OPTION) {
+			File file = fileChooser.getSelectedFile();
+			try { Files.write(file.toPath(), response.bytes, StandardOpenOption.CREATE, StandardOpenOption.WRITE); }
+			catch (IOException e) { e.printStackTrace(); }
+		}
 	}
 
 	private void expandBranch() {

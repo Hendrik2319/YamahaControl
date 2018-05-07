@@ -15,6 +15,8 @@ import java.awt.datatransfer.DataFlavor;
 import java.awt.datatransfer.Transferable;
 import java.awt.datatransfer.UnsupportedFlavorException;
 import java.awt.event.ActionListener;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.awt.image.BufferedImage;
 import java.io.BufferedReader;
 import java.io.File;
@@ -49,10 +51,13 @@ import javax.swing.ButtonGroup;
 import javax.swing.Icon;
 import javax.swing.ImageIcon;
 import javax.swing.JButton;
+import javax.swing.JCheckBoxMenuItem;
 import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
+import javax.swing.JMenuItem;
 import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
 import javax.swing.JProgressBar;
 import javax.swing.JScrollBar;
 import javax.swing.JScrollPane;
@@ -307,6 +312,19 @@ public class YamahaControl {
 		button.setEnabled(enabled);
 		if (l!=null) button.addActionListener(l);
 		return button;
+	}
+
+	static JMenuItem createMenuItem(String title, ActionListener l) {
+		JMenuItem menuItem = new JMenuItem(title);
+		if (l!=null) menuItem.addActionListener(l);
+		return menuItem;
+	}
+
+	static JCheckBoxMenuItem createCheckBoxMenuItem(String title, ActionListener l, ButtonGroup bg) {
+		JCheckBoxMenuItem menuItem = new JCheckBoxMenuItem(title);
+		if (l!=null) menuItem.addActionListener(l);
+		if (bg!=null) bg.add(menuItem);
+		return menuItem;
 	}
 
 	static <A> JComboBox<A> createComboBox(A[] values, ActionListener l) {
@@ -986,6 +1004,7 @@ public class YamahaControl {
 		public SubUnitNetRadio() {
 			super("NET RADIO","Net Radio",UpdateWish.NetRadioListInfo,UpdateWish.NetRadioPlayInfo);
 			modules.add(new PlayButtonModule(this, this));
+			withExtraUTF8Conversion = true;
 		}
 
 		@Override
@@ -1428,6 +1447,8 @@ public class YamahaControl {
 		protected UpdateWish listInfoUpdateWish;
 		protected UpdateWish playInfoUpdateWish;
 
+		protected boolean withExtraUTF8Conversion;
+
 	
 		public AbstractSubUnit_ListPlay(String inputID, String tabTitle, UpdateWish listInfoUpdateWish, UpdateWish playInfoUpdateWish) {
 			super(inputID, tabTitle);
@@ -1435,6 +1456,7 @@ public class YamahaControl {
 			this.playInfoUpdateWish = playInfoUpdateWish;
 			comps = new Vector<>();
 			modules = new Vector<>();
+			withExtraUTF8Conversion = false;
 		}
 
 		protected abstract Device.PlayInfo getPlayInfo();
@@ -1510,6 +1532,7 @@ public class YamahaControl {
 			
 			playinfoOutput = new JTextArea("<no data>");
 			playinfoOutput.setEditable(false);
+			playinfoOutput.addMouseListener(createPlayInfoContextMenu());
 			
 			playinfoScrollPane = new JScrollPane(playinfoOutput);
 			playinfoScrollPane.setPreferredSize(new Dimension(500, 400));
@@ -1535,16 +1558,50 @@ public class YamahaControl {
 			return playinfoPanel;
 		}
 
+		private MouseAdapter createPlayInfoContextMenu() {
+			//Font stdFont = playinfoOutput.getFont();
+			//Font extFont = new Font("Arial",stdFont.getStyle(),stdFont.getSize());
+			
+			//ButtonGroup fontBG = new ButtonGroup();
+			JCheckBoxMenuItem menuItemExtraConv = YamahaControl.createCheckBoxMenuItem("Additional UTF-8 Conversion",null,null);
+			//JCheckBoxMenuItem menuItemStdFont   = YamahaControl.createCheckBoxMenuItem("Use Standard Font",null,fontBG);
+			//JCheckBoxMenuItem menuItemExtFont   = YamahaControl.createCheckBoxMenuItem("Use Other Font",null,fontBG);
+			
+			menuItemExtraConv.addActionListener(e->{
+				withExtraUTF8Conversion = !withExtraUTF8Conversion;
+				updatePlayInfoOutput();
+			});
+			//menuItemStdFont.addActionListener(e->{ menuItemStdFont.setSelected(true); playinfoOutput.setFont(stdFont); updatePlayInfoOutput(); });
+			//menuItemExtFont.addActionListener(e->{ menuItemExtFont.setSelected(true); playinfoOutput.setFont(extFont); updatePlayInfoOutput(); });
+			
+			JPopupMenu playinfoOutputContextmenu = new JPopupMenu();
+			playinfoOutputContextmenu.add(menuItemExtraConv);
+			//playinfoOutputContextmenu.addSeparator();
+			//playinfoOutputContextmenu.add(menuItemStdFont);
+			//playinfoOutputContextmenu.add(menuItemExtFont);
+			//menuItemStdFont.setSelected(true);
+			menuItemExtraConv.setSelected(withExtraUTF8Conversion);
+			
+			MouseAdapter mouseAdapter = new MouseAdapter() {
+				@Override public void mouseClicked(MouseEvent e) {
+					if (e.getButton()==MouseEvent.BUTTON3)
+						playinfoOutputContextmenu.show(playinfoOutput,e.getX(),e.getY());
+				}
+			};
+			return mouseAdapter;
+		}
+
 		@Override
 		public void updatePlayInfo() {
+			updatePlayInfoOutput();
+			modules.forEach(m->m.updateButtons());
+		}
+
+		private void updatePlayInfoOutput() {
 			float hPos = YamahaControl.getScrollPos(playinfoScrollPane.getHorizontalScrollBar());
 			float vPos = YamahaControl.getScrollPos(playinfoScrollPane.getVerticalScrollBar());
-			if (device!=null) {
-				playinfoOutput.setText(getPlayInfo().toString());
-			} else{
-				playinfoOutput.setText("<no data>");
-			}
-			modules.forEach(m->m.updateButtons());
+			if (device!=null) playinfoOutput.setText(getPlayInfo().toString(withExtraUTF8Conversion));
+			else              playinfoOutput.setText("<no data>");
 			YamahaControl.setScrollPos(playinfoScrollPane.getHorizontalScrollBar(),hPos);
 			YamahaControl.setScrollPos(playinfoScrollPane.getVerticalScrollBar(),vPos);
 		}

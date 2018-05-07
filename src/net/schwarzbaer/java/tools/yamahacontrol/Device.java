@@ -1,5 +1,7 @@
 package net.schwarzbaer.java.tools.yamahacontrol;
 
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.Vector;
@@ -911,6 +913,16 @@ public final class Device {
 			parse(Ctrl.sendGetCommand_Node(address,getPlayInfoCmd));
 		}
 		protected abstract void parse(Node node);
+		
+		protected String convert(String str, boolean active) {
+			if (!active) return str;
+			return StandardCharsets.UTF_8.decode(ByteBuffer.wrap(str.getBytes())).toString();
+		}
+		
+		public abstract String toString(boolean withExtraUtf8Conversion);
+		@Override public String toString() {
+			return toString(false);
+		}
 	}
 
 	static class PlayInfo_NetRadio extends PlayInfo implements PlayInfo_PlayStop {
@@ -951,7 +963,7 @@ public final class Device {
 		}
 	
 		@Override
-		public String toString() {
+		public String toString(boolean withExtraUtf8Conversion) {
 			StringBuilder sb = new StringBuilder();
 			sb.append(name+": ").append(deviceStatus==null?"???":deviceStatus.getLabel());
 			if (playState==null)
@@ -963,9 +975,9 @@ public final class Device {
 				}
 			sb.append("\r\n");
 			
-			sb.append("Station: ").append(currentStation==null?"":("\""+currentStation+"\"")).append("\r\n");
-			sb.append("  Album: ").append(currentAlbum==null?"":("\""+currentAlbum+"\"")).append("\r\n");
-			sb.append("   Song: ").append(currentSong==null?"":("\""+currentSong+"\"")).append("\r\n");
+			sb.append("Station: ").append(currentStation==null?"":("\""+convert(currentStation,withExtraUtf8Conversion)+"\"")).append("\r\n");
+			sb.append("  Album: ").append(currentAlbum  ==null?"":("\""+convert(currentAlbum  ,withExtraUtf8Conversion)+"\"")).append("\r\n");
+			sb.append("   Song: ").append(currentSong   ==null?"":("\""+convert(currentSong   ,withExtraUtf8Conversion)+"\"")).append("\r\n");
 			sb.append("\r\n");
 			
 			sb.append("AlbumCover:\r\n");
@@ -974,7 +986,7 @@ public final class Device {
 			sb.append(albumCoverFormat==null?"":(" "+albumCoverFormat.getLabel()));
 			sb.append("\r\n");
 			sb.append("   ");
-			sb.append(albumCoverURL==null?"":(" \""+albumCoverURL+"\""));
+			sb.append(albumCoverURL==null?"":(" \""+convert(albumCoverURL,withExtraUtf8Conversion)+"\""));
 			sb.append("\r\n");
 			
 			return sb.toString();
@@ -1063,7 +1075,7 @@ public final class Device {
 		}
 
 		@Override
-		public String toString() {
+		public String toString(boolean withExtraUtf8Conversion) {
 			StringBuilder sb = new StringBuilder();
 			sb.append(name+": ").append(deviceStatus==null?"???":deviceStatus.getLabel());
 			if (playState==null)
@@ -1076,15 +1088,15 @@ public final class Device {
 				}
 			sb.append("\r\n");
 			
-			sb.append("Artist: ").append(currentArtist==null?"":("\""+currentArtist+"\"")).append("\r\n");
-			sb.append(" Album: ").append(currentAlbum ==null?"":("\""+currentAlbum +"\"")).append("\r\n");
-			sb.append("  Song: ").append(currentSong  ==null?"":("\""+currentSong  +"\"")).append("\r\n");
+			sb.append("Artist: ").append(currentArtist==null?"":("\""+convert(currentArtist,withExtraUtf8Conversion)+"\"")).append("\r\n");
+			sb.append(" Album: ").append(currentAlbum ==null?"":("\""+convert(currentAlbum ,withExtraUtf8Conversion)+"\"")).append("\r\n");
+			sb.append("  Song: ").append(currentSong  ==null?"":("\""+convert(currentSong  ,withExtraUtf8Conversion)+"\"")).append("\r\n");
 			sb.append("\r\n");
 			
 			sb.append("Input Logo:\r\n");
-			if (inputLogoURL_S!=null) sb.append("    [S] "+inputLogoURL_S+"\r\n");
-			if (inputLogoURL_M!=null) sb.append("    [M] "+inputLogoURL_M+"\r\n");
-			if (inputLogoURL_L!=null) sb.append("    [L] "+inputLogoURL_L+"\r\n");
+			if (inputLogoURL_S!=null) sb.append("    [S] "+convert(inputLogoURL_S,withExtraUtf8Conversion)+"\r\n");
+			if (inputLogoURL_M!=null) sb.append("    [M] "+convert(inputLogoURL_M,withExtraUtf8Conversion)+"\r\n");
+			if (inputLogoURL_L!=null) sb.append("    [L] "+convert(inputLogoURL_L,withExtraUtf8Conversion)+"\r\n");
 			
 			return sb.toString();
 		}
@@ -1199,7 +1211,7 @@ public final class Device {
 		}
 
 		@Override
-		public String toString() {
+		public String toString(boolean withExtraUtf8Conversion) {
 			StringBuilder sb = new StringBuilder();
 			sb.append(name+": ").append(deviceStatus==null?"???":deviceStatus.getLabel());
 			if (playState==null)
@@ -1214,9 +1226,9 @@ public final class Device {
 			sb.append("   Shuffle: ").append(shuffle==null?"???":shuffle.getLabel()).append("\r\n");;
 			sb.append("\r\n");
 			
-			sb.append("Artist: ").append(currentArtist==null?"":("\""+currentArtist+"\"")).append("\r\n");
-			sb.append(" Album: ").append(currentAlbum==null?"":("\""+currentAlbum+"\"")).append("\r\n");
-			sb.append("  Song: ").append(currentSong==null?"":("\""+currentSong+"\"")).append("\r\n");
+			sb.append("Artist: ").append(currentArtist==null?"":("\""+convert(currentArtist,withExtraUtf8Conversion)+"\"")).append("\r\n");
+			sb.append(" Album: ").append(currentAlbum ==null?"":("\""+convert(currentAlbum ,withExtraUtf8Conversion)+"\"")).append("\r\n");
+			sb.append("  Song: ").append(currentSong  ==null?"":("\""+convert(currentSong  ,withExtraUtf8Conversion)+"\"")).append("\r\n");
 			sb.append("\r\n");
 			
 			sb.append("AlbumCover:\r\n");
@@ -1225,7 +1237,7 @@ public final class Device {
 			sb.append(albumCoverFormat==null?"":(" "+albumCoverFormat.getLabel()));
 			sb.append("\r\n");
 			sb.append("   ");
-			sb.append(albumCoverURL==null?"":(" \""+albumCoverURL+"\""));
+			sb.append(albumCoverURL==null?"":(" \""+convert(albumCoverURL,withExtraUtf8Conversion)+"\""));
 			sb.append("\r\n");
 			
 			return sb.toString();

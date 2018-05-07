@@ -132,10 +132,10 @@ final class Ctrl {
 	static int lastRC = RC_OK;
 	
 	static Document sendCommand_controlled(String address, String command) {
-		String xmlStr = http.sendCommand(address, command);
-		if (xmlStr==null) { lastRC = RC_NO_RESPONSE; return null; }
+		HttpResponse response = http.sendCommand(address, command);
+		if (response==null) { lastRC = RC_NO_RESPONSE; return null; }
 		
-		Document document = XML.parse(xmlStr);
+		Document document = XML.parse(response.string);
 		if (document==null) { lastRC = RC_CANT_PARSE_XML; return null; }
 		
 		String rcStr = XML.getNodeAttribute(document,new TagList("YAMAHA_AV"),"RC");
@@ -198,31 +198,44 @@ final class Ctrl {
 	static String buildCommand(String cmd, TagList tagList, String value) {
 		return "<YAMAHA_AV cmd=\""+cmd+"\">"+tagList.toXML(value)+"</YAMAHA_AV>";
 	}
-	static void testCommand(String address, String command) {
-		testCommand(address, command, true);
+	static HttpResponse testCommand(String address, String command) {
+		return testCommand(address, command, true);
 	}
-	static void testCommand(String address, String command, boolean verbose) {
-		String response = http.sendCommand(address, command, verbose);
+	static HttpResponse testCommand(String address, String command, boolean verbose) {
+		HttpResponse response = http.sendCommand(address, command, verbose);
 		System.out.println("Command : "+command);
 		System.out.println("Response: "+response);
-		if (response!=null) XML.showXMLformated(response);
+		if (response!=null) XML.showXMLformated(response.string);
 		System.out.println();
+		return response;
 	}
 	
 	static HttpInterface http = new HttpInterfaceImplementation();
 
 	public static abstract class HttpInterface {
-		public String sendCommand(String address, String command) {
+		public HttpResponse sendCommand(String address, String command) {
 			return sendCommand(address, command, false);
 		}
-		public abstract String sendCommand(String address, String command, boolean verbose);
+		public abstract HttpResponse sendCommand(String address, String command, boolean verbose);
 		public abstract String getContentFromURL(String urlStr, boolean verbose);
 	}
 
+	public static class HttpResponse {
+		byte[] bytes;
+		String string;
+		public HttpResponse() {
+			this(null,null);
+		}
+		public HttpResponse(byte[] bytes, String string) {
+			this.bytes = bytes;
+			this.string = string;
+		}
+		@Override public String toString() { return string; }
+	}
 	private static final class HttpInterfaceImplementation extends HttpInterface {
 
 		@Override
-		public String sendCommand(String address, String command, boolean verbose) {
+		public HttpResponse sendCommand(String address, String command, boolean verbose) {
 			ByteBuffer byteBuf = StandardCharsets.UTF_8.encode(command);
 			byte[] bytes = new byte[byteBuf.limit()];
 			byteBuf.get(bytes);
@@ -230,7 +243,7 @@ final class Ctrl {
 			int port = 80; // 50100 bei BD-Playern
 			String urlStr = "http://"+address+":"+port+"/YamahaRemoteControl/ctrl";
 			
-			String response = sendHTTPRequest(
+			HttpResponse response = sendHTTPRequest(
 					urlStr,
 					connection -> {
 						try { connection.setRequestMethod("POST"); }
@@ -248,18 +261,20 @@ final class Ctrl {
 					verbose);
 			
 			if (response!=null)
-				addToCommProtocol(command,response);
+				addToCommProtocol(command,response.string);
 
 			return response;
 		}
 
 		@Override
 		public String getContentFromURL(String urlStr, boolean verbose) {
-			return sendHTTPRequest(
+			HttpResponse response = sendHTTPRequest(
 					urlStr,
 					connection->{ connection.setDoInput(true); return true; },
 					null,
 					verbose);
+			if (response==null) return null;
+			return response.string;
 		}
 
 		private static interface ConfigureConn {
@@ -269,12 +284,12 @@ final class Ctrl {
 		private static interface WriteRequestContent {
 			public boolean writeTo(HttpURLConnection connection);
 		}
-
-		private String sendHTTPRequest(String urlStr, ConfigureConn configureConn, WriteRequestContent writeRequestContent, boolean verbose) {
+		
+		private HttpResponse sendHTTPRequest(String urlStr, ConfigureConn configureConn, WriteRequestContent writeRequestContent, boolean verbose) {
 			return sendHTTPRequest(urlStr, configureConn, writeRequestContent, verbose, true);
 		}
 
-		private String sendHTTPRequest(String urlStr, ConfigureConn configureConn, WriteRequestContent writeRequestContent, boolean verbose, boolean verboseOnError) {
+		private HttpResponse sendHTTPRequest(String urlStr, ConfigureConn configureConn, WriteRequestContent writeRequestContent, boolean verbose, boolean verboseOnError) {
 			
 			if (verbose) System.out.println("URL: "+urlStr);
 			URL url;
@@ -307,37 +322,38 @@ final class Ctrl {
 				catch (IOException e) { if (verboseOnError) showConnection(connection); e.printStackTrace(); connection.disconnect(); return null; }
 			if (verbose) System.out.println("Content: "+content);
 			
-			String contentStr = null;
+			HttpResponse response = null;
 			if (content instanceof InputStream) {
+				response = new HttpResponse();
 				InputStream input = (InputStream)content;
-				byte[] responseBytes = new byte[connection.getContentLength()];
+				response.bytes = new byte[connection.getContentLength()];
 				int n,pos=0;
-				try { while ( (n=input.read(responseBytes, pos, responseBytes.length-pos))>=0 ) pos += n; }
+				try { while ( (n=input.read(response.bytes, pos, response.bytes.length-pos))>=0 ) pos += n; }
 				catch (IOException e) { e.printStackTrace(); if (verbose) System.out.println("abort reading response");}
 				
 				if (verbose) {
-					String bytesReadStr = pos!=responseBytes.length?(" "+pos+" of "+responseBytes.length+" bytes "):"";
+					String bytesReadStr = pos!=response.bytes.length?(" "+pos+" of "+response.bytes.length+" bytes "):"";
 					if (pos<1000) {
-						System.out.println("Content (bytes read): "+bytesReadStr+""+Arrays.toString(responseBytes));
+						System.out.println("Content (bytes read): "+bytesReadStr+""+Arrays.toString(response.bytes));
 					}
 				}
 				
-				contentStr = StandardCharsets.UTF_8.decode(ByteBuffer.wrap(responseBytes, 0, pos)).toString();
+				response.string = StandardCharsets.UTF_8.decode(ByteBuffer.wrap(response.bytes, 0, pos)).toString();
 				
 				if (verbose) {
-					if (contentStr.length()>1000) {
-						System.out.println("Content (as String): "+contentStr.substring(0, 100)+" ...");
-						System.out.println("                     ... "+contentStr.substring(contentStr.length()-100,contentStr.length()));
+					if (response.string.length()>1000) {
+						System.out.println("Content (as String): "+response.string.substring(0, 100)+" ...");
+						System.out.println("                     ... "+response.string.substring(response.string.length()-100,response.string.length()));
 					} else
-						System.out.println("Content (as String): "+contentStr);
+						System.out.println("Content (as String): "+response.string);
 				}
 			}
 			
-			if (verboseOnError && contentStr==null) showConnection(connection); 
+			if (verboseOnError && response==null) showConnection(connection); 
 			
 			connection.disconnect();
 			
-			return contentStr;
+			return response;
 		}
 
 		private void showConnection(HttpURLConnection connection) {

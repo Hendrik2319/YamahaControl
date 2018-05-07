@@ -43,6 +43,7 @@ import net.schwarzbaer.gui.Tables;
 import net.schwarzbaer.gui.Tables.CheckBoxRendererComponent;
 import net.schwarzbaer.gui.Tables.LabelRendererComponent;
 import net.schwarzbaer.gui.Tables.SimplifiedColumnConfig;
+import net.schwarzbaer.java.tools.yamahacontrol.Ctrl.HttpResponse;
 import net.schwarzbaer.java.tools.yamahacontrol.Responder.ResponseTableModel.TableEntry;
 import net.schwarzbaer.java.tools.yamahacontrol.YamahaControl.Log;
 
@@ -70,7 +71,7 @@ public class Responder extends Ctrl.HttpInterface {
 	}
 	
 	@Override
-	public String sendCommand(String address, String commandStr, boolean verbose) {
+	public HttpResponse sendCommand(String address, String commandStr, boolean verbose) {
 		TableEntry.Command command = tableModel.commands.get(commandStr);
 		if (command==null) {
 			Log.info( getClass(), "Received a command: %s", commandStr);
@@ -88,7 +89,8 @@ public class Responder extends Ctrl.HttpInterface {
 		
 		String response = command.selectedResponse.protocolEntry.xml;
 		Log.info( getClass(), "Response: %s", response);
-		return response;
+		
+		return new Ctrl.HttpResponse(response.getBytes(),response);
 	}
 
 	@Override
