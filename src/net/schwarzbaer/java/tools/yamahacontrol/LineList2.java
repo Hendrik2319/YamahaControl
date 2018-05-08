@@ -299,6 +299,7 @@ class LineList2 {
 	private void sendCursorSelect(Device.Value.CursorSelect cursorSelect, boolean listReset) {
 		listInfo.sendCursorSelect(cursorSelect);
 		if (listReset) {
+			lineListLabel.setText("loading ...");			
 			lineList.setModel(lineListModel = new LineList2Model());
 			lineList.setSelectedIndex(-1);
 		}
