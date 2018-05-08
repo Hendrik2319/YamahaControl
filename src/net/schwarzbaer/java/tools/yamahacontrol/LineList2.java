@@ -32,7 +32,6 @@ import javax.swing.event.ListDataListener;
 import net.schwarzbaer.gui.Tables.LabelRendererComponent;
 import net.schwarzbaer.java.tools.yamahacontrol.YamahaControl.FrequentlyTask;
 import net.schwarzbaer.java.tools.yamahacontrol.YamahaControl.GridBagPanel;
-import net.schwarzbaer.java.tools.yamahacontrol.YamahaControl.Log;
 import net.schwarzbaer.java.tools.yamahacontrol.YamahaControl.SmallImages;
 
 class LineList2 {
@@ -206,8 +205,6 @@ class LineList2 {
 				case KeyEvent.VK_SPACE: selectSelectedIndex(); break;
 				case KeyEvent.VK_BACK_SPACE: sendCursorSelect(Device.Value.CursorSelect.Return,true); break;
 				}
-				JScrollBar scrollBar = lineListScrollPane.getVerticalScrollBar();
-				Log.info(getClass(), "scrollBar: %d..%d(%d)..%d", scrollBar.getMinimum(), scrollBar.getValue(), scrollBar.getVisibleAmount(), scrollBar.getMaximum());
 			}
 		});
 		lineList.addMouseListener(new MouseAdapter() {
@@ -382,26 +379,25 @@ class LineList2 {
 		@Override
 		public Component getListCellRendererComponent(JList<? extends Device.ListInfo.Line> list, Device.ListInfo.Line line, int index, boolean isSelected, boolean cellHasFocus) {
 			
+			rendererComponent.setEnabled(list.isEnabled());
+			
 			if (line==null) {
 				rendererComponent.setIcon(null);
 				rendererComponent.setText("  loading ...");
+				rendererComponent.setEnabled(false);
 			} else {
 				switch (line.attr) {
 				case Container     : rendererComponent.setIcon(YamahaControl.smallImages.get(SmallImages.FolderIcon)); break;
 				case Item          : rendererComponent.setIcon(YamahaControl.smallImages.get(SmallImages.IconOn)); break;
 				case UnplayableItem: rendererComponent.setIcon(YamahaControl.smallImages.get(SmallImages.IconOff)); break;
-				case Unselectable  : rendererComponent.setIcon(null); break;
+				case Unselectable  : rendererComponent.setIcon(null); rendererComponent.setEnabled(false); break;
 				}
 				rendererComponent.setText(line.txt==null?"":line.txt);
 			}
-			if (!list.isEnabled()) {
-				rendererComponent.setOpaque(false);
-				rendererComponent.setForeground(Color.GRAY);
-			} else {
-				rendererComponent.setOpaque(isSelected);
-				rendererComponent.setBackground(isSelected?list.getSelectionBackground():list.getBackground());
-				rendererComponent.setForeground(isSelected?list.getSelectionForeground():list.getForeground());
-			}
+			rendererComponent.setOpaque(true);
+			rendererComponent.setBackground(isSelected?list.getSelectionBackground():list.getBackground());
+			rendererComponent.setForeground(isSelected?list.getSelectionForeground():list.getForeground());
+			
 			rendererComponent.setBorder(cellHasFocus?focusBorder:emptyBorder);
 			
 			return rendererComponent;
