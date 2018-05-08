@@ -11,21 +11,20 @@ import java.awt.event.KeyListener;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.util.Arrays;
-import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.Vector;
 
 import javax.swing.BorderFactory;
-import javax.swing.InputMap;
 import javax.swing.JButton;
 import javax.swing.JList;
 import javax.swing.JPanel;
+import javax.swing.JScrollBar;
 import javax.swing.JScrollPane;
 import javax.swing.JTextField;
-import javax.swing.KeyStroke;
 import javax.swing.ListCellRenderer;
 import javax.swing.ListModel;
 import javax.swing.ListSelectionModel;
+import javax.swing.SwingUtilities;
 import javax.swing.border.Border;
 import javax.swing.event.ListDataEvent;
 import javax.swing.event.ListDataListener;
@@ -33,11 +32,12 @@ import javax.swing.event.ListDataListener;
 import net.schwarzbaer.gui.Tables.LabelRendererComponent;
 import net.schwarzbaer.java.tools.yamahacontrol.YamahaControl.FrequentlyTask;
 import net.schwarzbaer.java.tools.yamahacontrol.YamahaControl.GridBagPanel;
+import net.schwarzbaer.java.tools.yamahacontrol.YamahaControl.Log;
 import net.schwarzbaer.java.tools.yamahacontrol.YamahaControl.SmallImages;
 
 class LineList2 {
 	
-	private static boolean KeyStrokesWereListed = false;
+//	private static boolean KeyStrokesWereListed = false;
 	private Device device;
 	private Device.ListInfo listInfo;
 	private LineList2User lineListUser;
@@ -132,16 +132,30 @@ class LineList2 {
 			if (listInfo.menuStatus!=Device.Value.ReadyOrBusy.Ready) return;
 			
 			if (!equals(lineListModel.lines.length,listInfo.maxLine) || !equals(lineListModel.menuName,listInfo.menuName) || !equals(lineListModel.menuLayer,listInfo.menuLayer)) {
-				int selectedIndex = -1;
+				final int selectedIndex;
 				if (listInfo.maxLine==null) {
+					selectedIndex = -1;
 					lineListModel = new LineList2Model();
 				} else {
-					if (listInfo.currentLine!=null) selectedIndex = listInfo.currentLine-1;
+					selectedIndex = listInfo.currentLine!=null?listInfo.currentLine-1:-1;
 					lineListModel = new LineList2Model(listInfo.maxLine,listInfo.menuName,listInfo.menuLayer);
 				}
 				lineList.setModel(lineListModel);
 				lineList.setSelectedIndex(selectedIndex);
-//				Log.info(getClass(), "change LineListModel: %s", lineListModel);
+				if (selectedIndex>=0 && lineListModel.lines.length>0) {
+					float ratio = selectedIndex/(float)(lineListModel.lines.length-1);
+					//Log.info(getClass(), "[New LineListModel]  %d/%d -> %1.3f", selectedIndex, lineListModel.lines.length, ratio);
+					SwingUtilities.invokeLater(()->{
+						JScrollBar scrollBar = lineListScrollPane.getVerticalScrollBar();
+						int min = scrollBar.getMinimum();
+						int max = scrollBar.getMaximum();
+						int ext = scrollBar.getVisibleAmount();
+						int value = Math.round(ratio*(max-min)-ext/2);
+						value = Math.max(min, Math.min(value, max));
+						scrollBar.setValue(value);
+						//Log.info(getClass(), "[New LineListModel]  %d/%d -> %d  | scrollBar: %d..%d(%d)..%d", selectedIndex, lineListModel.lines.length, value, scrollBar.getMinimum(), scrollBar.getValue(), scrollBar.getVisibleAmount(), scrollBar.getMaximum());
+					});
+				}
 				lineListLoader.start();
 			}
 			
@@ -175,54 +189,32 @@ class LineList2 {
 		lineListModel = new LineList2Model();
 		lineList = new JList<Device.ListInfo.Line>(lineListModel);
 		
-		if (!KeyStrokesWereListed) {
-			showKeyStrokes();
-			KeyStrokesWereListed = true;
-		}
+//		if (!KeyStrokesWereListed) {
+//			showKeyStrokes();
+//			KeyStrokesWereListed = true;
+//		}
 		
 		lineList.setCellRenderer(lineRenderer);
 		lineList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
 		
 		lineList.addKeyListener(new KeyListener() {
-			@Override public void keyTyped   (KeyEvent e) { /*showKeyEvent("keyTyped"   ,e);*/ }
+			@Override public void keyPressed (KeyEvent e) {}
+			@Override public void keyTyped   (KeyEvent e) {}
 			@Override public void keyReleased(KeyEvent e) {
-				//showKeyEvent("keyReleased",e);
 				switch (e.getKeyCode()) {
 				case KeyEvent.VK_ENTER: selectSelectedIndex(); break;
 				case KeyEvent.VK_SPACE: selectSelectedIndex(); break;
 				case KeyEvent.VK_BACK_SPACE: sendCursorSelect(Device.Value.CursorSelect.Return,true); break;
 				}
+				JScrollBar scrollBar = lineListScrollPane.getVerticalScrollBar();
+				Log.info(getClass(), "scrollBar: %d..%d(%d)..%d", scrollBar.getMinimum(), scrollBar.getValue(), scrollBar.getVisibleAmount(), scrollBar.getMaximum());
 			}
-			@Override public void keyPressed (KeyEvent e) { /*showKeyEvent("keyPressed" ,e);*/ }
-//			private void showKeyEvent(String label, KeyEvent e) {
-////				KeyEvent.getModifiersExText(modifiers)
-////				KeyEvent.getKeyModifiersText(modifiers);
-////				KeyEvent.getKeyText(keyCode)
-////				KeyEvent.getExtendedKeyCodeForChar(c)
-//				
-//				String str = String.format("[%12s]", label);
-//				str += String.format(" KeyCode:%d(%s)", e.getKeyCode(), KeyEvent.getKeyText(e.getKeyCode()));
-//				str += String.format(" ExtKeyCode:%d(%s)", e.getExtendedKeyCode(), KeyEvent.getKeyText(e.getExtendedKeyCode()));
-//				str += String.format(" KeyChar:'%c'", e.getKeyChar() );
-//				switch (e.getID()) {
-//				case KeyEvent.KEY_PRESSED : str += " KEY_PRESSED "; break;
-//				case KeyEvent.KEY_TYPED   : str += " KEY_TYPED   "; break;
-//				case KeyEvent.KEY_RELEASED: str += " KEY_RELEASED"; break;
-//				default: str += String.format(" ID:%d", e.getID() ); break;
-//				}
-//				str += String.format(" Mods:%04X(%s)", e.getModifiers(), KeyEvent.getKeyModifiersText(e.getModifiers()));
-//				str += String.format(" ExtMods:%04X(%s)", e.getModifiersEx(), KeyEvent.getModifiersExText(e.getModifiersEx()));
-//				
-//				Log.info(getClass(), str);
-//			}
 		});
 		lineList.addMouseListener(new MouseAdapter() {
 			@Override public void mouseClicked(MouseEvent e) {
-				//Log.info(getClass(), "lineList.mouseClicked: (%d,%d) -> index:%d (selected:%d)", e.getX(), e.getY(), lineList.locationToIndex(e.getPoint()), lineList.getSelectedIndex());
 				selectSelectedIndex();
 			}
 		});
-		
 		
 		lineListScrollPane = new JScrollPane(lineList);
 		lineListScrollPane.setPreferredSize(new Dimension(500, 200));
@@ -239,25 +231,25 @@ class LineList2 {
 		return lineListPanel;
 	}
 
-	private void showKeyStrokes() {
-		InputMap inputMap = lineList.getInputMap();
-		KeyStroke[] keyStrokes = inputMap.allKeys();
-		KeyStroke[] keyStrokes1 = inputMap.keys();
-		//Arrays.sort(keyStrokes,Comparator.nullsFirst(Comparator.comparing(key->key.toString())));
-		Arrays.sort(keyStrokes,Comparator.nullsFirst(Comparator.comparing(key->inputMap.get(key),Comparator.nullsFirst(Comparator.comparing(obj->obj.toString())))));
-		for (KeyStroke key:keyStrokes) {
-			Object object = inputMap.get(key);
-			System.out.printf("key[%-30s] %9s-> %s%n", key, isIn(key,keyStrokes1)?"":"[parent] ", object);
-		}
-	}
+//	private void showKeyStrokes() {
+//		InputMap inputMap = lineList.getInputMap();
+//		KeyStroke[] keyStrokes = inputMap.allKeys();
+//		KeyStroke[] keyStrokes1 = inputMap.keys();
+//		//Arrays.sort(keyStrokes,Comparator.nullsFirst(Comparator.comparing(key->key.toString())));
+//		Arrays.sort(keyStrokes,Comparator.nullsFirst(Comparator.comparing(key->inputMap.get(key),Comparator.nullsFirst(Comparator.comparing(obj->obj.toString())))));
+//		for (KeyStroke key:keyStrokes) {
+//			Object object = inputMap.get(key);
+//			System.out.printf("key[%-30s] %9s-> %s%n", key, isIn(key,keyStrokes1)?"":"[parent] ", object);
+//		}
+//	}
 
-	private boolean isIn(KeyStroke key1, KeyStroke[] keyStrokes) {
-		if (keyStrokes==null) return false;
-		if (key1==null) return false;
-		for (KeyStroke key:keyStrokes)
-			if (key1.equals(key)) return true;
-		return false;
-	}
+//	private boolean isIn(KeyStroke key1, KeyStroke[] keyStrokes) {
+//		if (keyStrokes==null) return false;
+//		if (key1==null) return false;
+//		for (KeyStroke key:keyStrokes)
+//			if (key1.equals(key)) return true;
+//		return false;
+//	}
 
 	private void selectSelectedIndex() {
 		int index = lineList.getSelectedIndex();

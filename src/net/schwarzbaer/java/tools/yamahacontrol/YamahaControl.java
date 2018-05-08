@@ -342,10 +342,12 @@ public class YamahaControl {
 	}
 
 	static void setScrollPos(JScrollBar scrollBar, float pos) {
-		int min = scrollBar.getMinimum();
-		int max = scrollBar.getMaximum();
-		int ext = scrollBar.getVisibleAmount();
-		SwingUtilities.invokeLater(()->scrollBar.setValue(Math.round(pos*(max-ext-min)+min)));
+		SwingUtilities.invokeLater(()->{
+			int min = scrollBar.getMinimum();
+			int max = scrollBar.getMaximum();
+			int ext = scrollBar.getVisibleAmount();
+			scrollBar.setValue(Math.round(pos*(max-ext-min)+min));
+		});
 	}
 
 	static void copyToClipBoard(String str) {
@@ -1626,7 +1628,7 @@ public class YamahaControl {
 		
 		private static void out(PrintStream out, Class<?> callerClass, String label,                String format, Object... values) { out(out, callerClass, label, Locale.ENGLISH, format, values); }
 		private static void out(PrintStream out, Class<?> callerClass, String label, Locale locale, String format, Object... values) {
-			out.printf(locale, "[%s] %s: %s%n", callerClass==null?"???":callerClass.getSimpleName(), label, String.format(format, values));
+			out.printf(locale, "[%s] %s: %s%n", callerClass==null?"???":callerClass.getSimpleName(), label, String.format(locale, format, values));
 		}
 	}
 
