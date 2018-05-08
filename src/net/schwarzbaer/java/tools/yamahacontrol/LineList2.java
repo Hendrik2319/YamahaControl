@@ -6,17 +6,23 @@ import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.GridBagConstraints;
 import java.awt.Insets;
-import java.awt.event.ActionListener;
+import java.awt.event.KeyEvent;
+import java.awt.event.KeyListener;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.Vector;
 
 import javax.swing.BorderFactory;
+import javax.swing.InputMap;
 import javax.swing.JButton;
 import javax.swing.JList;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTextField;
+import javax.swing.KeyStroke;
 import javax.swing.ListCellRenderer;
 import javax.swing.ListModel;
 import javax.swing.ListSelectionModel;
@@ -31,6 +37,7 @@ import net.schwarzbaer.java.tools.yamahacontrol.YamahaControl.SmallImages;
 
 class LineList2 {
 	
+	private static boolean KeyStrokesWereListed = false;
 	private Device device;
 	private Device.ListInfo listInfo;
 	private LineList2User lineListUser;
@@ -44,7 +51,6 @@ class LineList2 {
 	
 	private LineList2Model lineListModel;
 	private LineRenderer lineRenderer;
-	private boolean ignoreListSelection;
 	private LineListLoader lineListLoader;
 	private FrequentlyTask waitUntilListReady;
 
@@ -60,7 +66,6 @@ class LineList2 {
 		this.lineListScrollPane = null;
 		this.lineListModel = null;
 		this.lineRenderer = null;
-		this.ignoreListSelection = false;
 		
 		this.lineListLoader = null;
 		this.lineListLoader = new LineListLoader();
@@ -127,9 +132,15 @@ class LineList2 {
 			if (listInfo.menuStatus!=Device.Value.ReadyOrBusy.Ready) return;
 			
 			if (!equals(lineListModel.lines.length,listInfo.maxLine) || !equals(lineListModel.menuName,listInfo.menuName) || !equals(lineListModel.menuLayer,listInfo.menuLayer)) {
-				if (listInfo.maxLine==null) lineListModel = new LineList2Model();
-				else lineListModel = new LineList2Model((int)listInfo.maxLine,listInfo.menuName,listInfo.menuLayer);
+				int selectedIndex = -1;
+				if (listInfo.maxLine==null) {
+					lineListModel = new LineList2Model();
+				} else {
+					if (listInfo.currentLine!=null) selectedIndex = listInfo.currentLine-1;
+					lineListModel = new LineList2Model(listInfo.maxLine,listInfo.menuName,listInfo.menuLayer);
+				}
 				lineList.setModel(lineListModel);
+				lineList.setSelectedIndex(selectedIndex);
 //				Log.info(getClass(), "change LineListModel: %s", lineListModel);
 				lineListLoader.start();
 			}
@@ -160,49 +171,58 @@ class LineList2 {
 		lineListLabel = new JTextField("???");
 		lineListLabel.setEditable(false);
 		
-		ignoreListSelection = false;
 		lineRenderer = new LineRenderer();
 		lineListModel = new LineList2Model();
 		lineList = new JList<Device.ListInfo.Line>(lineListModel);
+		
+		if (!KeyStrokesWereListed) {
+			showKeyStrokes();
+			KeyStrokesWereListed = true;
+		}
+		
 		lineList.setCellRenderer(lineRenderer);
 		lineList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-		lineList.addListSelectionListener(e -> {
-			if (e.getValueIsAdjusting()) return;
-			if (ignoreListSelection) return;
-			
-			int index = lineList.getSelectedIndex();
-			if (index<0) return;
-			
-			Device.ListInfo.Line line = lineListModel.getElementAt(index);
-			if (line==null || line.attr==null) return;
-			
-			switch(line.attr) {
-			
-			case UnplayableItem:
-			case Unselectable: return;
-			
-			case Container:
-				lineListLabel.setText("loading ...");			
-				lineList.setModel(lineListModel = new LineList2Model());
-				
-				listInfo.sendJumpToLine(index+1);
-				//waitUntilListReady.start();
-				//listInfo.sendDirectSelect((index&0x7)+1);
-				listInfo.sendCursorSelect(Device.Value.CursorSelect.Sel);
-				break;
-				
-			case Item:
-				listInfo.sendJumpToLine(index+1);
-				//waitUntilListReady.start();
-				//listInfo.sendDirectSelect((index&0x7)+1);
-				listInfo.sendCursorSelect(Device.Value.CursorSelect.Sel);
-				break;
+		
+		lineList.addKeyListener(new KeyListener() {
+			@Override public void keyTyped   (KeyEvent e) { /*showKeyEvent("keyTyped"   ,e);*/ }
+			@Override public void keyReleased(KeyEvent e) {
+				//showKeyEvent("keyReleased",e);
+				switch (e.getKeyCode()) {
+				case KeyEvent.VK_ENTER: selectSelectedIndex(); break;
+				case KeyEvent.VK_SPACE: selectSelectedIndex(); break;
+				case KeyEvent.VK_BACK_SPACE: sendCursorSelect(Device.Value.CursorSelect.Return,true); break;
+				}
 			}
-			
-			device.update(EnumSet.of(listInfoUpdateWish,playInfoUpdateWish));
-			updateLineList();
-			lineListUser.updatePlayInfo();
+			@Override public void keyPressed (KeyEvent e) { /*showKeyEvent("keyPressed" ,e);*/ }
+//			private void showKeyEvent(String label, KeyEvent e) {
+////				KeyEvent.getModifiersExText(modifiers)
+////				KeyEvent.getKeyModifiersText(modifiers);
+////				KeyEvent.getKeyText(keyCode)
+////				KeyEvent.getExtendedKeyCodeForChar(c)
+//				
+//				String str = String.format("[%12s]", label);
+//				str += String.format(" KeyCode:%d(%s)", e.getKeyCode(), KeyEvent.getKeyText(e.getKeyCode()));
+//				str += String.format(" ExtKeyCode:%d(%s)", e.getExtendedKeyCode(), KeyEvent.getKeyText(e.getExtendedKeyCode()));
+//				str += String.format(" KeyChar:'%c'", e.getKeyChar() );
+//				switch (e.getID()) {
+//				case KeyEvent.KEY_PRESSED : str += " KEY_PRESSED "; break;
+//				case KeyEvent.KEY_TYPED   : str += " KEY_TYPED   "; break;
+//				case KeyEvent.KEY_RELEASED: str += " KEY_RELEASED"; break;
+//				default: str += String.format(" ID:%d", e.getID() ); break;
+//				}
+//				str += String.format(" Mods:%04X(%s)", e.getModifiers(), KeyEvent.getKeyModifiersText(e.getModifiers()));
+//				str += String.format(" ExtMods:%04X(%s)", e.getModifiersEx(), KeyEvent.getModifiersExText(e.getModifiersEx()));
+//				
+//				Log.info(getClass(), str);
+//			}
 		});
+		lineList.addMouseListener(new MouseAdapter() {
+			@Override public void mouseClicked(MouseEvent e) {
+				//Log.info(getClass(), "lineList.mouseClicked: (%d,%d) -> index:%d (selected:%d)", e.getX(), e.getY(), lineList.locationToIndex(e.getPoint()), lineList.getSelectedIndex());
+				selectSelectedIndex();
+			}
+		});
+		
 		
 		lineListScrollPane = new JScrollPane(lineList);
 		lineListScrollPane.setPreferredSize(new Dimension(500, 200));
@@ -219,85 +239,83 @@ class LineList2 {
 		return lineListPanel;
 	}
 
+	private void showKeyStrokes() {
+		InputMap inputMap = lineList.getInputMap();
+		KeyStroke[] keyStrokes = inputMap.allKeys();
+		KeyStroke[] keyStrokes1 = inputMap.keys();
+		//Arrays.sort(keyStrokes,Comparator.nullsFirst(Comparator.comparing(key->key.toString())));
+		Arrays.sort(keyStrokes,Comparator.nullsFirst(Comparator.comparing(key->inputMap.get(key),Comparator.nullsFirst(Comparator.comparing(obj->obj.toString())))));
+		for (KeyStroke key:keyStrokes) {
+			Object object = inputMap.get(key);
+			System.out.printf("key[%-30s] %9s-> %s%n", key, isIn(key,keyStrokes1)?"":"[parent] ", object);
+		}
+	}
+
+	private boolean isIn(KeyStroke key1, KeyStroke[] keyStrokes) {
+		if (keyStrokes==null) return false;
+		if (key1==null) return false;
+		for (KeyStroke key:keyStrokes)
+			if (key1.equals(key)) return true;
+		return false;
+	}
+
+	private void selectSelectedIndex() {
+		int index = lineList.getSelectedIndex();
+		if (index<0) return;
+		lineList.setSelectedIndex(-1);
+		
+		Device.ListInfo.Line line = lineListModel.getElementAt(index);
+		if (line==null || line.attr==null) return;
+		
+		switch(line.attr) {
+		
+		case Container:
+			lineListLabel.setText("loading ...");			
+			lineList.setModel(lineListModel = new LineList2Model());
+			
+			listInfo.sendJumpToLine(index+1);
+			//waitUntilListReady.start();
+			//listInfo.sendDirectSelect((index&0x7)+1);
+			listInfo.sendCursorSelect(Device.Value.CursorSelect.Sel);
+			break;
+			
+		case UnplayableItem:
+		case Unselectable: // return;
+			
+		case Item:
+			listInfo.sendJumpToLine(index+1);
+			//waitUntilListReady.start();
+			//listInfo.sendDirectSelect((index&0x7)+1);
+			listInfo.sendCursorSelect(Device.Value.CursorSelect.Sel);
+			break;
+		}
+		
+		device.update(EnumSet.of(listInfoUpdateWish,playInfoUpdateWish));
+		updateLineList();
+		lineListUser.updatePlayInfo();
+	}
+
 	private void createButtons(GridBagPanel buttonsPanel) {
 		buttonsPanel.setInsets(new Insets(0,3,0,3));
-		buttonsPanel.add(createButton(Device.Value.CursorSelect.ReturnToHome), 0,0, 0,0, 1,1, GridBagConstraints.BOTH);
-		buttonsPanel.add(createButton(Device.Value.CursorSelect.Return      ), 1,0, 0,0, 1,1, GridBagConstraints.BOTH);
-		
-//		buttonsPanel.add(createButton(ButtonID.Home    ), 0,0, 0,0, 1,1, GridBagConstraints.BOTH);
-////		buttonsPanel.add(createButton(ButtonID.Jump    ), 0,1, 0,0, 1,1, GridBagConstraints.BOTH);
-//		buttonsPanel.add(createButton(ButtonID.Return  ), 1,0, 0,0, 1,1, GridBagConstraints.BOTH);
-////		buttonsPanel.add(createButton(ButtonID.Select  ), 1,1, 0,0, 1,1, GridBagConstraints.BOTH);
-////		buttonsPanel.add(createButton(ButtonID.Up      ), 2,0, 0,0, 1,1, GridBagConstraints.BOTH);
-////		buttonsPanel.add(createButton(ButtonID.Down    ), 2,1, 0,0, 1,1, GridBagConstraints.BOTH);
-////		buttonsPanel.add(createButton(ButtonID.PageUp  ), 3,0, 0,0, 1,1, GridBagConstraints.BOTH);
-////		buttonsPanel.add(createButton(ButtonID.PageDown), 3,1, 0,0, 1,1, GridBagConstraints.BOTH);
+		buttonsPanel.add(createButton(Device.Value.CursorSelect.ReturnToHome, true), 0,0, 0,0, 1,1, GridBagConstraints.BOTH);
+		buttonsPanel.add(createButton(Device.Value.CursorSelect.Return      , true), 1,0, 0,0, 1,1, GridBagConstraints.BOTH);
 	}
 	
-//	private enum ButtonID {
-//		/*Up,*/ Home, Return, /*Select, PageUp("Page Up"), Down, PageDown("Page Down"), Jump("Jump to Line")*/;
-//
-//		String label;
-//		ButtonID() { label = toString(); }
-//		ButtonID(String label) { this.label = label; }
-//		public String getLabel() { return label; }
-//	}
-	
-	private JButton createButton(Device.Value.CursorSelect cursorSelect) {
-		JButton button = YamahaControl.createButton(cursorSelect.getLabel(), createCursorSelectListener(cursorSelect), true);
+	private JButton createButton(Device.Value.CursorSelect cursorSelect, boolean listReset) {
+		JButton button = YamahaControl.createButton(cursorSelect.getLabel(), e->sendCursorSelect(cursorSelect, listReset), true);
 		buttons.add(button);
 		return button;
 	}
-	
-//	private JButton createButton(ButtonID buttonID) {
-//		JButton button = YamahaControl.createButton(buttonID.getLabel(), createListener(buttonID), true);
-//		buttons.add(button);
-//		return button;
-//	}
 
-//	private ActionListener createListener(ButtonID buttonID) {
-//		switch (buttonID) {
-////		case Up    : return createCursorSelectListener(Device.Value.CursorSelect.Up);
-////		case Down  : return createCursorSelectListener(Device.Value.CursorSelect.Down);
-//		case Return: return createCursorSelectListener(Device.Value.CursorSelect.Return);
-////		case Select: return createCursorSelectListener(Device.Value.CursorSelect.Sel);
-//		case Home  : return createCursorSelectListener(Device.Value.CursorSelect.ReturnToHome);
-//		
-////		case Jump  : return createJumpToLineListener();
-//		
-////		case PageUp  : return createPageSelectListener(Device.Value.PageSelect.Up);
-////		case PageDown: return createPageSelectListener(Device.Value.PageSelect.Down);
-//		}
-//		return e->{};
-//	}
-
-//	private ActionListener createJumpToLineListener() {
-//		return e->{
-//			String valurStr = JOptionPane.showInputDialog(lineList, "Enter line number:", listInfo.currentLine);
-//			int lineNumber;
-//			try { lineNumber = Integer.parseInt(valurStr); }
-//			catch (NumberFormatException e1) { return; }
-//			listInfo.sendJumpToLine(lineNumber);
-//			device.update(EnumSet.of(listInfoUpdateWish));
-//			updateLineList();
-//		};
-//	}
-
-//	private ActionListener createPageSelectListener(Device.Value.PageSelect pageSelect) {
-//		return e->{
-//			listInfo.sendPageSelect(pageSelect);
-//			device.update(EnumSet.of(listInfoUpdateWish));
-//			updateLineList();
-//		};
-//	}
-
-	private ActionListener createCursorSelectListener(Device.Value.CursorSelect cursorSelect) {
-		return e->{
-			listInfo.sendCursorSelect(cursorSelect);
-			device.update(EnumSet.of(listInfoUpdateWish,playInfoUpdateWish));
-			updateLineList();
-			lineListUser.updatePlayInfo();
-		};
+	private void sendCursorSelect(Device.Value.CursorSelect cursorSelect, boolean listReset) {
+		listInfo.sendCursorSelect(cursorSelect);
+		if (listReset) {
+			lineList.setModel(lineListModel = new LineList2Model());
+			lineList.setSelectedIndex(-1);
+		}
+		device.update(EnumSet.of(listInfoUpdateWish,playInfoUpdateWish));
+		updateLineList();
+		lineListUser.updatePlayInfo();
 	}
 
 	private static class LineList2Model implements ListModel<Device.ListInfo.Line> {
@@ -368,9 +386,10 @@ class LineList2 {
 			emptyBorder = BorderFactory.createEmptyBorder(1, 1, 1, 1);
 			focusBorder = BorderFactory.createDashedBorder(Color.DARK_GRAY);
 		}
-	
+
 		@Override
 		public Component getListCellRendererComponent(JList<? extends Device.ListInfo.Line> list, Device.ListInfo.Line line, int index, boolean isSelected, boolean cellHasFocus) {
+			
 			if (line==null) {
 				rendererComponent.setIcon(null);
 				rendererComponent.setText("  loading ...");
