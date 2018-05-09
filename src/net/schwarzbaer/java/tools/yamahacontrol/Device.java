@@ -1,9 +1,11 @@
 package net.schwarzbaer.java.tools.yamahacontrol;
 
 import java.nio.ByteBuffer;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.Comparator;
 import java.util.EnumSet;
+import java.util.Locale;
 import java.util.Vector;
 
 import org.w3c.dom.Node;
@@ -46,9 +48,11 @@ public final class Device {
 	}
 	
 	enum UpdateWish {
-		BasicStatus, Scenes, Inputs, TunerConfig, AirPlayConfig,
-		NetRadioPlayInfo, NetRadioListInfo, USBListInfo, USBPlayInfo,
-		DLNAPlayInfo, DLNAListInfo, IPodUSBListInfo, IPodUSBPlayInfo, IPodUSBMode, AirPlayPlayInfo, SpotifyPlayInfo
+		BasicStatus, Scenes, Inputs,
+		NetRadioPlayInfo, NetRadioListInfo, DLNAPlayInfo, DLNAListInfo,
+		USBListInfo, USBPlayInfo, IPodUSBListInfo, IPodUSBPlayInfo, IPodUSBMode,
+		AirPlayConfig, AirPlayPlayInfo, SpotifyPlayInfo,
+		TunerConfig, TunerPlayInfo, TunerPresets
 	}
 	
 	public void update(EnumSet<UpdateWish> updateWishes) {
@@ -58,19 +62,28 @@ public final class Device {
 			case Inputs          : inputs.askInputs(); break;
 			case Scenes          : inputs.askScenes(); break;
 			case BasicStatus     : basicStatus       = BasicStatus   .parse(Ctrl.sendGetCommand_Node(address,KnownCommand.General.GetBasicStatus  )); break;
-			case TunerConfig     : tuner  .config    = Tuner  .Config.parse(Ctrl.sendGetCommand_Node(address,KnownCommand.Config.Tuner  )); break;
-			case AirPlayConfig   : airPlay.config    = AirPlay.Config.parse(Ctrl.sendGetCommand_Node(address,KnownCommand.Config.AirPlay)); break;
-			case AirPlayPlayInfo : airPlay .playInfo.update(); break;
-			case SpotifyPlayInfo : spotify .playInfo.update(); break;
+			
 			case NetRadioListInfo: netRadio.listInfo.update(); break;
 			case NetRadioPlayInfo: netRadio.playInfo.update(); break;
+			
 			case USBListInfo     : usb     .listInfo.update(); break;
 			case USBPlayInfo     : usb     .playInfo.update(); break;
+			
 			case DLNAListInfo    : dlna    .listInfo.update(); break;
 			case DLNAPlayInfo    : dlna    .playInfo.update(); break;
+			
 			case IPodUSBListInfo : iPodUSB .listInfo.update(); break;
 			case IPodUSBPlayInfo : iPodUSB .playInfo.update(); break;
 			case IPodUSBMode     : iPodUSB.updateMode(); break;
+			
+			case TunerConfig     : tuner   .config  .update(); break;
+			case TunerPlayInfo   : tuner   .playInfo.update(); break;
+			case TunerPresets    : tuner   .playInfo.updatePresets(); break;
+			
+			case AirPlayConfig   : airPlay .config  .update(); break;
+			case AirPlayPlayInfo : airPlay .playInfo.update(); break;
+			
+			case SpotifyPlayInfo : spotify .playInfo.update(); break;
 			}
 		});
 	}
@@ -131,16 +144,16 @@ public final class Device {
 	public void setVolume(double value) {
 		if (basicStatus==null) return;
 		if (basicStatus.volume==null) return;
-		if (basicStatus.volume.number==null) return;
 		
-		int currentValue = (int)Math.round(basicStatus.volume.number*2);
+		int currentValue = (int)Math.round(basicStatus.volume.getValue()*2);
 		int newValue     = (int)Math.round(value*2);
 		if (newValue!=currentValue) {
 			// Value 0:   Val = Number: -805..(5)..165
 			// Value 1:   Exp = "1"
 			// Value 2:   Unit = "dB"
-			String xmlStr = NumberWithUnit.createXML(newValue/2.0,1,"dB");
-			basicStatus.volume.number = newValue/2.0f;
+			//String xmlStr = NumberWithUnit.createXML(newValue/2.0,1,"dB");
+			basicStatus.volume.setValue(newValue/2.0f);
+			String xmlStr = basicStatus.volume.createXML();
 			int rc = Ctrl.sendPutCommand(address,KnownCommand.General.SetVolume,xmlStr);
 			if (rc!=Ctrl.RC_OK && rc!=Ctrl.RC_DEVICE_IN_STANDBY)
 				Log.error(getClass(), "setVolume(%f)-> %s %s -> RC:%d", value, KnownCommand.General.SetVolume.tagList, xmlStr, rc);
@@ -348,6 +361,7 @@ public final class Device {
 			IPodUSB ( "iPod_USB,Play_Info"), // G1: iPod_USB,Play_Info
 			Spotify (  "Spotify,Play_Info"), // G1: Spotify,Play_Info
 			AirPlay (  "AirPlay,Play_Info"), // G1: AirPlay,Play_Info
+			Tuner   (    "Tuner,Play_Info"), // G1: Tuner,Play_Info
 			;
 			final private TagList tagList;
 			GetPlayInfo (String tagListStr) { tagList = new TagList(tagListStr); }
@@ -450,11 +464,12 @@ public final class Device {
 		}
 		
 		enum Special implements KnownCommand {
-			GetUSBPresets ("USB,Play_Control,Preset,Preset_Sel_Item"), // G4: USB,Play_Control,Preset,Preset_Sel_Item
-			SetUSBSelectPreset ("USB,Play_Control,Preset,Preset_Sel"), // P4: USB,Play_Control,Preset,Preset_Sel
-			GetDLNAPresets ("SERVER,Play_Control,Preset,Preset_Sel_Item"), // G4: SERVER,Play_Control,Preset,Preset_Sel_Item
-			SetDLNASelectPreset ("SERVER,Play_Control,Preset,Preset_Sel"), // P4: SERVER,Play_Control,Preset,Preset_Sel
-			SetIPodUSBMode("iPod_USB,Play_Control,iPod_Mode"), // P10: iPod_USB,Play_Control,iPod_Mode
+			GetUSBPresets       (     "USB,Play_Control,Preset,Preset_Sel_Item"), // G4: USB,Play_Control,Preset,Preset_Sel_Item
+			SetUSBSelectPreset  (     "USB,Play_Control,Preset,Preset_Sel"     ), // P4: USB,Play_Control,Preset,Preset_Sel
+			GetDLNAPresets      (  "SERVER,Play_Control,Preset,Preset_Sel_Item"), // G4: SERVER,Play_Control,Preset,Preset_Sel_Item
+			SetDLNASelectPreset (  "SERVER,Play_Control,Preset,Preset_Sel"     ), // P4: SERVER,Play_Control,Preset,Preset_Sel
+			GetTunerPresets     (   "Tuner,Play_Control,Preset,Preset_Sel_Item"), // G3: Tuner,Play_Control,Preset,Preset_Sel_Item
+			SetIPodUSBMode      ("iPod_USB,Play_Control,iPod_Mode"             ), // P10: iPod_USB,Play_Control,iPod_Mode
 			;
 			final private TagList tagList;
 			Special(String tagListStr) { tagList = new TagList(tagListStr); }
@@ -465,6 +480,7 @@ public final class Device {
 	}
 
 	static interface Value {
+
 		public String getLabel();
 		
 		public enum OnOff            implements Value { On, Off           ; @Override public String getLabel() { return toString(); }  } 
@@ -476,6 +492,29 @@ public final class Device {
 		public enum OffOneAll        implements Value { Off, One, All     ; @Override public String getLabel() { return toString(); }  } 
 		public enum ShuffleIPod      implements Value { Off, Songs, Albums; @Override public String getLabel() { return toString(); }  } 
 		public enum IPodMode         implements Value { Normal, Extended  ; @Override public String getLabel() { return toString(); }  }
+		public enum NegateAssert     implements Value { Negate, Assert    ; @Override public String getLabel() { return toString(); }  }
+		public enum AmFm             implements Value { AM, FM            ; @Override public String getLabel() { return toString(); }  }
+		
+		public enum FreqAutoTP implements Value {
+			AutoUp("Auto Up"),AutoDown("Auto Down"),TPUp("TP Up"),TPDown("TP Down");
+			private String label;
+			FreqAutoTP(String label) { this.label = label; }
+			@Override public String getLabel() { return label; }
+		}
+		
+		public enum FreqAuto implements Value {
+			AutoUp("Auto Up"),AutoDown("Auto Down");
+			private String label;
+			FreqAuto(String label) { this.label = label; }
+			@Override public String getLabel() { return label; }
+		}
+		
+		public enum FreqTP implements Value {
+			TPUp("TP Up"),TPDown("TP Down");
+			private String label;
+			FreqTP(String label) { this.label = label; }
+			@Override public String getLabel() { return label; }
+		}
 		
 		public enum SkipFwdRev implements Value {
 			SkipFwd("Skip Fwd"),SkipRev("Skip Rev");
@@ -548,21 +587,44 @@ public final class Device {
 	}
 
 	static class NumberWithUnit {
-		public Float number;
-		public final String unit;
+		private float value;
+		private int number;
+		private final String unit;
+		private final int exponent;
 		
-		private NumberWithUnit(Float number, String unit) {
+		private NumberWithUnit(int number, int exponent, String unit) {
 			this.number = number;
+			this.exponent = exponent;
 			this.unit = unit;
+			this.value = (float)number;
+			for (int i=0; i<exponent; ++i) value/=10;
 		}
 
-		public static String createXML(double val, int exp, String unit) {
+		String getUnit() { return unit; }
+		float getValue() { return value; }
+		
+		void setValue(float value) {
+			this.value = value;
+			for (int i=0; i<exponent; ++i) value*=10;
+			this.number = Math.round(value);
+		}
+		
+		@Override
+		public String toString() {
+			return String.format(Locale.ENGLISH, "%1."+exponent+"f %s", value, unit);
+		}
+
+		String createXML() {
+			return "<Val>"+number+"</Val><Exp>"+exponent+"</Exp><Unit>"+unit+"</Unit>";
+		}
+
+		static String createXML(double val, int exp, String unit) {
 			for (int i=0; i<exp; ++i) val*=10;
 			int valInt = (int)Math.round(val);
 			return "<Val>"+valInt+"</Val><Exp>"+exp+"</Exp><Unit>"+unit+"</Unit>";
 		}
 
-		public static NumberWithUnit parse(Node node, String... tagList) {
+		static NumberWithUnit parse(Node node, String... tagList) {
 			Node value = XML.getSubNode(node, tagList);
 			if (value==null) return null;
 			
@@ -570,16 +632,15 @@ public final class Device {
 			String exp = XML.getSubValue(value,"Exp");
 			String unit = XML.getSubValue(value,"Unit");
 			
-			float number;
+			int number;
 			int exponent;
 			try {
 				number = Integer.parseInt(val);
 				exponent = Integer.parseInt(exp);
 			} catch (NumberFormatException e) {
-				return new NumberWithUnit(null, unit);
+				return null;
 			}
-			for (int i=0; i<exponent; ++i) number/=10;
-			return new NumberWithUnit(number, unit);
+			return new NumberWithUnit(number, exponent, unit);
 		}
 	}
 	
@@ -646,29 +707,39 @@ public final class Device {
 		Config config;
 		
 		public AirPlay(String address) {
-			this.config   = null;
+			this.config   = new Config(address, KnownCommand.Config.AirPlay);
 			this.playInfo = new PlayInfo_AirPlaySpotify("AirPlay", address, KnownCommand.GetPlayInfo.AirPlay, KnownCommand.SetPlayback.AirPlay);
 		}
 		
-		static class Config {
+		static class Config extends AbstractConfig {
 			Value.ReadyOrNot deviceStatus;
 			String volumeInterlock;
+			
+			Config(String address, KnownCommand.Config getConfigCmd) {
+				super(address, getConfigCmd);
+				clearValues();
+			}
+
+			private void clearValues() {
+				deviceStatus = null;
+				volumeInterlock = null;
+			}
 	
-			public static Config parse(Node node) {
-				Config config = new Config();
+			@Override
+			protected void parse(Node node) {
+				clearValues();
 				XML.forEachChild(node, child->{
 					switch (child.getNodeName()) {
 					case "Feature_Availability":
 						// GET[G3]:    AirPlay,Config   ->   Feature_Availability -> "Ready" | "Not Ready"
-						config.deviceStatus =  XML.getSubValue(child, Value.ReadyOrNot.values());
+						deviceStatus =  XML.getSubValue(child, Value.ReadyOrNot.values());
 						break;
 						
 					case "Volume_Interlock":
-						config.volumeInterlock =  XML.getSubValue(child);
+						volumeInterlock =  XML.getSubValue(child);
 						break;
 					}
 				});
-				return config;
 			}
 		}
 	}
@@ -686,49 +757,57 @@ public final class Device {
 		@SuppressWarnings("unused")
 		private String address;
 		Config config;
+		PlayInfo_Tuner playInfo;
 	
 		public Tuner(String address) {
 			this.address = address;
-			this.config = null;
+			this.config   = new Config        (         address, KnownCommand.Config.Tuner);
+			this.playInfo = new PlayInfo_Tuner("Tuner", address, KnownCommand.GetPlayInfo.Tuner, KnownCommand.Special.GetTunerPresets);
 		}
 	
-		static class Config {
+		static class Config extends AbstractConfig {
 	
 			Value.ReadyOrNot deviceStatus;
 			String RDS;
 			BandRange FM;
 			BandRange AM;
 	
-			public Config() {
+			public Config(String address, KnownCommand.Config getConfigCmd) {
+				super(address, getConfigCmd);
+				clearValues();
+			}
+
+			private void clearValues() {
 				deviceStatus = null;
 				RDS = null;
 				FM = null;
 				AM = null;
 			}
 	
-			static Config parse(Node node) {
-				Config config = new Config();
+			@Override
+			protected void parse(Node node) {
+				clearValues();
 				XML.forEachChild(node, child->{
 					switch (child.getNodeName()) {
 					case "Feature_Availability":
 						// GET[G2]:    Tuner,Config   ->   Feature_Availability -> "Ready" | "Not Ready"
-						config.deviceStatus =  XML.getSubValue(child, Value.ReadyOrNot.values());
+						deviceStatus =  XML.getSubValue(child, Value.ReadyOrNot.values());
 						break;
 						
 					case "RDS":
-						config.RDS =  XML.getSubValue(child);
+						RDS =  XML.getSubValue(child);
 						break;
+						
 					case "Range_and_Step":
 						XML.forEachChild(child, band->{
 							switch (child.getNodeName()) {
-							case "FM": config.FM = (BandRange)BandRange.parse(child); break;
-							case "AM": config.AM = (BandRange)BandRange.parse(child); break;
+							case "FM": FM = (BandRange)BandRange.parse(child); break;
+							case "AM": AM = (BandRange)BandRange.parse(child); break;
 							}
 						});
 						break;
 					}
 				});
-				return config;
 			}
 			
 			static class BandRange {
@@ -899,6 +978,21 @@ public final class Device {
 			}}
 	}
 
+	static abstract class AbstractConfig {
+		
+		private String address;
+		private KnownCommand.Config getConfigCmd;
+		
+		protected AbstractConfig(String address, KnownCommand.Config getConfigCmd) {
+			this.address = address;
+			this.getConfigCmd = getConfigCmd;
+		}
+		public void update() {
+			parse(Ctrl.sendGetCommand_Node(address,getConfigCmd));
+		}
+		protected abstract void parse(Node node);
+	}
+
 	static abstract class PlayInfo {
 		protected String name;
 		protected String address;
@@ -914,14 +1008,255 @@ public final class Device {
 		}
 		protected abstract void parse(Node node);
 		
-		protected String convert(String str, boolean active) {
+		protected String convertUTF8(String str, boolean active) {
+			return convert(str, active, StandardCharsets.UTF_8);
+		}
+		protected String convertLatin1(String str, boolean active) {
+			return convert(str, active, StandardCharsets.ISO_8859_1);
+		}
+		protected String convert(String str, boolean active, Charset charset) {
 			if (!active) return str;
-			return StandardCharsets.UTF_8.decode(ByteBuffer.wrap(str.getBytes())).toString();
+			return charset.decode(ByteBuffer.wrap(str.getBytes())).toString();
 		}
 		
-		public abstract String toString(boolean withExtraUtf8Conversion);
+		public abstract String toString(boolean withExtraCharsetConversion);
 		@Override public String toString() {
 			return toString(false);
+		}
+	}
+
+	static class PlayInfo_Tuner extends PlayInfo {
+
+		Value.ReadyOrNot deviceStatus;
+		
+		String searchMode;
+		Value.NegateAssert signalTuned;
+		Value.NegateAssert signalStereo;
+		String fmMode;
+		String currentPreset;
+		
+		Value.AmFm tuningBand;
+		Value.FreqAutoTP tuningFreqCurrentAutomatic;
+		Value.FreqAutoTP tuningFreqFmAutomatic;
+		Value.FreqAuto   tuningFreqAmAutomatic;
+		NumberWithUnit tuningFreqCurrentValue;
+		NumberWithUnit tuningFreqFmValue;
+		NumberWithUnit tuningFreqAmValue;
+		
+		String programType;
+		String programService;
+		String radioTextA;
+		String radioTextB;
+		String clockTime;
+
+		private KnownCommand getPresetsCmd;
+		private Vector<Preset> presets;
+
+		protected PlayInfo_Tuner(String name, String address, KnownCommand.GetPlayInfo getPlayInfoCmd, KnownCommand getPresetsCmd) {
+			super(name, address, getPlayInfoCmd);
+			this.getPresetsCmd = getPresetsCmd;
+			this.presets = new Vector<>();
+			clearValues();
+		}
+
+		private void clearValues() {
+			this.deviceStatus = null;
+			this.searchMode = null;
+			this.signalTuned = null;
+			this.signalStereo = null;
+			this.fmMode = null;
+			this.currentPreset = null;
+			this.tuningBand = null;
+			this.tuningFreqCurrentAutomatic = null;
+			this.tuningFreqFmAutomatic = null;
+			this.tuningFreqAmAutomatic = null;
+			this.tuningFreqCurrentValue = null;
+			this.tuningFreqFmValue = null;
+			this.tuningFreqAmValue = null;
+			this.programType = null;
+			this.programService = null;
+			this.radioTextA = null;
+			this.radioTextB = null;
+			this.clockTime = null;
+		}
+
+		@Override
+		public String toString(boolean withExtraCharsetConversion) {
+			StringBuilder sb = new StringBuilder();
+			sb.append(name+": ").append(deviceStatus==null?"???":deviceStatus.getLabel()).append("\r\n");
+			sb.append("   SearchMode: ").append(searchMode   ==null?"":("\""+searchMode   +"\"")).append("\r\n");
+			sb.append("   FM Mode   : ").append(fmMode       ==null?"":("\""+fmMode       +"\"")).append("\r\n");
+			sb.append("   Preset    : ").append(currentPreset==null?"":("\""+currentPreset+"\""));
+			Preset preset = getPreset(currentPreset);
+			if (preset!=null) sb.append("  (").append(preset.rw).append(",\"").append(preset.title==null?"":preset.title).append("\")");
+			sb.append("\r\n");
+			sb.append("   Signal    : ");
+			if (signalTuned !=null) sb.append((signalTuned ==Value.NegateAssert.Negate?"not":"")+" tuned");
+			if (signalStereo!=null && signalTuned !=null) sb.append(" & "); 
+			if (signalStereo!=null) sb.append( signalStereo==Value.NegateAssert.Negate?"mono":"stereo");
+			sb.append("\r\n");
+			sb.append("\r\n");
+			
+			sb.append("Tuning\r\n");
+			sb.append("   Band: ").append(tuningBand==null?"":tuningBand).append("\r\n");
+			sb.append("   Frequency\r\n");
+			sb.append("      Current: ").append(tuningFreqCurrentAutomatic!=null?tuningFreqCurrentAutomatic:tuningFreqCurrentValue==null?"":tuningFreqCurrentValue.toString()).append("\r\n");
+			sb.append("      FM     : ").append(tuningFreqFmAutomatic     !=null?tuningFreqFmAutomatic     :tuningFreqFmValue     ==null?"":tuningFreqFmValue     .toString()).append("\r\n");
+			sb.append("      AM     : ").append(tuningFreqAmAutomatic     !=null?tuningFreqAmAutomatic     :tuningFreqAmValue     ==null?"":tuningFreqAmValue     .toString()).append("\r\n");
+			sb.append("\r\n");
+			
+			sb.append("Program Info\r\n");
+			sb.append("   Genre  : ").append(programType   ==null?"":(" \""+programType   +"\"")).append("\r\n");
+			sb.append("   Service: ").append(programService==null?"":(" \""+convertLatin1(programService,withExtraCharsetConversion)+"\"")).append("\r\n");
+			sb.append("   Text   : ").append(radioTextA    ==null?"":(" \""+convertLatin1(radioTextA    ,withExtraCharsetConversion)+"\"")).append("\r\n");
+			sb.append("          : ").append(radioTextB    ==null?"":(" \""+convertLatin1(radioTextB    ,withExtraCharsetConversion)+"\"")).append("\r\n");
+			sb.append("   Time   : ").append(clockTime     ==null?"":(" \""+clockTime     +"\"")).append("\r\n");
+			sb.append("\r\n");
+			
+			return sb.toString();
+		}
+
+		@Override
+		protected void parse(Node node) {
+			clearValues();
+			XML.forEachChild(node, child->{
+				switch (child.getNodeName()) {
+				case "Feature_Availability":
+					deviceStatus = XML.getSubValue(child, Value.ReadyOrNot.values());
+					break;
+					
+				case "Search_Mode":
+					searchMode =  XML.getSubValue(child);
+					break;
+					
+				case "Preset":
+					// GET[G1]:    Tuner,Play_Info   ->   Preset,Preset_Sel -> Values [GET[G3]:Tuner,Play_Control,Preset,Preset_Sel_Item]
+					currentPreset = XML.getSubValue(child, "Preset_Sel");
+					break;
+					
+				case "Tuning":
+					XML.forEachChild(child, tuning->{
+						switch (tuning.getNodeName()) {
+						case "Band":
+							// GET[G1]:    Tuner,Play_Info   ->   Tuning,Band -> "AM" | "FM"
+							tuningBand = XML.getSubValue(tuning, Value.AmFm.values());
+							break;
+							
+						case "Freq":
+							XML.forEachChild(tuning, freq->{
+								switch (freq.getNodeName()) {
+								case "Current":
+									// GET[G1]:    Tuner,Play_Info
+									// Value 0:   Tuning,Freq,Current,Val -> Number: 531..(9)..1611 | Number: 8750..(5)..10800 | "Auto Up" | "Auto Down" | "TP Up" | "TP Down"
+									// Value 1:   Tuning,Freq,Current,Exp -> "0" | "2" | <no value> | <no value> | <no value> | <no value>
+									// Value 2:   Tuning,Freq,Current,Unit -> "kHz" | "MHz" | <no value> | <no value> | <no value> | <no value>
+									tuningFreqCurrentAutomatic = XML.getSubValue(freq, Value.FreqAutoTP.values(), "Val");
+									if (tuningFreqCurrentAutomatic==null)
+										tuningFreqCurrentValue = NumberWithUnit.parse(freq);
+									break;
+									
+								case "FM":
+									// GET[G1]:    Tuner,Play_Info
+									// Value 0:   Tuning,Freq,FM,Val -> Number: 8750..(5)..10800 | "Auto Up" | "Auto Down" | "TP Up" | "TP Down"
+									// Value 1:   Tuning,Freq,FM,Exp -> "2" | <no value> | <no value> | <no value> | <no value>
+									// Value 2:   Tuning,Freq,FM,Unit -> "MHz" | <no value> | <no value> | <no value> | <no value>
+									tuningFreqFmAutomatic = XML.getSubValue(freq, Value.FreqAutoTP.values(), "Val");
+									if (tuningFreqFmAutomatic==null)
+										tuningFreqFmValue = NumberWithUnit.parse(freq);
+									break;
+									
+								case "AM":
+									// GET[G1]:    Tuner,Play_Info
+									// Value 0:   Tuning,Freq,AM,Val -> Number: 531..(9)..1611 | "Auto Up" | "Auto Down"
+									// Value 1:   Tuning,Freq,AM,Exp -> "0" | <no value> | <no value>
+									// Value 2:   Tuning,Freq,AM,Unit -> "kHz" | <no value> | <no value>
+									tuningFreqAmAutomatic = XML.getSubValue(freq, Value.FreqAuto.values(), "Val");
+									if (tuningFreqAmAutomatic==null)
+										tuningFreqAmValue = NumberWithUnit.parse(freq);
+									break;
+								}
+							});
+							break;
+						}
+					});
+					break;
+					
+				case "FM_Mode":
+					fmMode =  XML.getSubValue(child);
+					break;
+					
+				case "Signal_Info":
+					// GET[G1]:    Tuner,Play_Info   ->   Signal_Info,Tuned -> "Negate" | "Assert"
+					// GET[G1]:    Tuner,Play_Info   ->   Signal_Info,Stereo -> "Negate" | "Assert"
+					signalTuned  =  XML.getSubValue(child, Value.NegateAssert.values(), "Tuned"); 
+					signalStereo =  XML.getSubValue(child, Value.NegateAssert.values(), "Stereo"); 
+					break;
+					
+				case "Meta_Info":
+					// GET[G1]:    Tuner,Play_Info   ->   Meta_Info,Program_Type -> Text: 0..8 (Ascii)
+					// GET[G1]:    Tuner,Play_Info   ->   Meta_Info,Program_Service -> Text: 0..8 (Latin-1)
+					// GET[G1]:    Tuner,Play_Info   ->   Meta_Info,Radio_Text_A -> Text: 0..64 (Latin-1)
+					// GET[G1]:    Tuner,Play_Info   ->   Meta_Info,Radio_Text_B -> Text: 0..64 (Latin-1)
+					// GET[G1]:    Tuner,Play_Info   ->   Meta_Info,Clock_Time -> Text: 0..5 (Ascii)
+					programType    =  XML.getSubValue(child, "Program_Type"   ); // Program Type   [Genre]   
+					programService =  XML.getSubValue(child, "Program_Service");
+					radioTextA     =  XML.getSubValue(child, "Radio_Text_A"   ); 
+					radioTextB     =  XML.getSubValue(child, "Radio_Text_B"   ); 
+					clockTime      =  XML.getSubValue(child, "Clock_Time"     ); 
+					break;
+				}
+			});
+		}
+
+		public void updatePresets() {
+			presets.clear();
+			Node node = Ctrl.sendGetCommand_Node(address,getPresetsCmd);
+			if (node==null) return;
+			XML.forEachChild(node, child->{
+				String nodeName = child.getNodeName();
+				if (nodeName==null) return;
+				if (!nodeName.startsWith("Item_")) return;
+				int index;
+				try { index = Integer.parseInt(nodeName.substring("Item_".length())); }
+				catch (NumberFormatException e) { return; }
+				Preset preset = Preset.parse(child,index);
+				if (preset!=null) presets.add(preset);
+			});
+		}
+		
+		private Preset getPreset(String ID) {
+			if (ID==null) return null;
+			for (Preset p:presets)
+				if (ID.equals(p.ID))
+					return p;
+			return null;
+		}
+		
+		static class Preset {
+
+			String ID;
+			String rw;
+			String title;
+
+			public Preset() {
+				this.ID = null;
+				this.rw = null;
+				this.title = null;
+			}
+
+			public static Preset parse(Node node, int index) {
+				Preset preset = new Preset();
+				XML.forEachChild(node, child->{
+					switch (child.getNodeName()) {
+					case "Param": preset.ID    = XML.getSubValue(child); break;
+					case "RW"   : preset.rw    = XML.getSubValue(child); break;
+					case "Title": preset.title = XML.getSubValue(child); break;
+					}
+					
+				});
+				return preset;
+			}
+			
 		}
 	}
 
@@ -963,7 +1298,7 @@ public final class Device {
 		}
 	
 		@Override
-		public String toString(boolean withExtraUtf8Conversion) {
+		public String toString(boolean withExtraCharsetConversion) {
 			StringBuilder sb = new StringBuilder();
 			sb.append(name+": ").append(deviceStatus==null?"???":deviceStatus.getLabel());
 			if (playState==null)
@@ -975,9 +1310,9 @@ public final class Device {
 				}
 			sb.append("\r\n");
 			
-			sb.append("Station: ").append(currentStation==null?"":("\""+convert(currentStation,withExtraUtf8Conversion)+"\"")).append("\r\n");
-			sb.append("  Album: ").append(currentAlbum  ==null?"":("\""+convert(currentAlbum  ,withExtraUtf8Conversion)+"\"")).append("\r\n");
-			sb.append("   Song: ").append(currentSong   ==null?"":("\""+convert(currentSong   ,withExtraUtf8Conversion)+"\"")).append("\r\n");
+			sb.append("Station: ").append(currentStation==null?"":("\""+convertUTF8(currentStation,withExtraCharsetConversion)+"\"")).append("\r\n");
+			sb.append("  Album: ").append(currentAlbum  ==null?"":("\""+convertUTF8(currentAlbum  ,withExtraCharsetConversion)+"\"")).append("\r\n");
+			sb.append("   Song: ").append(currentSong   ==null?"":("\""+convertUTF8(currentSong   ,withExtraCharsetConversion)+"\"")).append("\r\n");
 			sb.append("\r\n");
 			
 			sb.append("AlbumCover:\r\n");
@@ -986,7 +1321,7 @@ public final class Device {
 			sb.append(albumCoverFormat==null?"":(" "+albumCoverFormat.getLabel()));
 			sb.append("\r\n");
 			sb.append("   ");
-			sb.append(albumCoverURL==null?"":(" \""+convert(albumCoverURL,withExtraUtf8Conversion)+"\""));
+			sb.append(albumCoverURL==null?"":(" \""+convertUTF8(albumCoverURL,withExtraCharsetConversion)+"\""));
 			sb.append("\r\n");
 			
 			return sb.toString();
@@ -1075,7 +1410,7 @@ public final class Device {
 		}
 
 		@Override
-		public String toString(boolean withExtraUtf8Conversion) {
+		public String toString(boolean withExtraCharsetConversion) {
 			StringBuilder sb = new StringBuilder();
 			sb.append(name+": ").append(deviceStatus==null?"???":deviceStatus.getLabel());
 			if (playState==null)
@@ -1088,15 +1423,15 @@ public final class Device {
 				}
 			sb.append("\r\n");
 			
-			sb.append("Artist: ").append(currentArtist==null?"":("\""+convert(currentArtist,withExtraUtf8Conversion)+"\"")).append("\r\n");
-			sb.append(" Album: ").append(currentAlbum ==null?"":("\""+convert(currentAlbum ,withExtraUtf8Conversion)+"\"")).append("\r\n");
-			sb.append("  Song: ").append(currentSong  ==null?"":("\""+convert(currentSong  ,withExtraUtf8Conversion)+"\"")).append("\r\n");
+			sb.append("Artist: ").append(currentArtist==null?"":("\""+convertUTF8(currentArtist,withExtraCharsetConversion)+"\"")).append("\r\n");
+			sb.append(" Album: ").append(currentAlbum ==null?"":("\""+convertUTF8(currentAlbum ,withExtraCharsetConversion)+"\"")).append("\r\n");
+			sb.append("  Song: ").append(currentSong  ==null?"":("\""+convertUTF8(currentSong  ,withExtraCharsetConversion)+"\"")).append("\r\n");
 			sb.append("\r\n");
 			
 			sb.append("Input Logo:\r\n");
-			if (inputLogoURL_S!=null) sb.append("    [S] "+convert(inputLogoURL_S,withExtraUtf8Conversion)+"\r\n");
-			if (inputLogoURL_M!=null) sb.append("    [M] "+convert(inputLogoURL_M,withExtraUtf8Conversion)+"\r\n");
-			if (inputLogoURL_L!=null) sb.append("    [L] "+convert(inputLogoURL_L,withExtraUtf8Conversion)+"\r\n");
+			if (inputLogoURL_S!=null) sb.append("    [S] "+convertUTF8(inputLogoURL_S,withExtraCharsetConversion)+"\r\n");
+			if (inputLogoURL_M!=null) sb.append("    [M] "+convertUTF8(inputLogoURL_M,withExtraCharsetConversion)+"\r\n");
+			if (inputLogoURL_L!=null) sb.append("    [L] "+convertUTF8(inputLogoURL_L,withExtraCharsetConversion)+"\r\n");
 			
 			return sb.toString();
 		}
@@ -1211,7 +1546,7 @@ public final class Device {
 		}
 
 		@Override
-		public String toString(boolean withExtraUtf8Conversion) {
+		public String toString(boolean withExtraCharsetConversion) {
 			StringBuilder sb = new StringBuilder();
 			sb.append(name+": ").append(deviceStatus==null?"???":deviceStatus.getLabel());
 			if (playState==null)
@@ -1226,9 +1561,9 @@ public final class Device {
 			sb.append("   Shuffle: ").append(shuffle==null?"???":shuffle.getLabel()).append("\r\n");;
 			sb.append("\r\n");
 			
-			sb.append("Artist: ").append(currentArtist==null?"":("\""+convert(currentArtist,withExtraUtf8Conversion)+"\"")).append("\r\n");
-			sb.append(" Album: ").append(currentAlbum ==null?"":("\""+convert(currentAlbum ,withExtraUtf8Conversion)+"\"")).append("\r\n");
-			sb.append("  Song: ").append(currentSong  ==null?"":("\""+convert(currentSong  ,withExtraUtf8Conversion)+"\"")).append("\r\n");
+			sb.append("Artist: ").append(currentArtist==null?"":("\""+convertUTF8(currentArtist,withExtraCharsetConversion)+"\"")).append("\r\n");
+			sb.append(" Album: ").append(currentAlbum ==null?"":("\""+convertUTF8(currentAlbum ,withExtraCharsetConversion)+"\"")).append("\r\n");
+			sb.append("  Song: ").append(currentSong  ==null?"":("\""+convertUTF8(currentSong  ,withExtraCharsetConversion)+"\"")).append("\r\n");
 			sb.append("\r\n");
 			
 			sb.append("AlbumCover:\r\n");
@@ -1237,7 +1572,7 @@ public final class Device {
 			sb.append(albumCoverFormat==null?"":(" "+albumCoverFormat.getLabel()));
 			sb.append("\r\n");
 			sb.append("   ");
-			sb.append(albumCoverURL==null?"":(" \""+convert(albumCoverURL,withExtraUtf8Conversion)+"\""));
+			sb.append(albumCoverURL==null?"":(" \""+convertUTF8(albumCoverURL,withExtraCharsetConversion)+"\""));
 			sb.append("\r\n");
 			
 			return sb.toString();

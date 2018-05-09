@@ -102,8 +102,8 @@ public class RotaryCtrl extends Canvas {
 				this.value = 0;
 				this.unit = "##";
 			} else {
-				this.value = numberWithUnit.number;
-				this.unit = numberWithUnit.unit;
+				this.value = numberWithUnit.getValue();
+				this.unit = numberWithUnit.getUnit();
 			}
 			this.angle = value*2*Math.PI/deltaPerFullCircle;
 			repaint();
