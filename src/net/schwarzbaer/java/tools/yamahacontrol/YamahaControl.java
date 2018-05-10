@@ -448,6 +448,55 @@ public class YamahaControl {
 		}
 		
 	}
+	
+	public static class ExtButtonGroup<E extends Enum<E>> {
+		
+		private final ButtonGroup bg;
+		private final EnumMap<E, AbstractButton> buttons;
+		private JLabel label;
+		private final Consumer<E> btnCmd;
+
+		ExtButtonGroup(Class<E> enumClass, Consumer<E> btnCmd) {
+			this.btnCmd = btnCmd;
+			bg = new ButtonGroup();
+			buttons = new EnumMap<E,AbstractButton>(enumClass);
+			label = null;
+		}
+		
+		public Component createLabel(String title) {
+			return createLabel(title,JLabel.LEFT);
+		}
+		
+		public Component createLabel(String title, int horizontalAlignment) {
+			label = new JLabel(title,horizontalAlignment);
+			return label;
+		}
+		
+		public JToggleButton createButton(String title, E buttonID) {
+			ActionListener l = btnCmd==null?e->{}:e->btnCmd.accept(buttonID);
+			JToggleButton button = YamahaControl.createToggleButton(title, l, true, bg);
+			buttons.put(buttonID, button);
+			return button; 
+		}
+		
+		public void setEnabled(boolean enabled) {
+			if (label!=null) label.setEnabled(enabled);
+			buttons.forEach((e,b)->b.setEnabled(enabled));
+			if (!enabled) clearSelection();
+		}
+		
+		public void clearSelection() {
+			bg.clearSelection();
+		}
+		
+		public void setSelected(E buttonID) {
+			if (buttonID != null) {
+				AbstractButton button = buttons.get(buttonID);
+				if (button != null) { button.setSelected(true); return; }
+			}
+			clearSelection();
+		}
+	}
 
 	enum UpdateReason { Initial, Frequently }
 
@@ -1108,10 +1157,11 @@ public class YamahaControl {
 	
 	private static class SubUnitTuner extends AbstractSubUnit_Play {
 		private static final long serialVersionUID = -8583320100311806933L;
-		private ButtonGroup bgBand;
-		private ButtonGroup bgAMFreq;
-		private ButtonGroup bgFMFreq;
-		private ButtonGroup bgTP;
+		private ExtButtonGroup<Device.Value.AmFm> bgBand;
+		private ExtButtonGroup<Device.Value.ScanFreq> bgScanAM;
+		private ExtButtonGroup<Device.Value.ScanFreq> bgScanFM;
+		private ExtButtonGroup<Device.Value.ScanTP> bgScanFMTP;
+		private RotaryCtrl tuneCtrl;
 	
 		public SubUnitTuner() {
 			super("TUNER","Tuner", UpdateWish.TunerPlayInfo);
@@ -1144,12 +1194,52 @@ public class YamahaControl {
 		@Override
 		public void setEnabledGUI(boolean enabled) {
 			super.setEnabledGUI(enabled);
-			if (!enabled) {
-				bgBand  .clearSelection();
-				bgAMFreq.clearSelection();
-				bgFMFreq.clearSelection();
-				bgTP    .clearSelection();
-			}
+			bgBand    .setEnabled(enabled);
+			bgScanAM  .setEnabled(enabled);
+			bgScanFM  .setEnabled(enabled);
+			bgScanFMTP.setEnabled(enabled);
+			tuneCtrl  .setEnabled(enabled);
+			updateGui();
+		}
+
+		private void updateDeviceNGui() {
+			device.update(getUpdateWishes(UpdateReason.Frequently));
+			updateGui();
+		}
+
+		private void updateGui() {
+			updatePlayInfo();
+			if (device==null) return;
+			bgBand  .setSelected(device.tuner.playInfo.tuningBand);
+			if (device.tuner.playInfo.tuningBand==null) {
+				bgScanAM  .setEnabled(false);
+				bgScanFM  .setEnabled(false);
+				bgScanFMTP.setEnabled(false);
+			} else
+				switch(device.tuner.playInfo.tuningBand) {
+				case AM:
+					bgScanAM  .setEnabled(true);
+					bgScanFM  .setEnabled(false);
+					bgScanFMTP.setEnabled(false);
+					bgScanAM.setSelected(device.tuner.playInfo.tuningFreqAmAutomatic);
+					break;
+					
+				case FM:
+					bgScanAM  .setEnabled(false);
+					bgScanFM  .setEnabled(true);
+					bgScanFMTP.setEnabled(true);
+					if (device.tuner.playInfo.tuningFreqFmAutomatic==null) {
+						bgScanFM  .clearSelection();
+						bgScanFMTP.clearSelection();
+					} else
+						switch (device.tuner.playInfo.tuningFreqFmAutomatic) {
+						case AutoDown: bgScanFM.setSelected(Value.ScanFreq.AutoDown); bgScanFMTP.clearSelection(); break;
+						case AutoUp  : bgScanFM.setSelected(Value.ScanFreq.AutoUp  ); bgScanFMTP.clearSelection(); break;
+						case TPDown  : bgScanFM.clearSelection(); bgScanFMTP.setSelected(Value.ScanTP.TPDown); break;
+						case TPUp    : bgScanFM.clearSelection(); bgScanFMTP.setSelected(Value.ScanTP.TPUp  ); break;
+						}
+					break;
+				}
 		}
 
 		@Override
@@ -1160,28 +1250,44 @@ public class YamahaControl {
 			GridBagPanel buttonPanel = new GridBagPanel();
 			buttonPanel.setInsets(new Insets(0,3,0,3));
 			
-			bgBand = new ButtonGroup();
-			buttonPanel.add(new JLabel("Band: "), 0,0, 0,0, 1,1, GridBagConstraints.BOTH);
-			buttonPanel.add(createButton(ButtonID.BandAM, bgBand), 1,0, 0,0, 1,1, GridBagConstraints.HORIZONTAL);
-			buttonPanel.add(createButton(ButtonID.BandFM, bgBand), 2,0, 0,0, 2,1, GridBagConstraints.HORIZONTAL);
+			bgBand = new ExtButtonGroup<>(Device.Value.AmFm.class,e->{
+				if (device==null) return;
+				device.tuner.setBand(e);
+				updateDeviceNGui();
+			});
+			buttonPanel.add(bgBand.createLabel("Band: "), 0,0, 0,0, 1,1, GridBagConstraints.BOTH);
+			buttonPanel.add(bgBand.createButton("AM",Device.Value.AmFm.AM), 1,0, 0,0, 1,1, GridBagConstraints.HORIZONTAL);
+			buttonPanel.add(bgBand.createButton("FM",Device.Value.AmFm.FM), 2,0, 0,0, 2,1, GridBagConstraints.HORIZONTAL);
 			
-			bgAMFreq = new ButtonGroup();
-			buttonPanel.add(new JLabel("Frequency",JLabel.CENTER), 1,1, 0,0, 1,1, GridBagConstraints.BOTH);
-			buttonPanel.add(createButton(ButtonID.AMFreqUp    , bgAMFreq), 1,2, 0,0, 1,1, GridBagConstraints.HORIZONTAL);
-			buttonPanel.add(createButton(ButtonID.AMFreqDown  , bgAMFreq), 1,3, 0,0, 1,1, GridBagConstraints.HORIZONTAL);
-			buttonPanel.add(createButton(ButtonID.AMFreqCancel, bgAMFreq), 1,4, 0,0, 1,1, GridBagConstraints.HORIZONTAL);
+			bgScanAM = new ExtButtonGroup<>(Device.Value.ScanFreq.class,e->{
+				if (device==null) return;
+				device.tuner.setScanAM(e);
+				updateDeviceNGui();
+			});
+			buttonPanel.add(bgScanAM.createLabel("Frequency",JLabel.CENTER), 1,1, 0,0, 1,1, GridBagConstraints.BOTH);
+			buttonPanel.add(bgScanAM.createButton("Scan Up"  ,Device.Value.ScanFreq.AutoUp  ), 1,2, 0,0, 1,1, GridBagConstraints.HORIZONTAL);
+			buttonPanel.add(bgScanAM.createButton("Scan Down",Device.Value.ScanFreq.AutoDown), 1,3, 0,0, 1,1, GridBagConstraints.HORIZONTAL);
+			buttonPanel.add(bgScanAM.createButton("Cancel"   ,Device.Value.ScanFreq.Cancel  ), 1,4, 0,0, 1,1, GridBagConstraints.HORIZONTAL);
 			
-			bgFMFreq = new ButtonGroup();
-			buttonPanel.add(new JLabel("Frequency",JLabel.CENTER), 2,1, 0,0, 1,1, GridBagConstraints.BOTH);
-			buttonPanel.add(createButton(ButtonID.FMFreqUp    , bgFMFreq), 2,2, 0,0, 1,1, GridBagConstraints.HORIZONTAL);
-			buttonPanel.add(createButton(ButtonID.FMFreqDown  , bgFMFreq), 2,3, 0,0, 1,1, GridBagConstraints.HORIZONTAL);
-			buttonPanel.add(createButton(ButtonID.FMFreqCancel, bgFMFreq), 2,4, 0,0, 1,1, GridBagConstraints.HORIZONTAL);
+			bgScanFM = new ExtButtonGroup<>(Device.Value.ScanFreq.class,e->{
+				if (device==null) return;
+				device.tuner.setScanFM(e);
+				updateDeviceNGui();
+			});
+			buttonPanel.add(bgScanFM.createLabel("Frequency",JLabel.CENTER), 2,1, 0,0, 1,1, GridBagConstraints.BOTH);
+			buttonPanel.add(bgScanFM.createButton("Scan Up"  ,Device.Value.ScanFreq.AutoUp  ), 2,2, 0,0, 1,1, GridBagConstraints.HORIZONTAL);
+			buttonPanel.add(bgScanFM.createButton("Scan Down",Device.Value.ScanFreq.AutoDown), 2,3, 0,0, 1,1, GridBagConstraints.HORIZONTAL);
+			buttonPanel.add(bgScanFM.createButton("Cancel"   ,Device.Value.ScanFreq.Cancel  ), 2,4, 0,0, 1,1, GridBagConstraints.HORIZONTAL);
 			
-			bgTP = new ButtonGroup();
-			buttonPanel.add(new JLabel("Traffic",JLabel.CENTER), 3,1, 0,0, 1,1, GridBagConstraints.BOTH);
-			buttonPanel.add(createButton(ButtonID.TPUp    , bgTP), 3,2, 0,0, 1,1, GridBagConstraints.HORIZONTAL);
-			buttonPanel.add(createButton(ButtonID.TPDown  , bgTP), 3,3, 0,0, 1,1, GridBagConstraints.HORIZONTAL);
-			buttonPanel.add(createButton(ButtonID.TPCancel, bgTP), 3,4, 0,0, 1,1, GridBagConstraints.HORIZONTAL);
+			bgScanFMTP = new ExtButtonGroup<>(Device.Value.ScanTP.class,e->{
+				if (device==null) return;
+				device.tuner.setScanFMTP(e);
+				updateDeviceNGui();
+			});
+			buttonPanel.add(bgScanFMTP.createLabel("Traffic",JLabel.CENTER), 3,1, 0,0, 1,1, GridBagConstraints.BOTH);
+			buttonPanel.add(bgScanFMTP.createButton("Scan Up"  ,Device.Value.ScanTP.TPUp  ), 3,2, 0,0, 1,1, GridBagConstraints.HORIZONTAL);
+			buttonPanel.add(bgScanFMTP.createButton("Scan Down",Device.Value.ScanTP.TPDown), 3,3, 0,0, 1,1, GridBagConstraints.HORIZONTAL);
+			buttonPanel.add(bgScanFMTP.createButton("Cancel"   ,Device.Value.ScanTP.Cancel), 3,4, 0,0, 1,1, GridBagConstraints.HORIZONTAL);
 			
 			// Preset   [Plus_Minus | Preset]   
 			// [Plus_1]        PUT[P2]     Tuner,Play_Control,Preset,Preset_Sel = Up
@@ -1191,9 +1297,7 @@ public class YamahaControl {
 			// PUT[P2]:                    Tuner,Play_Control,Preset,Preset_Sel   =   Values [GET[G3]:Tuner,Play_Control,Preset,Preset_Sel_Item]
 			
 			
-			// PUT[P9]:    Tuner,Play_Control,Tuning,Freq,AM  =  Number: 531..(9)..1611 / Exp:0 / Unit:kHz
-			// PUT[P8]:    Tuner,Play_Control,Tuning,Freq,FM  =  Number: 8750..(5)..10800 / Exp:2 / Unit:MHz
-			RotaryCtrl tuneCtrl = new RotaryCtrl(150, 10, -90, new RotaryCtrl.ValueListener() {
+			tuneCtrl = new RotaryCtrl(150, 10, -90, new RotaryCtrl.ValueListener() {
 				@Override public void valueChanged(double value, boolean isAdjusting) {
 					// TODO Auto-generated method stub
 				}
@@ -1207,26 +1311,6 @@ public class YamahaControl {
 			
 			return panel;
 		}
-		
-		enum ButtonID {
-			AMFreqUp("Scan Up"), AMFreqDown("Scan Down"), AMFreqCancel("Cancel"),
-			FMFreqUp("Scan Up"), FMFreqDown("Scan Down"), FMFreqCancel("Cancel"),
-			TPUp("Scan Up"), TPDown("Scan Down"), TPCancel("Cancel"),
-			BandAM("AM"), BandFM("FM"),
-			;
-
-			private final String title;
-			ButtonID(String title) { this.title = title; }
-			public String getTitle() { return title; }
-		}
-		
-		private JToggleButton createButton(ButtonID buttonID, ButtonGroup bg) {
-			ActionListener l = e->{};
-			JToggleButton button = YamahaControl.createToggleButton(buttonID.getTitle(), l, true, bg);
-			addComp(button);
-			return button; 
-		}
-		
 	}
 
 	private static class SubUnitAirPlay extends AbstractSubUnit_AirPlaySpotify {

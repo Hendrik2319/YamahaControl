@@ -13,6 +13,8 @@ import java.util.Locale;
 import net.schwarzbaer.gui.Canvas;
 
 public class RotaryCtrl extends Canvas {
+		private static final Color COLOR_DISABLED_MARKER = new Color(0x8080B0);
+		private static final Color COLOR_DISABLED_BACKGROUND = new Color(0xE8E8E8);
 		private static final long serialVersionUID = -5870265710270984615L;
 		private double angle;
 		private int radius;
@@ -50,6 +52,8 @@ public class RotaryCtrl extends Canvas {
 
 				@Override
 				public void mousePressed(MouseEvent e) {
+					if (!control.isEnabled()) return;
+					
 					pickAngle = getMouseAngle(e.getX(), e.getY(), true)-angle;
 					isAdjusting = true;
 //					System.out.printf("pickAngle: %f%n",pickAngle);
@@ -57,6 +61,8 @@ public class RotaryCtrl extends Canvas {
 
 				@Override
 				public void mouseReleased(MouseEvent e) {
+					if (!control.isEnabled()) return;
+					
 					isAdjusting = false;
 					if (!Double.isNaN(pickAngle))
 						changeValue(e.getX(), e.getY());
@@ -66,6 +72,8 @@ public class RotaryCtrl extends Canvas {
 
 				@Override
 				public void mouseDragged(MouseEvent e) {
+					if (!control.isEnabled()) return;
+					
 					if (!Double.isNaN(pickAngle))
 						changeValue(e.getX(), e.getY());
 //					System.out.printf("angle: %f%n",angle);
@@ -116,21 +124,35 @@ public class RotaryCtrl extends Canvas {
 			
 			double angle1 = 2*Math.PI/deltaPerFullCircle;
 			
+			Color ctrlBackground = Color.WHITE;
+			Color ctrlLines  = Color.BLACK;
+			Color ctrlLines2 = Color.GRAY;
+			Color ctrlMarker = Color.BLUE;
+			Color ctrlText   = Color.BLACK;
+			if (!isEnabled()) {
+				ctrlBackground = COLOR_DISABLED_BACKGROUND;
+				ctrlLines  = Color.GRAY;
+				ctrlLines2 = Color.GRAY;
+				ctrlMarker = COLOR_DISABLED_MARKER;
+				ctrlText   = Color.GRAY;
+			}
+			
+			g.setColor(ctrlLines);
 			drawRadiusLine(g, width, height, 0.95, 1.15, zeroAngle);
 			for (double a=angle1; a<Math.PI*0.9; a+=angle1) {
 				drawRadiusLine(g, width, height, 0.95, 1.15, zeroAngle+a);
 				drawRadiusLine(g, width, height, 0.95, 1.15, zeroAngle-a);
 			}
 			
-			g.setColor(Color.WHITE);
+			g.setColor(ctrlBackground);
 			g.fillOval(width/2-radius, height/2-radius, radius*2, radius*2);
 			
-			g.setColor(Color.BLACK);
+			g.setColor(ctrlLines);
 			g.drawOval(width/2-radius, height/2-radius, radius*2, radius*2);
-			g.setColor(Color.GRAY);
+			g.setColor(ctrlLines2);
 			g.drawOval(width/2-radius/2, height/2-radius/2, radius, radius);
 			
-			g.setColor(Color.BLUE);
+			g.setColor(ctrlMarker);
 			if (g2!=null) g2.setStroke( new BasicStroke(5,BasicStroke.CAP_ROUND,BasicStroke.JOIN_ROUND) );
 			drawRadiusLine(g, width, height, 0.96, 0.7, angle+zeroAngle);
 			if (g2!=null) g2.setStroke(new BasicStroke(1));
@@ -140,7 +162,7 @@ public class RotaryCtrl extends Canvas {
 			int strX = width/2-(int)Math.round(stringBounds.getWidth()/2+stringBounds.getX());
 			int strY = height/2-(int)Math.round(stringBounds.getHeight()/2+stringBounds.getY());
 			
-			g.setColor(Color.BLACK);
+			g.setColor(ctrlText);
 			g.drawString(str, strX, strY);
 			//g.drawString(String.format(Locale.ENGLISH, "%6.1f", angle/Math.PI*180), width/2, height/2+15);
 		}

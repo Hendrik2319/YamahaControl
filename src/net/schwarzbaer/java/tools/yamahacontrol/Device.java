@@ -463,12 +463,27 @@ public final class Device {
 			@Override public String toFullString() { return "KnownCommand."+getClass().getSimpleName()+"."+toString(); }
 		}
 		
+		enum SetTuner implements KnownCommand {
+			SetSearchmode       ("Tuner,Play_Control,Search_Mode"       ), // P1: Tuner,Play_Control,Search_Mode
+			SetBand             ("Tuner,Play_Control,Tuning,Band"       ), // P3: Tuner,Play_Control,Tuning,Band
+			SetFreqFM           ("Tuner,Play_Control,Tuning,Freq,FM"    ), // P8: Tuner,Play_Control,Tuning,Freq,FM
+			SetFreqAM           ("Tuner,Play_Control,Tuning,Freq,AM"    ), // P9: Tuner,Play_Control,Tuning,Freq,AM
+			SetScanFM           ("Tuner,Play_Control,Tuning,Freq,FM,Val"), // P10: Tuner,Play_Control,Tuning,Freq,FM,Val
+			SetScanAM           ("Tuner,Play_Control,Tuning,Freq,AM,Val"), // P11: Tuner,Play_Control,Tuning,Freq,AM,Val
+			;
+			final private TagList tagList;
+			SetTuner(String tagListStr) { tagList = new TagList(tagListStr); }
+			@Override public TagList getTagList() { return tagList; }
+			@Override public String toFullString() { return "KnownCommand."+getClass().getSimpleName()+"."+toString(); }
+		}
+		
 		enum Special implements KnownCommand {
 			GetUSBPresets       (     "USB,Play_Control,Preset,Preset_Sel_Item"), // G4: USB,Play_Control,Preset,Preset_Sel_Item
 			SetUSBSelectPreset  (     "USB,Play_Control,Preset,Preset_Sel"     ), // P4: USB,Play_Control,Preset,Preset_Sel
 			GetDLNAPresets      (  "SERVER,Play_Control,Preset,Preset_Sel_Item"), // G4: SERVER,Play_Control,Preset,Preset_Sel_Item
 			SetDLNASelectPreset (  "SERVER,Play_Control,Preset,Preset_Sel"     ), // P4: SERVER,Play_Control,Preset,Preset_Sel
 			GetTunerPresets     (   "Tuner,Play_Control,Preset,Preset_Sel_Item"), // G3: Tuner,Play_Control,Preset,Preset_Sel_Item
+			SetTunerSelectPreset(   "Tuner,Play_Control,Preset,Preset_Sel"     ), // P2: Tuner,Play_Control,Preset,Preset_Sel
 			SetIPodUSBMode      ("iPod_USB,Play_Control,iPod_Mode"             ), // P10: iPod_USB,Play_Control,iPod_Mode
 			;
 			final private TagList tagList;
@@ -494,6 +509,7 @@ public final class Device {
 		public enum IPodMode         implements Value { Normal, Extended  ; @Override public String getLabel() { return toString(); }  }
 		public enum NegateAssert     implements Value { Negate, Assert    ; @Override public String getLabel() { return toString(); }  }
 		public enum AmFm             implements Value { AM, FM            ; @Override public String getLabel() { return toString(); }  }
+		public enum UpDown           implements Value { Up, Down          ; @Override public String getLabel() { return toString(); }  }
 		
 		public enum FreqAutoTP implements Value {
 			AutoUp("Auto Up"),AutoDown("Auto Down"),TPUp("TP Up"),TPDown("TP Down");
@@ -502,17 +518,17 @@ public final class Device {
 			@Override public String getLabel() { return label; }
 		}
 		
-		public enum FreqAuto implements Value {
-			AutoUp("Auto Up"),AutoDown("Auto Down");
+		public enum ScanFreq implements Value {
+			AutoUp("Auto Up"),AutoDown("Auto Down"), Cancel("Cancel");
 			private String label;
-			FreqAuto(String label) { this.label = label; }
+			ScanFreq(String label) { this.label = label; }
 			@Override public String getLabel() { return label; }
 		}
 		
-		public enum FreqTP implements Value {
-			TPUp("TP Up"),TPDown("TP Down");
+		public enum ScanTP implements Value {
+			TPUp("TP Up"),TPDown("TP Down"), Cancel("Cancel");
 			private String label;
-			FreqTP(String label) { this.label = label; }
+			ScanTP(String label) { this.label = label; }
 			@Override public String getLabel() { return label; }
 		}
 		
@@ -611,6 +627,10 @@ public final class Device {
 		
 		@Override
 		public String toString() {
+			return "NumberWithUnit("+number+","+exponent+",\""+unit+"\")";
+		}
+		
+		public String toValueStr() {
 			return String.format(Locale.ENGLISH, "%1."+exponent+"f %s", value, unit);
 		}
 
@@ -754,7 +774,6 @@ public final class Device {
 	}
 
 	static class Tuner {
-		@SuppressWarnings("unused")
 		private String address;
 		Config config;
 		PlayInfo_Tuner playInfo;
@@ -763,6 +782,63 @@ public final class Device {
 			this.address = address;
 			this.config   = new Config        (         address, KnownCommand.Config.Tuner);
 			this.playInfo = new PlayInfo_Tuner("Tuner", address, KnownCommand.GetPlayInfo.Tuner, KnownCommand.Special.GetTunerPresets);
+		}
+
+		public void setScanAM(Value.ScanFreq value) {
+			// [Plus_1]             PUT[P11]     Tuner,Play_Control,Tuning,Freq,AM,Val = Auto Up
+			// [Minus_1]            PUT[P11]     Tuner,Play_Control,Tuning,Freq,AM,Val = Auto Down
+			// [Freq_Auto_Cancel]   PUT[P11]     Tuner,Play_Control,Tuning,Freq,AM,Val = Cancel
+			if (value!=null)
+				sendCommand(getClass(), address, "setScanAM", KnownCommand.SetTuner.SetScanAM, value.getLabel());
+		}
+
+		public void setScanFM(Value.ScanFreq value) {
+			// [Plus_1]             PUT[P10]     Tuner,Play_Control,Tuning,Freq,FM,Val = Auto Up
+			// [Minus_1]            PUT[P10]     Tuner,Play_Control,Tuning,Freq,FM,Val = Auto Down
+			// [Freq_Auto_Cancel]   PUT[P10]     Tuner,Play_Control,Tuning,Freq,FM,Val = Cancel
+			if (value!=null)
+				sendCommand(getClass(), address, "setScanFM", KnownCommand.SetTuner.SetScanFM, value.getLabel());
+		}
+
+		public void setScanFMTP(Value.ScanTP value) {
+			// [Plus_1]             PUT[P10]     Tuner,Play_Control,Tuning,Freq,FM,Val = TP Up
+			// [Minus_1]            PUT[P10]     Tuner,Play_Control,Tuning,Freq,FM,Val = TP Down
+			// [Freq_Auto_Cancel]   PUT[P10]     Tuner,Play_Control,Tuning,Freq,FM,Val = Cancel
+			if (value!=null)
+				sendCommand(getClass(), address, "setScanFM", KnownCommand.SetTuner.SetScanFM, value.getLabel());
+		}
+
+		public void setBand(Value.AmFm band) {
+			Device.sendSetBand(getClass(), address, KnownCommand.SetTuner.SetBand, band);
+		}
+
+		public void setFreqAM(float value) {
+			// PUT[P9]:    Tuner,Play_Control,Tuning,Freq,AM  =  Number: 531..(9)..1611 / Exp:0 / Unit:"kHz"
+			int number = Math.round((value-531)/9)*9+531;
+			number = Math.max(531, Math.min(number, 1611));
+			NumberWithUnit nwu = new NumberWithUnit(number, 0, "kHz");
+			sendCommand(getClass(), address, "setFreqAM", KnownCommand.SetTuner.SetFreqAM, String.format(Locale.ENGLISH, "%1.2f->%s", value, nwu), nwu.createXML());
+		}
+
+		public void setFreqFM(float value) {
+			// PUT[P8]:    Tuner,Play_Control,Tuning,Freq,FM  =  Number: 8750..(5)..10800 / Exp:2 / Unit:"MHz"
+			int number = Math.round(value*20)*5;
+			number = Math.max(8750, Math.min(number, 10800));
+			NumberWithUnit nwu = new NumberWithUnit(number, 2, "MHz");
+			sendCommand(getClass(), address, "setFreqFM", KnownCommand.SetTuner.SetFreqFM, String.format(Locale.ENGLISH, "%1.4f->%s", value, nwu), nwu.createXML());
+		}
+
+		public void setPreset(Value.UpDown value) {
+			// [Plus_1]        PUT[P2]     Tuner,Play_Control,Preset,Preset_Sel = Up
+			// [Minus_1]       PUT[P2]     Tuner,Play_Control,Preset,Preset_Sel = Down
+			if (value!=null)
+				sendCommand(getClass(), address, "setPreset", KnownCommand.Special.SetTunerSelectPreset, value.getLabel());
+		}
+
+		public void setPreset(PlayInfo_Tuner.Preset preset) {
+			// PUT[P2]:    Tuner,Play_Control,Preset,Preset_Sel   =   Values [GET[G3]:Tuner,Play_Control,Preset,Preset_Sel_Item]
+			if (preset!=null)
+				sendCommand(getClass(), address, "setPreset", KnownCommand.Special.SetTunerSelectPreset, preset.ID);
 		}
 	
 		static class Config extends AbstractConfig {
@@ -1038,7 +1114,7 @@ public final class Device {
 		Value.AmFm tuningBand;
 		Value.FreqAutoTP tuningFreqCurrentAutomatic;
 		Value.FreqAutoTP tuningFreqFmAutomatic;
-		Value.FreqAuto   tuningFreqAmAutomatic;
+		Value.ScanFreq   tuningFreqAmAutomatic;
 		NumberWithUnit tuningFreqCurrentValue;
 		NumberWithUnit tuningFreqFmValue;
 		NumberWithUnit tuningFreqAmValue;
@@ -1100,9 +1176,9 @@ public final class Device {
 			sb.append("Tuning\r\n");
 			sb.append("   Band: ").append(tuningBand==null?"":tuningBand).append("\r\n");
 			sb.append("   Frequency\r\n");
-			sb.append("      Current: ").append(tuningFreqCurrentAutomatic!=null?tuningFreqCurrentAutomatic:tuningFreqCurrentValue==null?"":tuningFreqCurrentValue.toString()).append("\r\n");
-			sb.append("      FM     : ").append(tuningFreqFmAutomatic     !=null?tuningFreqFmAutomatic     :tuningFreqFmValue     ==null?"":tuningFreqFmValue     .toString()).append("\r\n");
-			sb.append("      AM     : ").append(tuningFreqAmAutomatic     !=null?tuningFreqAmAutomatic     :tuningFreqAmValue     ==null?"":tuningFreqAmValue     .toString()).append("\r\n");
+			sb.append("      Current: ").append(tuningFreqCurrentAutomatic!=null?tuningFreqCurrentAutomatic:tuningFreqCurrentValue==null?"":tuningFreqCurrentValue.toValueStr()).append("\r\n");
+			sb.append("      FM     : ").append(tuningFreqFmAutomatic     !=null?tuningFreqFmAutomatic     :tuningFreqFmValue     ==null?"":tuningFreqFmValue     .toValueStr()).append("\r\n");
+			sb.append("      AM     : ").append(tuningFreqAmAutomatic     !=null?tuningFreqAmAutomatic     :tuningFreqAmValue     ==null?"":tuningFreqAmValue     .toValueStr()).append("\r\n");
 			sb.append("\r\n");
 			
 			sb.append("Program Info\r\n");
@@ -1170,7 +1246,7 @@ public final class Device {
 									// Value 0:   Tuning,Freq,AM,Val -> Number: 531..(9)..1611 | "Auto Up" | "Auto Down"
 									// Value 1:   Tuning,Freq,AM,Exp -> "0" | <no value> | <no value>
 									// Value 2:   Tuning,Freq,AM,Unit -> "kHz" | <no value> | <no value>
-									tuningFreqAmAutomatic = XML.getSubValue(freq, Value.FreqAuto.values(), "Val");
+									tuningFreqAmAutomatic = XML.getSubValue(freq, Value.ScanFreq.values(), "Val");
 									if (tuningFreqAmAutomatic==null)
 										tuningFreqAmValue = NumberWithUnit.parse(freq);
 									break;
@@ -1628,6 +1704,18 @@ public final class Device {
 	private static boolean debug_verbose = false;
 	private static Log.Type logType = Log.Type.ERROR;
 	
+	private static void sendSetBand(Class<?> callerClass, String address, KnownCommand cmd, Value.AmFm value) {
+		// [Band_AM]        PUT[P3]     Tuner,Play_Control,Tuning,Band = AM
+		// [Band_FM]        PUT[P3]     Tuner,Play_Control,Tuning,Band = FM
+		int rc = Ctrl.sendPutCommand(address, cmd, value.getLabel());
+		if (rc!=Ctrl.RC_OK || debug_verbose) Log.log( logType, callerClass, "sendSetBand( %s ): %s -> RC: %d", value, cmd.toFullString(), rc);
+	}
+
+	private static void sendCommand(Class<?> callerClass, String address, String function, KnownCommand cmd, String valueSourceStr, String xmlStr) {
+		int rc = Ctrl.sendPutCommand(address, cmd, xmlStr);
+		if (rc!=Ctrl.RC_OK || debug_verbose) Log.log( logType, callerClass, "%s( %s->%s ): %s -> RC: %d", function, valueSourceStr, xmlStr, cmd.toFullString(), rc);
+	}
+
 	private static void sendCommand(Class<?> callerClass, String address, String function, KnownCommand cmd, String value) {
 		int rc = Ctrl.sendPutCommand(address, cmd, value);
 		if (rc!=Ctrl.RC_OK || debug_verbose) Log.log( logType, callerClass, "%s( %s ): %s -> RC: %d", function, value, cmd.toFullString(), rc);
