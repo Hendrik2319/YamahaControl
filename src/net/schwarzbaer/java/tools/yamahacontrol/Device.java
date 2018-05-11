@@ -817,6 +817,10 @@ public final class Device {
 			int number = Math.round((value-531)/9)*9+531;
 			number = Math.max(531, Math.min(number, 1611));
 			NumberWithUnit nwu = new NumberWithUnit(number, 0, "kHz");
+			if (playInfo.tuningFreqAmValue!=null) {
+				if (number==playInfo.tuningFreqAmValue.number) return;
+				playInfo.tuningFreqAmValue = nwu;
+			}
 			sendCommand(getClass(), address, "setFreqAM", KnownCommand.SetTuner.SetFreqAM, String.format(Locale.ENGLISH, "%1.2f->%s", value, nwu), nwu.createXML());
 		}
 
@@ -825,6 +829,10 @@ public final class Device {
 			int number = Math.round(value*20)*5;
 			number = Math.max(8750, Math.min(number, 10800));
 			NumberWithUnit nwu = new NumberWithUnit(number, 2, "MHz");
+			if (playInfo.tuningFreqFmValue!=null) {
+				if (number==playInfo.tuningFreqFmValue.number) return;
+				playInfo.tuningFreqFmValue = nwu;
+			}
 			sendCommand(getClass(), address, "setFreqFM", KnownCommand.SetTuner.SetFreqFM, String.format(Locale.ENGLISH, "%1.4f->%s", value, nwu), nwu.createXML());
 		}
 

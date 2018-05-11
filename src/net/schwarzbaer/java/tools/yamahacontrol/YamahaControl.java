@@ -500,6 +500,76 @@ public class YamahaControl {
 
 	enum UpdateReason { Initial, Frequently }
 
+	public static class ValueSetter {
+		private ExecutorService executor;
+		private int counter;
+		private int queueLength;
+		private Stack<Future<?>> runningTasks;
+		private Setter setter;
+
+		ValueSetter(int queueLength, Setter setter) {
+			this.queueLength = queueLength;
+			this.setter = setter;
+			executor = Executors.newSingleThreadExecutor();
+			counter = 0;
+			runningTasks = new Stack<>();
+		}
+
+		static interface Setter {
+			public void setValue(double value, boolean isAdjusting);
+		}
+
+		public synchronized void set(double value, boolean isAdjusting) {
+			if (runningTasks.size() > 100) {
+				// Log.info(getClass(), "Max. number of running tasks reached");
+				removeCompletedTasks();
+			}
+
+			if (isAdjusting) {
+
+				if (counter > queueLength)
+					return;
+
+				runningTasks.add(executor.submit(() -> {
+					incCounter();
+					setter.setValue(value, isAdjusting);
+					decCounter();
+				}));
+
+			} else {
+				// Log.info(getClass(), "Value stops adjusting: cancel all
+				// running tasks");
+				runningTasks.forEach(task -> task.cancel(false));
+				removeCompletedTasks();
+
+				runningTasks.add(executor.submit(() -> {
+					incCounter();
+					setter.setValue(value, isAdjusting);
+					decCounter();
+				}));
+			}
+		}
+
+		private void removeCompletedTasks() {
+			// Log.info(getClass(), "remove completed tasks");
+			for (int i = 0; i < runningTasks.size();) {
+				Future<?> task = runningTasks.get(i);
+				if (task.isDone() || task.isCancelled())
+					runningTasks.remove(i);
+				else
+					++i;
+			}
+		}
+
+		private synchronized void decCounter() {
+			--counter;
+		}
+
+		private synchronized void incCounter() {
+			++counter;
+		}
+	}
+
 	public static interface GuiRegion {
 		void setEnabledGUI(boolean enabled);
 		void initGUIafterConnect(Device device);
@@ -661,7 +731,7 @@ public class YamahaControl {
 		private static final int BAR_MIN = 0;
 		private Device device;
 		private RotaryCtrl rotaryCtrl;
-		private VolumeSetter volumeSetter;
+		private ValueSetter volumeSetter;
 		private JToggleButton muteBtn;
 		private JButton decBtn;
 		private JButton incBtn;
@@ -670,7 +740,19 @@ public class YamahaControl {
 		VolumeCtrl() {
 			device = null;
 			rotaryCtrl = null;
-			volumeSetter = new VolumeSetter(10);
+			volumeSetter = new ValueSetter(10,(value, isAdjusting) -> {
+				device.setVolume(value);
+				if (isAdjusting) {
+					SwingUtilities.invokeLater(()->{
+						updateVolumeBar();
+					});
+				} else {
+					device.update(EnumSet.of( UpdateWish.BasicStatus ));
+					SwingUtilities.invokeLater(()->{
+						updateValues();
+					});
+				}
+			});
 			decBtn = null;
 			muteBtn= null;
 			incBtn = null;
@@ -715,7 +797,7 @@ public class YamahaControl {
 		}
 
 		public JPanel createVolumeControlPanel(int width) {
-			rotaryCtrl = new RotaryCtrl(width, 3.0, -90, (value, isAdjusting) -> {
+			rotaryCtrl = new RotaryCtrl(width, 3.0, 1, 1.0, -90, (value, isAdjusting) -> {
 				if (device==null) return;
 				volumeSetter.set(value,isAdjusting);
 			});
@@ -762,70 +844,6 @@ public class YamahaControl {
 			device.setMute(getNext(mute,Value.OnOff.values()));
 			device.update(EnumSet.of( UpdateWish.BasicStatus ));
 			updateValues();
-		}
-
-		private class VolumeSetter {
-			private ExecutorService executor;
-			private int counter;
-			private int queueLength;
-			private Stack<Future<?>> runningTasks;
-
-			VolumeSetter(int queueLength) {
-				this.queueLength = queueLength;
-				executor = Executors.newSingleThreadExecutor();
-				counter = 0;
-				runningTasks = new Stack<>();
-			}
-
-			public synchronized void set(double value, boolean isAdjusting) {
-				if (runningTasks.size()>100) {
-//					Log.info(getClass(), "Max. number of running tasks reached");
-					removeCompletedTasks();
-				}
-
-				if (isAdjusting) {
-					
-					if (counter>queueLength) return;
-					
-					runningTasks.add(executor.submit(()->{
-						incCounter();
-						device.setVolume(value);
-						SwingUtilities.invokeLater(()->{
-							updateVolumeBar();
-						});
-						decCounter();
-					}));
-					
-				} else {
-//					Log.info(getClass(), "Value stops adjusting: cancel all running tasks");
-					runningTasks.forEach(task->task.cancel(false));
-					removeCompletedTasks();
-					
-					runningTasks.add(executor.submit(()->{
-						incCounter();
-						device.setVolume(value);
-						device.update(EnumSet.of( UpdateWish.BasicStatus ));
-						SwingUtilities.invokeLater(()->{
-							updateValues();
-						});
-						decCounter();
-					}));
-				}
-			}
-
-			private void removeCompletedTasks() {
-//				Log.info(getClass(), "remove completed tasks");
-				for (int i=0; i<runningTasks.size();) {
-					Future<?> task = runningTasks.get(i); 
-					if (task.isDone() || task.isCancelled())
-						runningTasks.remove(i);
-					else
-						++i;
-				}
-			}
-
-			private synchronized void decCounter() { --counter; }
-			private synchronized void incCounter() { ++counter; }
 		}
 	}
 	
@@ -1162,9 +1180,31 @@ public class YamahaControl {
 		private ExtButtonGroup<Device.Value.ScanFreq> bgScanFM;
 		private ExtButtonGroup<Device.Value.ScanTP> bgScanFMTP;
 		private RotaryCtrl tuneCtrl;
+		private boolean isEnabled;
+		private ValueSetter freqFmSetter;
+		private ValueSetter freqAmSetter;
 	
 		public SubUnitTuner() {
 			super("TUNER","Tuner", UpdateWish.TunerPlayInfo);
+			isEnabled = true;
+			freqFmSetter = new ValueSetter(10,(value, isAdjusting) -> {
+				device.tuner.setFreqFM((float)value);
+				if (!isAdjusting) {
+					device.update(getUpdateWishes(UpdateReason.Frequently));
+					SwingUtilities.invokeLater(()->{
+						updateGui();
+					});
+				}
+			});
+			freqAmSetter = new ValueSetter(10,(value, isAdjusting) -> {
+				device.tuner.setFreqAM((float)value);
+				if (!isAdjusting) {
+					device.update(getUpdateWishes(UpdateReason.Frequently));
+					SwingUtilities.invokeLater(()->{
+						updateGui();
+					});
+				}
+			});
 		}
 		
 		@Override
@@ -1194,6 +1234,7 @@ public class YamahaControl {
 		@Override
 		public void setEnabledGUI(boolean enabled) {
 			super.setEnabledGUI(enabled);
+			isEnabled = enabled;
 			bgBand    .setEnabled(enabled);
 			bgScanAM  .setEnabled(enabled);
 			bgScanFM  .setEnabled(enabled);
@@ -1201,6 +1242,9 @@ public class YamahaControl {
 			tuneCtrl  .setEnabled(enabled);
 			updateGui();
 		}
+
+		@Override
+		protected PlayInfo getPlayInfo() { return device==null?null:device.tuner.playInfo; }
 
 		private void updateDeviceNGui() {
 			device.update(getUpdateWishes(UpdateReason.Frequently));
@@ -1210,7 +1254,10 @@ public class YamahaControl {
 		private void updateGui() {
 			updatePlayInfo();
 			if (device==null) return;
-			bgBand  .setSelected(device.tuner.playInfo.tuningBand);
+			
+			if (isEnabled)
+				bgBand.setSelected(device.tuner.playInfo.tuningBand);
+			
 			if (device.tuner.playInfo.tuningBand==null) {
 				bgScanAM  .setEnabled(false);
 				bgScanFM  .setEnabled(false);
@@ -1218,32 +1265,43 @@ public class YamahaControl {
 			} else
 				switch(device.tuner.playInfo.tuningBand) {
 				case AM:
-					bgScanAM  .setEnabled(true);
-					bgScanFM  .setEnabled(false);
-					bgScanFMTP.setEnabled(false);
-					bgScanAM.setSelected(device.tuner.playInfo.tuningFreqAmAutomatic);
+					if (isEnabled) {
+						bgScanAM  .setEnabled(true);
+						bgScanFM  .setEnabled(false);
+						bgScanFMTP.setEnabled(false);
+						bgScanAM.setSelected(device.tuner.playInfo.tuningFreqAmAutomatic);
+					}
+					if (device.tuner.playInfo.tuningFreqAmValue!=null && !tuneCtrl.isAdjusting) {
+						// PUT[P9]:    Tuner,Play_Control,Tuning,Freq,AM  =  Number: 531..(9)..1611 / Exp:0 / Unit:"kHz"
+						tuneCtrl.setConfig(180.0, 0, 18.0);
+						tuneCtrl.setValue(device.tuner.playInfo.tuningFreqAmValue);
+					}
 					break;
 					
 				case FM:
-					bgScanAM  .setEnabled(false);
-					bgScanFM  .setEnabled(true);
-					bgScanFMTP.setEnabled(true);
-					if (device.tuner.playInfo.tuningFreqFmAutomatic==null) {
-						bgScanFM  .clearSelection();
-						bgScanFMTP.clearSelection();
-					} else
-						switch (device.tuner.playInfo.tuningFreqFmAutomatic) {
-						case AutoDown: bgScanFM.setSelected(Value.ScanFreq.AutoDown); bgScanFMTP.clearSelection(); break;
-						case AutoUp  : bgScanFM.setSelected(Value.ScanFreq.AutoUp  ); bgScanFMTP.clearSelection(); break;
-						case TPDown  : bgScanFM.clearSelection(); bgScanFMTP.setSelected(Value.ScanTP.TPDown); break;
-						case TPUp    : bgScanFM.clearSelection(); bgScanFMTP.setSelected(Value.ScanTP.TPUp  ); break;
-						}
+					if (isEnabled) {
+						bgScanAM  .setEnabled(false);
+						bgScanFM  .setEnabled(true);
+						bgScanFMTP.setEnabled(true);
+						if (device.tuner.playInfo.tuningFreqFmAutomatic==null) {
+							bgScanFM  .clearSelection();
+							bgScanFMTP.clearSelection();
+						} else
+							switch (device.tuner.playInfo.tuningFreqFmAutomatic) {
+							case AutoDown: bgScanFM.setSelected(Value.ScanFreq.AutoDown); bgScanFMTP.clearSelection(); break;
+							case AutoUp  : bgScanFM.setSelected(Value.ScanFreq.AutoUp  ); bgScanFMTP.clearSelection(); break;
+							case TPDown  : bgScanFM.clearSelection(); bgScanFMTP.setSelected(Value.ScanTP.TPDown); break;
+							case TPUp    : bgScanFM.clearSelection(); bgScanFMTP.setSelected(Value.ScanTP.TPUp  ); break;
+							}
+					}
+					if (device.tuner.playInfo.tuningFreqFmValue!=null && !tuneCtrl.isAdjusting) {
+						// PUT[P8]:    Tuner,Play_Control,Tuning,Freq,FM  =  Number: 8750..(5)..10800 / Exp:2 / Unit:"MHz"
+						tuneCtrl.setConfig(1.0, 2, 0.2);
+						tuneCtrl.setValue(device.tuner.playInfo.tuningFreqFmValue);
+					}
 					break;
 				}
 		}
-
-		@Override
-		protected PlayInfo getPlayInfo() { return device==null?null:device.tuner.playInfo; }
 
 		@Override
 		protected JPanel createUpperPanel() {
@@ -1297,9 +1355,13 @@ public class YamahaControl {
 			// PUT[P2]:                    Tuner,Play_Control,Preset,Preset_Sel   =   Values [GET[G3]:Tuner,Play_Control,Preset,Preset_Sel_Item]
 			
 			
-			tuneCtrl = new RotaryCtrl(150, 10, -90, new RotaryCtrl.ValueListener() {
+			tuneCtrl = new RotaryCtrl(150, 1, 1, 1.0, -90, new RotaryCtrl.ValueListener() {
 				@Override public void valueChanged(double value, boolean isAdjusting) {
-					// TODO Auto-generated method stub
+					if (device==null || device.tuner.playInfo.tuningBand==null) return;
+					switch(device.tuner.playInfo.tuningBand) {
+					case AM: freqAmSetter.set(value, isAdjusting); break;
+					case FM: freqFmSetter.set(value, isAdjusting); break;
+					}
 				}
 			});
 			addComp(tuneCtrl);

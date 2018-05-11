@@ -24,14 +24,18 @@ public class RotaryCtrl extends Canvas {
 		protected boolean isAdjusting;
 		private String unit;
 		private RotaryCtrl.ValueListener valueListener;
+		private int decimals;
+		private double tickInterval;
 		
 		public interface ValueListener {
 			public void valueChanged(double value, boolean isAdjusting);
 		}
 		
-		public RotaryCtrl(int width, double deltaPerFullCircle, double zeroAngle_deg, RotaryCtrl.ValueListener valueListener) {
+		public RotaryCtrl(int width, double deltaPerFullCircle, int decimals, double tickInterval, double zeroAngle_deg, RotaryCtrl.ValueListener valueListener) {
 			super(width, width);
 			this.deltaPerFullCircle = deltaPerFullCircle;
+			this.decimals = decimals;
+			this.tickInterval = tickInterval;
 			this.valueListener = valueListener;
 			
 			zeroAngle = zeroAngle_deg/180*Math.PI;
@@ -44,6 +48,13 @@ public class RotaryCtrl extends Canvas {
 			setMouseAdapter();
 		}
 		
+		public void setConfig(double deltaPerFullCircle, int decimals, double tickInterval) {
+			if (isAdjusting) return;
+			this.deltaPerFullCircle = deltaPerFullCircle;
+			this.decimals = decimals;
+			this.tickInterval = tickInterval;
+		}
+
 		private void setMouseAdapter() {
 			MouseAdapter mouseAdapter = new MouseAdapter() {
 				
@@ -122,7 +133,7 @@ public class RotaryCtrl extends Canvas {
 			Graphics2D g2 = (g instanceof Graphics2D)?(Graphics2D)g:null;
 			if (g2!=null) g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 			
-			double angle1 = 2*Math.PI/deltaPerFullCircle;
+			double angleTick = 2*Math.PI*tickInterval/deltaPerFullCircle;
 			
 			Color ctrlBackground = Color.WHITE;
 			Color ctrlLines  = Color.BLACK;
@@ -139,7 +150,7 @@ public class RotaryCtrl extends Canvas {
 			
 			g.setColor(ctrlLines);
 			drawRadiusLine(g, width, height, 0.95, 1.15, zeroAngle);
-			for (double a=angle1; a<Math.PI*0.9; a+=angle1) {
+			for (double a=angleTick; a<Math.PI*0.9; a+=angleTick) {
 				drawRadiusLine(g, width, height, 0.95, 1.15, zeroAngle+a);
 				drawRadiusLine(g, width, height, 0.95, 1.15, zeroAngle-a);
 			}
@@ -157,7 +168,7 @@ public class RotaryCtrl extends Canvas {
 			drawRadiusLine(g, width, height, 0.96, 0.7, angle+zeroAngle);
 			if (g2!=null) g2.setStroke(new BasicStroke(1));
 			
-			String str = String.format(Locale.ENGLISH, "%1.1f %s", value, unit);
+			String str = String.format(Locale.ENGLISH, "%1."+decimals+"f %s", value, unit);
 			Rectangle2D stringBounds = g.getFontMetrics().getStringBounds(str,g);
 			int strX = width/2-(int)Math.round(stringBounds.getWidth()/2+stringBounds.getX());
 			int strY = height/2-(int)Math.round(stringBounds.getHeight()/2+stringBounds.getY());
