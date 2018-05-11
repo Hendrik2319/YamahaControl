@@ -26,13 +26,19 @@ public class RotaryCtrl extends Canvas {
 		private RotaryCtrl.ValueListener valueListener;
 		private int decimals;
 		private double tickInterval;
+		private boolean showInnerCircle;
+		private double minValue;
+		private double maxValue;
 		
 		public interface ValueListener {
 			public void valueChanged(double value, boolean isAdjusting);
 		}
 		
-		public RotaryCtrl(int width, double deltaPerFullCircle, int decimals, double tickInterval, double zeroAngle_deg, RotaryCtrl.ValueListener valueListener) {
+		public RotaryCtrl(int width, boolean showInnerCircle, double minValue, double maxValue, double deltaPerFullCircle, double tickInterval, int decimals, double zeroAngle_deg, RotaryCtrl.ValueListener valueListener) {
 			super(width, width);
+			this.minValue = minValue;
+			this.maxValue = maxValue;
+			this.showInnerCircle = showInnerCircle;
 			this.deltaPerFullCircle = deltaPerFullCircle;
 			this.decimals = decimals;
 			this.tickInterval = tickInterval;
@@ -43,13 +49,15 @@ public class RotaryCtrl extends Canvas {
 			angle = 0.0;
 			value = 0.0;
 			isAdjusting = false;
-			unit = "##";
+			unit = null;
 			
 			setMouseAdapter();
 		}
 		
-		public void setConfig(double deltaPerFullCircle, int decimals, double tickInterval) {
+		public void setConfig(double minValue, double maxValue, double deltaPerFullCircle, double tickInterval, int decimals) {
 			if (isAdjusting) return;
+			this.minValue = minValue;
+			this.maxValue = maxValue;
 			this.deltaPerFullCircle = deltaPerFullCircle;
 			this.decimals = decimals;
 			this.tickInterval = tickInterval;
@@ -98,6 +106,8 @@ public class RotaryCtrl extends Canvas {
 					else if (Math.abs(diff) > Math.abs(diff-2*Math.PI)) pickAngle += 2*Math.PI;
 					angle = mouseAngle-pickAngle;
 					value = angle/2/Math.PI*deltaPerFullCircle;
+					value = Math.max(minValue, Math.min(value, maxValue));
+					angle = value*2*Math.PI/deltaPerFullCircle;
 					
 					valueListener.valueChanged(value,isAdjusting);
 					control.repaint();
@@ -119,7 +129,7 @@ public class RotaryCtrl extends Canvas {
 			if (isAdjusting) return;
 			if (numberWithUnit==null) {
 				this.value = 0;
-				this.unit = "##";
+				this.unit = null;
 			} else {
 				this.value = numberWithUnit.getValue();
 				this.unit = numberWithUnit.getUnit();
@@ -160,15 +170,17 @@ public class RotaryCtrl extends Canvas {
 			
 			g.setColor(ctrlLines);
 			g.drawOval(width/2-radius, height/2-radius, radius*2, radius*2);
-			g.setColor(ctrlLines2);
-			g.drawOval(width/2-radius/2, height/2-radius/2, radius, radius);
+			if (showInnerCircle) {
+				g.setColor(ctrlLines2);
+				g.drawOval(width/2-radius/2, height/2-radius/2, radius, radius);
+			}
 			
 			g.setColor(ctrlMarker);
 			if (g2!=null) g2.setStroke( new BasicStroke(5,BasicStroke.CAP_ROUND,BasicStroke.JOIN_ROUND) );
 			drawRadiusLine(g, width, height, 0.96, 0.7, angle+zeroAngle);
 			if (g2!=null) g2.setStroke(new BasicStroke(1));
 			
-			String str = String.format(Locale.ENGLISH, "%1."+decimals+"f %s", value, unit);
+			String str = unit==null?"":String.format(Locale.ENGLISH, "%1."+decimals+"f %s", value, unit);
 			Rectangle2D stringBounds = g.getFontMetrics().getStringBounds(str,g);
 			int strX = width/2-(int)Math.round(stringBounds.getWidth()/2+stringBounds.getX());
 			int strY = height/2-(int)Math.round(stringBounds.getHeight()/2+stringBounds.getY());

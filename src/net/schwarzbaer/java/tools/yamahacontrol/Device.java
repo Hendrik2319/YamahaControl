@@ -1134,7 +1134,7 @@ public final class Device {
 		String clockTime;
 
 		private KnownCommand getPresetsCmd;
-		private Vector<Preset> presets;
+		final Vector<Preset> presets;
 
 		protected PlayInfo_Tuner(String name, String address, KnownCommand.GetPlayInfo getPlayInfoCmd, KnownCommand getPresetsCmd) {
 			super(name, address, getPlayInfoCmd);
@@ -1340,7 +1340,11 @@ public final class Device {
 				});
 				return preset;
 			}
-			
+
+			@Override
+			public String toString() {
+				return title==null?"":title;
+			}
 		}
 	}
 

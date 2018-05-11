@@ -49,6 +49,7 @@ import javax.activation.DataHandler;
 import javax.swing.AbstractButton;
 import javax.swing.BorderFactory;
 import javax.swing.ButtonGroup;
+import javax.swing.DefaultComboBoxModel;
 import javax.swing.Icon;
 import javax.swing.ImageIcon;
 import javax.swing.JButton;
@@ -75,6 +76,7 @@ import net.schwarzbaer.gui.StandardMainWindow;
 import net.schwarzbaer.java.tools.yamahacontrol.Device.PlayInfo;
 import net.schwarzbaer.java.tools.yamahacontrol.Device.UpdateWish;
 import net.schwarzbaer.java.tools.yamahacontrol.Device.Value;
+import net.schwarzbaer.java.tools.yamahacontrol.Device.Value.UpDown;
 
 public class YamahaControl {
 	
@@ -449,17 +451,49 @@ public class YamahaControl {
 		
 	}
 	
-	public static class ExtButtonGroup<E extends Enum<E>> {
+	public static abstract class AbstractButtonFactory<E extends Enum<E>> {
+		private Consumer<E> btnCmd;
+		private EnumMap<E, AbstractButton> buttons;
+
+		AbstractButtonFactory(Class<E> enumClass, Consumer<E> btnCmd) {
+			this.btnCmd = btnCmd;
+			buttons = new EnumMap<E,AbstractButton>(enumClass);
+		}
+		public AbstractButton createButton(String title, E buttonID) {
+			AbstractButton button = createButton(title, buttonID, btnCmd==null?e->{}:e->btnCmd.accept(buttonID));
+			buttons.put(buttonID, button);
+			return button; 
+		}
+		protected abstract AbstractButton createButton(String title, E buttonID, ActionListener l);
+		
+		public void setEnabled(boolean enabled) {
+			buttons.forEach((e,b)->b.setEnabled(enabled));
+		}
+		public AbstractButton getButton(E buttonID) {
+			return buttons.get(buttonID);
+		}
+	}
+	
+	public static class ButtonFactory<E extends Enum<E>> extends AbstractButtonFactory<E> {
+
+		ButtonFactory(Class<E> enumClass, Consumer<E> btnCmd) {
+			super(enumClass,btnCmd);
+		}
+		@Override
+		protected JButton createButton(String title, E buttonID, ActionListener l) {
+			JButton button = YamahaControl.createButton(title, l, true);
+			return button;
+		}
+	}
+	
+	public static class ToggleButtonGroup<E extends Enum<E>> extends AbstractButtonFactory<E> {
 		
 		private final ButtonGroup bg;
-		private final EnumMap<E, AbstractButton> buttons;
 		private JLabel label;
-		private final Consumer<E> btnCmd;
 
-		ExtButtonGroup(Class<E> enumClass, Consumer<E> btnCmd) {
-			this.btnCmd = btnCmd;
+		ToggleButtonGroup(Class<E> enumClass, Consumer<E> btnCmd) {
+			super(enumClass,btnCmd);
 			bg = new ButtonGroup();
-			buttons = new EnumMap<E,AbstractButton>(enumClass);
 			label = null;
 		}
 		
@@ -472,16 +506,16 @@ public class YamahaControl {
 			return label;
 		}
 		
-		public JToggleButton createButton(String title, E buttonID) {
-			ActionListener l = btnCmd==null?e->{}:e->btnCmd.accept(buttonID);
+		@Override
+		protected JToggleButton createButton(String title, E buttonID, ActionListener l) {
 			JToggleButton button = YamahaControl.createToggleButton(title, l, true, bg);
-			buttons.put(buttonID, button);
 			return button; 
 		}
 		
+		@Override
 		public void setEnabled(boolean enabled) {
+			super.setEnabled(enabled);
 			if (label!=null) label.setEnabled(enabled);
-			buttons.forEach((e,b)->b.setEnabled(enabled));
 			if (!enabled) clearSelection();
 		}
 		
@@ -491,7 +525,7 @@ public class YamahaControl {
 		
 		public void setSelected(E buttonID) {
 			if (buttonID != null) {
-				AbstractButton button = buttons.get(buttonID);
+				AbstractButton button = getButton(buttonID);
 				if (button != null) { button.setSelected(true); return; }
 			}
 			clearSelection();
@@ -797,7 +831,8 @@ public class YamahaControl {
 		}
 
 		public JPanel createVolumeControlPanel(int width) {
-			rotaryCtrl = new RotaryCtrl(width, 3.0, 1, 1.0, -90, (value, isAdjusting) -> {
+			// PUT[P2]:    Main_Zone,Volume,Lvl  =  Number: -805..(5)..165 / Exp:"1" / Unit:"dB"
+			rotaryCtrl = new RotaryCtrl(width,true, -80.5, +16.5, 3.0, 1.0, 1, -90, (value, isAdjusting) -> {
 				if (device==null) return;
 				volumeSetter.set(value,isAdjusting);
 			});
@@ -1175,34 +1210,39 @@ public class YamahaControl {
 	
 	private static class SubUnitTuner extends AbstractSubUnit_Play {
 		private static final long serialVersionUID = -8583320100311806933L;
-		private ExtButtonGroup<Device.Value.AmFm> bgBand;
-		private ExtButtonGroup<Device.Value.ScanFreq> bgScanAM;
-		private ExtButtonGroup<Device.Value.ScanFreq> bgScanFM;
-		private ExtButtonGroup<Device.Value.ScanTP> bgScanFMTP;
+		
+		private ToggleButtonGroup<Device.Value.AmFm> bgBand;
+		private ToggleButtonGroup<Device.Value.ScanFreq> bgScanAM;
+		private ToggleButtonGroup<Device.Value.ScanFreq> bgScanFM;
+		private ToggleButtonGroup<Device.Value.ScanTP> bgScanFMTP;
 		private RotaryCtrl tuneCtrl;
+		private ButtonFactory<UpDown> presetButtons;
+		private JComboBox<Device.PlayInfo_Tuner.Preset> presetCmbBx;
+		private JLabel presetLabel;
+		private JTextField freqAmTxtFld;
+		private JTextField freqFmTxtFld;
+		
 		private boolean isEnabled;
-		private ValueSetter freqFmSetter;
 		private ValueSetter freqAmSetter;
+		private ValueSetter freqFmSetter;
 	
 		public SubUnitTuner() {
 			super("TUNER","Tuner", UpdateWish.TunerPlayInfo);
 			isEnabled = true;
-			freqFmSetter = new ValueSetter(10,(value, isAdjusting) -> {
-				device.tuner.setFreqFM((float)value);
-				if (!isAdjusting) {
-					device.update(getUpdateWishes(UpdateReason.Frequently));
-					SwingUtilities.invokeLater(()->{
-						updateGui();
-					});
-				}
-			});
 			freqAmSetter = new ValueSetter(10,(value, isAdjusting) -> {
 				device.tuner.setFreqAM((float)value);
+				SwingUtilities.invokeLater(this::updateFreqAmTxtFld);
 				if (!isAdjusting) {
 					device.update(getUpdateWishes(UpdateReason.Frequently));
-					SwingUtilities.invokeLater(()->{
-						updateGui();
-					});
+					SwingUtilities.invokeLater(this::updateGui);
+				}
+			});
+			freqFmSetter = new ValueSetter(10,(value, isAdjusting) -> {
+				device.tuner.setFreqFM((float)value);
+				SwingUtilities.invokeLater(this::updateFreqFmTxtFld);
+				if (!isAdjusting) {
+					device.update(getUpdateWishes(UpdateReason.Frequently));
+					SwingUtilities.invokeLater(this::updateGui);
 				}
 			});
 		}
@@ -1215,6 +1255,13 @@ public class YamahaControl {
 			case Frequently: break;
 			}
 			return wishes;
+		}
+
+		@Override
+		public void initGUIafterConnect(Device device) {
+			super.initGUIafterConnect(device);
+			if (this.device!=null)
+				presetCmbBx.setModel(new DefaultComboBoxModel<>(this.device.tuner.playInfo.presets));
 		}
 
 		@Override
@@ -1240,6 +1287,11 @@ public class YamahaControl {
 			bgScanFM  .setEnabled(enabled);
 			bgScanFMTP.setEnabled(enabled);
 			tuneCtrl  .setEnabled(enabled);
+			freqAmTxtFld.setEnabled(enabled);
+			freqFmTxtFld.setEnabled(enabled);
+			presetButtons.setEnabled(enabled);
+			presetCmbBx  .setEnabled(enabled);
+			presetLabel  .setEnabled(enabled);
 			updateGui();
 		}
 
@@ -1258,6 +1310,9 @@ public class YamahaControl {
 			if (isEnabled)
 				bgBand.setSelected(device.tuner.playInfo.tuningBand);
 			
+			updateFreqAmTxtFld();
+			updateFreqFmTxtFld();
+				
 			if (device.tuner.playInfo.tuningBand==null) {
 				bgScanAM  .setEnabled(false);
 				bgScanFM  .setEnabled(false);
@@ -1270,10 +1325,12 @@ public class YamahaControl {
 						bgScanFM  .setEnabled(false);
 						bgScanFMTP.setEnabled(false);
 						bgScanAM.setSelected(device.tuner.playInfo.tuningFreqAmAutomatic);
+						freqAmTxtFld.setEnabled(true);
+						freqFmTxtFld.setEnabled(false);
 					}
 					if (device.tuner.playInfo.tuningFreqAmValue!=null && !tuneCtrl.isAdjusting) {
 						// PUT[P9]:    Tuner,Play_Control,Tuning,Freq,AM  =  Number: 531..(9)..1611 / Exp:0 / Unit:"kHz"
-						tuneCtrl.setConfig(180.0, 0, 18.0);
+						tuneCtrl.setConfig(531,1611, 180.0, 18.0, 0);
 						tuneCtrl.setValue(device.tuner.playInfo.tuningFreqAmValue);
 					}
 					break;
@@ -1283,6 +1340,8 @@ public class YamahaControl {
 						bgScanAM  .setEnabled(false);
 						bgScanFM  .setEnabled(true);
 						bgScanFMTP.setEnabled(true);
+						freqAmTxtFld.setEnabled(false);
+						freqFmTxtFld.setEnabled(true);
 						if (device.tuner.playInfo.tuningFreqFmAutomatic==null) {
 							bgScanFM  .clearSelection();
 							bgScanFMTP.clearSelection();
@@ -1296,11 +1355,19 @@ public class YamahaControl {
 					}
 					if (device.tuner.playInfo.tuningFreqFmValue!=null && !tuneCtrl.isAdjusting) {
 						// PUT[P8]:    Tuner,Play_Control,Tuning,Freq,FM  =  Number: 8750..(5)..10800 / Exp:2 / Unit:"MHz"
-						tuneCtrl.setConfig(1.0, 2, 0.2);
+						tuneCtrl.setConfig(87.5,108.0, 1.0, 0.2, 2);
 						tuneCtrl.setValue(device.tuner.playInfo.tuningFreqFmValue);
 					}
 					break;
 				}
+		}
+
+		private void updateFreqFmTxtFld() {
+			if (device.tuner.playInfo.tuningFreqFmValue!=null) freqFmTxtFld.setText(device.tuner.playInfo.tuningFreqFmValue.toValueStr());
+		}
+
+		private void updateFreqAmTxtFld() {
+			if (device.tuner.playInfo.tuningFreqAmValue!=null) freqAmTxtFld.setText(device.tuner.playInfo.tuningFreqAmValue.toValueStr());
 		}
 
 		@Override
@@ -1308,7 +1375,7 @@ public class YamahaControl {
 			GridBagPanel buttonPanel = new GridBagPanel();
 			buttonPanel.setInsets(new Insets(0,3,0,3));
 			
-			bgBand = new ExtButtonGroup<>(Device.Value.AmFm.class,e->{
+			bgBand = new ToggleButtonGroup<>(Device.Value.AmFm.class,e->{
 				if (device==null) return;
 				device.tuner.setBand(e);
 				updateDeviceNGui();
@@ -1317,45 +1384,63 @@ public class YamahaControl {
 			buttonPanel.add(bgBand.createButton("AM",Device.Value.AmFm.AM), 1,0, 0,0, 1,1, GridBagConstraints.HORIZONTAL);
 			buttonPanel.add(bgBand.createButton("FM",Device.Value.AmFm.FM), 2,0, 0,0, 2,1, GridBagConstraints.HORIZONTAL);
 			
-			bgScanAM = new ExtButtonGroup<>(Device.Value.ScanFreq.class,e->{
+			freqAmTxtFld = new JTextField();
+			freqFmTxtFld = new JTextField();
+			freqAmTxtFld.setEditable(false);
+			freqFmTxtFld.setEditable(false);
+			
+			bgScanAM = new ToggleButtonGroup<>(Device.Value.ScanFreq.class,e->{
 				if (device==null) return;
 				device.tuner.setScanAM(e);
 				updateDeviceNGui();
 			});
 			buttonPanel.add(bgScanAM.createLabel("Frequency",JLabel.CENTER), 1,1, 0,0, 1,1, GridBagConstraints.BOTH);
-			buttonPanel.add(bgScanAM.createButton("Scan Up"  ,Device.Value.ScanFreq.AutoUp  ), 1,2, 0,0, 1,1, GridBagConstraints.HORIZONTAL);
-			buttonPanel.add(bgScanAM.createButton("Scan Down",Device.Value.ScanFreq.AutoDown), 1,3, 0,0, 1,1, GridBagConstraints.HORIZONTAL);
-			buttonPanel.add(bgScanAM.createButton("Cancel"   ,Device.Value.ScanFreq.Cancel  ), 1,4, 0,0, 1,1, GridBagConstraints.HORIZONTAL);
+			buttonPanel.add(freqAmTxtFld, 1,2, 0,0, 1,1, GridBagConstraints.HORIZONTAL);
+			buttonPanel.add(bgScanAM.createButton("Scan Up"  ,Device.Value.ScanFreq.AutoUp  ), 1,3, 0,0, 1,1, GridBagConstraints.HORIZONTAL);
+			buttonPanel.add(bgScanAM.createButton("Scan Down",Device.Value.ScanFreq.AutoDown), 1,4, 0,0, 1,1, GridBagConstraints.HORIZONTAL);
+			buttonPanel.add(bgScanAM.createButton("Cancel"   ,Device.Value.ScanFreq.Cancel  ), 1,5, 0,0, 1,1, GridBagConstraints.HORIZONTAL);
 			
-			bgScanFM = new ExtButtonGroup<>(Device.Value.ScanFreq.class,e->{
+			bgScanFM = new ToggleButtonGroup<>(Device.Value.ScanFreq.class,e->{
 				if (device==null) return;
 				device.tuner.setScanFM(e);
 				updateDeviceNGui();
 			});
 			buttonPanel.add(bgScanFM.createLabel("Frequency",JLabel.CENTER), 2,1, 0,0, 1,1, GridBagConstraints.BOTH);
-			buttonPanel.add(bgScanFM.createButton("Scan Up"  ,Device.Value.ScanFreq.AutoUp  ), 2,2, 0,0, 1,1, GridBagConstraints.HORIZONTAL);
-			buttonPanel.add(bgScanFM.createButton("Scan Down",Device.Value.ScanFreq.AutoDown), 2,3, 0,0, 1,1, GridBagConstraints.HORIZONTAL);
-			buttonPanel.add(bgScanFM.createButton("Cancel"   ,Device.Value.ScanFreq.Cancel  ), 2,4, 0,0, 1,1, GridBagConstraints.HORIZONTAL);
+			buttonPanel.add(freqFmTxtFld, 2,2, 0,0, 2,1, GridBagConstraints.HORIZONTAL);
+			buttonPanel.add(bgScanFM.createButton("Scan Up"  ,Device.Value.ScanFreq.AutoUp  ), 2,3, 0,0, 1,1, GridBagConstraints.HORIZONTAL);
+			buttonPanel.add(bgScanFM.createButton("Scan Down",Device.Value.ScanFreq.AutoDown), 2,4, 0,0, 1,1, GridBagConstraints.HORIZONTAL);
+			buttonPanel.add(bgScanFM.createButton("Cancel"   ,Device.Value.ScanFreq.Cancel  ), 2,5, 0,0, 1,1, GridBagConstraints.HORIZONTAL);
 			
-			bgScanFMTP = new ExtButtonGroup<>(Device.Value.ScanTP.class,e->{
+			bgScanFMTP = new ToggleButtonGroup<>(Device.Value.ScanTP.class,e->{
 				if (device==null) return;
 				device.tuner.setScanFMTP(e);
 				updateDeviceNGui();
 			});
 			buttonPanel.add(bgScanFMTP.createLabel("Traffic",JLabel.CENTER), 3,1, 0,0, 1,1, GridBagConstraints.BOTH);
-			buttonPanel.add(bgScanFMTP.createButton("Scan Up"  ,Device.Value.ScanTP.TPUp  ), 3,2, 0,0, 1,1, GridBagConstraints.HORIZONTAL);
-			buttonPanel.add(bgScanFMTP.createButton("Scan Down",Device.Value.ScanTP.TPDown), 3,3, 0,0, 1,1, GridBagConstraints.HORIZONTAL);
-			buttonPanel.add(bgScanFMTP.createButton("Cancel"   ,Device.Value.ScanTP.Cancel), 3,4, 0,0, 1,1, GridBagConstraints.HORIZONTAL);
-			
-			// Preset   [Plus_Minus | Preset]   
-			// [Plus_1]        PUT[P2]     Tuner,Play_Control,Preset,Preset_Sel = Up
-			// [Minus_1]       PUT[P2]     Tuner,Play_Control,Preset,Preset_Sel = Down
-			
-			// Preset   [Preset]    ListType:Slider
-			// PUT[P2]:                    Tuner,Play_Control,Preset,Preset_Sel   =   Values [GET[G3]:Tuner,Play_Control,Preset,Preset_Sel_Item]
+			buttonPanel.add(bgScanFMTP.createButton("Scan Up"  ,Device.Value.ScanTP.TPUp  ), 3,3, 0,0, 1,1, GridBagConstraints.HORIZONTAL);
+			buttonPanel.add(bgScanFMTP.createButton("Scan Down",Device.Value.ScanTP.TPDown), 3,4, 0,0, 1,1, GridBagConstraints.HORIZONTAL);
+			buttonPanel.add(bgScanFMTP.createButton("Cancel"   ,Device.Value.ScanTP.Cancel), 3,5, 0,0, 1,1, GridBagConstraints.HORIZONTAL);
 			
 			
-			tuneCtrl = new RotaryCtrl(150, 1, 1, 1.0, -90, new RotaryCtrl.ValueListener() {
+			presetButtons = new ButtonFactory<Device.Value.UpDown>(Device.Value.UpDown.class, e->{
+				if (device==null) return;
+				device.tuner.setPreset(e);
+				updateDeviceNGui();
+			});
+			buttonPanel.add(presetLabel = new JLabel("Preset:"), 0,6, 0,0, 1,1, GridBagConstraints.BOTH);
+			buttonPanel.add(presetButtons.createButton("<<",Device.Value.UpDown.Down), 1,6, 0,0, 1,1, GridBagConstraints.HORIZONTAL);
+			buttonPanel.add(presetButtons.createButton(">>",Device.Value.UpDown.Up  ), 3,6, 0,0, 1,1, GridBagConstraints.HORIZONTAL);
+			
+			presetCmbBx = new JComboBox<>();
+			presetCmbBx.addActionListener(e->{
+				if (device==null) return;
+				device.tuner.setPreset((Device.PlayInfo_Tuner.Preset) presetCmbBx.getSelectedItem());
+				updateDeviceNGui();
+			});
+			buttonPanel.add(presetCmbBx, 2,6, 0,0, 1,1, GridBagConstraints.BOTH);
+			
+			
+			tuneCtrl = new RotaryCtrl(150,false, -1.0, +1.0, 1.0, 1.0, 1, -90, new RotaryCtrl.ValueListener() {
 				@Override public void valueChanged(double value, boolean isAdjusting) {
 					if (device==null || device.tuner.playInfo.tuningBand==null) return;
 					switch(device.tuner.playInfo.tuningBand) {
