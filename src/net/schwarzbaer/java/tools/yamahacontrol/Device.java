@@ -1292,7 +1292,7 @@ public final class Device {
 			});
 		}
 
-		public void updatePresets() {
+		void updatePresets() {
 			presets.clear();
 			Node node = Ctrl.sendGetCommand_Node(address,getPresetsCmd);
 			if (node==null) return;
@@ -1306,6 +1306,10 @@ public final class Device {
 				Preset preset = Preset.parse(child,index);
 				if (preset!=null) presets.add(preset);
 			});
+		}
+		
+		Preset getCurrentPreset() {
+			return getPreset(currentPreset);
 		}
 		
 		private Preset getPreset(String ID) {
@@ -1343,7 +1347,7 @@ public final class Device {
 
 			@Override
 			public String toString() {
-				return title==null?"":title;
+				return title==null?("["+ID+"]"):title;
 			}
 		}
 	}

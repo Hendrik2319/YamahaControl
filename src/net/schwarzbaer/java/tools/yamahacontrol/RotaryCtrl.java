@@ -21,7 +21,6 @@ public class RotaryCtrl extends Canvas {
 		private double zeroAngle;
 		private double value;
 		private double deltaPerFullCircle;
-		protected boolean isAdjusting;
 		private String unit;
 		private RotaryCtrl.ValueListener valueListener;
 		private int decimals;
@@ -29,6 +28,7 @@ public class RotaryCtrl extends Canvas {
 		private boolean showInnerCircle;
 		private double minValue;
 		private double maxValue;
+		private MouseHandler mouseHandler;
 		
 		public interface ValueListener {
 			public void valueChanged(double value, boolean isAdjusting);
@@ -48,85 +48,32 @@ public class RotaryCtrl extends Canvas {
 			radius = width/2-20;
 			angle = 0.0;
 			value = 0.0;
-			isAdjusting = false;
 			unit = null;
 			
-			setMouseAdapter();
+			mouseHandler = new MouseHandler();
+			addMouseListener(mouseHandler);
+			addMouseMotionListener(mouseHandler);
+		}
+		
+		public boolean isAdjusting() {
+			return mouseHandler.isAdjusting;
 		}
 		
 		public void setConfig(double minValue, double maxValue, double deltaPerFullCircle, double tickInterval, int decimals) {
-			if (isAdjusting) return;
-			this.minValue = minValue;
-			this.maxValue = maxValue;
-			this.deltaPerFullCircle = deltaPerFullCircle;
+			boolean stopAdjusting = false;
+			if (this.minValue != minValue) { this.minValue = minValue; stopAdjusting = true; }
+			if (this.maxValue != maxValue) { this.maxValue = maxValue; stopAdjusting = true; }
+			if (this.deltaPerFullCircle != deltaPerFullCircle) { this.deltaPerFullCircle = deltaPerFullCircle; stopAdjusting = true; }
 			this.decimals = decimals;
 			this.tickInterval = tickInterval;
-		}
-
-		private void setMouseAdapter() {
-			MouseAdapter mouseAdapter = new MouseAdapter() {
-				
-				private RotaryCtrl control = RotaryCtrl.this;
-				private double pickAngle = Double.NaN;
-
-				@Override
-				public void mousePressed(MouseEvent e) {
-					if (!control.isEnabled()) return;
-					
-					pickAngle = getMouseAngle(e.getX(), e.getY(), true)-angle;
-					isAdjusting = true;
-//					System.out.printf("pickAngle: %f%n",pickAngle);
-				}
-
-				@Override
-				public void mouseReleased(MouseEvent e) {
-					if (!control.isEnabled()) return;
-					
-					isAdjusting = false;
-					if (!Double.isNaN(pickAngle))
-						changeValue(e.getX(), e.getY());
-					pickAngle = Double.NaN;
-//					System.out.printf("pickAngle: %f%n",pickAngle);
-				}
-
-				@Override
-				public void mouseDragged(MouseEvent e) {
-					if (!control.isEnabled()) return;
-					
-					if (!Double.isNaN(pickAngle))
-						changeValue(e.getX(), e.getY());
-//					System.out.printf("angle: %f%n",angle);
-				}
-				
-
-				private void changeValue(int mouseX, int mouseY) {
-					double mouseAngle = getMouseAngle(mouseX, mouseY, false);
-					double diff = mouseAngle-pickAngle-angle;
-					if      (Math.abs(diff) > Math.abs(diff+2*Math.PI)) pickAngle -= 2*Math.PI;
-					else if (Math.abs(diff) > Math.abs(diff-2*Math.PI)) pickAngle += 2*Math.PI;
-					angle = mouseAngle-pickAngle;
-					value = angle/2/Math.PI*deltaPerFullCircle;
-					value = Math.max(minValue, Math.min(value, maxValue));
-					angle = value*2*Math.PI/deltaPerFullCircle;
-					
-					valueListener.valueChanged(value,isAdjusting);
-					control.repaint();
-				}
-
-				private double getMouseAngle(int mouseX, int mouseY, boolean checkIfInsideCircle) {
-					int x = mouseX-control.width/2;
-					int y = mouseY-control.height/2;
-					if (checkIfInsideCircle && Math.sqrt(x*x+y*y)>radius) return Double.NaN;
-					double mouseAngle = Math.atan2(y,x);
-					return mouseAngle;
-				}
-			};
-			addMouseListener(mouseAdapter);
-			addMouseMotionListener(mouseAdapter);
+			if (stopAdjusting && mouseHandler.isAdjusting) {
+				mouseHandler.stopAdjusting();
+				repaint();
+			}
 		}
 		
 		public void setValue(Device.NumberWithUnit numberWithUnit) {
-			if (isAdjusting) return;
+			if (mouseHandler.isAdjusting) return;
 			if (numberWithUnit==null) {
 				this.value = 0;
 				this.unit = null;
@@ -137,7 +84,74 @@ public class RotaryCtrl extends Canvas {
 			this.angle = value*2*Math.PI/deltaPerFullCircle;
 			repaint();
 		}
-		
+
+		private class MouseHandler extends MouseAdapter {
+			
+			private double pickAngle;
+			private boolean isAdjusting;
+			MouseHandler() {
+				pickAngle = Double.NaN;
+				isAdjusting = false;
+			}
+
+			public void stopAdjusting() {
+				pickAngle = Double.NaN;
+				isAdjusting = false;
+			}
+
+			@Override
+			public void mousePressed(MouseEvent e) {
+				if (!isEnabled()) return;
+				
+				pickAngle = getMouseAngle(e.getX(), e.getY(), true)-angle;
+				isAdjusting = true;
+//				System.out.printf("pickAngle: %f%n",pickAngle);
+			}
+
+			@Override
+			public void mouseReleased(MouseEvent e) {
+				if (!isEnabled()) return;
+				
+				isAdjusting = false;
+				if (!Double.isNaN(pickAngle))
+					changeValue(e.getX(), e.getY());
+				pickAngle = Double.NaN;
+//				System.out.printf("pickAngle: %f%n",pickAngle);
+			}
+
+			@Override
+			public void mouseDragged(MouseEvent e) {
+				if (!isEnabled()) return;
+				
+				if (!Double.isNaN(pickAngle))
+					changeValue(e.getX(), e.getY());
+//				System.out.printf("angle: %f%n",angle);
+			}
+			
+
+			private void changeValue(int mouseX, int mouseY) {
+				double mouseAngle = getMouseAngle(mouseX, mouseY, false);
+				double diff = mouseAngle-pickAngle-angle;
+				if      (Math.abs(diff) > Math.abs(diff+2*Math.PI)) pickAngle -= 2*Math.PI;
+				else if (Math.abs(diff) > Math.abs(diff-2*Math.PI)) pickAngle += 2*Math.PI;
+				angle = mouseAngle-pickAngle;
+				value = angle/2/Math.PI*deltaPerFullCircle;
+				value = Math.max(minValue, Math.min(value, maxValue));
+				angle = value*2*Math.PI/deltaPerFullCircle;
+				
+				valueListener.valueChanged(value,isAdjusting);
+				repaint();
+			}
+
+			private double getMouseAngle(int mouseX, int mouseY, boolean checkIfInsideCircle) {
+				int x = mouseX-width/2;
+				int y = mouseY-height/2;
+				if (checkIfInsideCircle && Math.sqrt(x*x+y*y)>radius) return Double.NaN;
+				double mouseAngle = Math.atan2(y,x);
+				return mouseAngle;
+			}
+		}
+
 		@Override
 		protected void paintCanvas(Graphics g, int width, int height) {
 			Graphics2D g2 = (g instanceof Graphics2D)?(Graphics2D)g:null;

@@ -575,6 +575,8 @@ public class YamahaControl {
 				// running tasks");
 				runningTasks.forEach(task -> task.cancel(false));
 				removeCompletedTasks();
+				if (!runningTasks.isEmpty())
+					Log.warning(getClass(), "stops adjusting -> left %d running tasks", runningTasks.size());
 
 				runningTasks.add(executor.submit(() -> {
 					incCounter();
@@ -582,6 +584,13 @@ public class YamahaControl {
 					decCounter();
 				}));
 			}
+		}
+
+		public synchronized void clear() {
+			runningTasks.forEach(task -> task.cancel(true));
+			removeCompletedTasks();
+			if (!runningTasks.isEmpty())
+				Log.warning(getClass(), "clear() -> left %d running tasks", runningTasks.size());
 		}
 
 		private void removeCompletedTasks() {
@@ -595,13 +604,8 @@ public class YamahaControl {
 			}
 		}
 
-		private synchronized void decCounter() {
-			--counter;
-		}
-
-		private synchronized void incCounter() {
-			++counter;
-		}
+		private synchronized void decCounter() { --counter; }
+		private synchronized void incCounter() { ++counter; }
 	}
 
 	public static interface GuiRegion {
@@ -1225,10 +1229,12 @@ public class YamahaControl {
 		private boolean isEnabled;
 		private ValueSetter freqAmSetter;
 		private ValueSetter freqFmSetter;
+		private Device.Value.AmFm selectedBand;
 	
 		public SubUnitTuner() {
 			super("TUNER","Tuner", UpdateWish.TunerPlayInfo);
 			isEnabled = true;
+			selectedBand = null;
 			freqAmSetter = new ValueSetter(10,(value, isAdjusting) -> {
 				device.tuner.setFreqAM((float)value);
 				SwingUtilities.invokeLater(this::updateFreqAmTxtFld);
@@ -1312,6 +1318,7 @@ public class YamahaControl {
 			
 			updateFreqAmTxtFld();
 			updateFreqFmTxtFld();
+			presetCmbBx.setSelectedItem(device.tuner.playInfo.getCurrentPreset());
 				
 			if (device.tuner.playInfo.tuningBand==null) {
 				bgScanAM  .setEnabled(false);
@@ -1328,9 +1335,13 @@ public class YamahaControl {
 						freqAmTxtFld.setEnabled(true);
 						freqFmTxtFld.setEnabled(false);
 					}
-					if (device.tuner.playInfo.tuningFreqAmValue!=null && !tuneCtrl.isAdjusting) {
-						// PUT[P9]:    Tuner,Play_Control,Tuning,Freq,AM  =  Number: 531..(9)..1611 / Exp:0 / Unit:"kHz"
+					if (selectedBand!=device.tuner.playInfo.tuningBand) {
 						tuneCtrl.setConfig(531,1611, 180.0, 18.0, 0);
+						freqFmSetter.clear();
+						selectedBand=device.tuner.playInfo.tuningBand;
+					}
+					if (device.tuner.playInfo.tuningFreqAmValue!=null && !tuneCtrl.isAdjusting()) {
+						// PUT[P9]:    Tuner,Play_Control,Tuning,Freq,AM  =  Number: 531..(9)..1611 / Exp:0 / Unit:"kHz"
 						tuneCtrl.setValue(device.tuner.playInfo.tuningFreqAmValue);
 					}
 					break;
@@ -1353,9 +1364,13 @@ public class YamahaControl {
 							case TPUp    : bgScanFM.clearSelection(); bgScanFMTP.setSelected(Value.ScanTP.TPUp  ); break;
 							}
 					}
-					if (device.tuner.playInfo.tuningFreqFmValue!=null && !tuneCtrl.isAdjusting) {
-						// PUT[P8]:    Tuner,Play_Control,Tuning,Freq,FM  =  Number: 8750..(5)..10800 / Exp:2 / Unit:"MHz"
+					if (selectedBand!=device.tuner.playInfo.tuningBand) {
 						tuneCtrl.setConfig(87.5,108.0, 1.0, 0.2, 2);
+						freqAmSetter.clear();
+						selectedBand=device.tuner.playInfo.tuningBand;
+					}
+					if (device.tuner.playInfo.tuningFreqFmValue!=null && !tuneCtrl.isAdjusting()) {
+						// PUT[P8]:    Tuner,Play_Control,Tuning,Freq,FM  =  Number: 8750..(5)..10800 / Exp:2 / Unit:"MHz"
 						tuneCtrl.setValue(device.tuner.playInfo.tuningFreqFmValue);
 					}
 					break;
