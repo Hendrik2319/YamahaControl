@@ -13,17 +13,15 @@ import org.w3c.dom.NodeList;
 
 import net.schwarzbaer.java.tools.yamahacontrol.XML.TagList;
 import net.schwarzbaer.java.tools.yamahacontrol.YamahaControl.Log;
-import net.schwarzbaer.java.tools.yamahacontrol.YamahaControl.PlayInfo_PlayPauseStopSkip;
-import net.schwarzbaer.java.tools.yamahacontrol.YamahaControl.PlayInfo_PlayStop;
-import net.schwarzbaer.java.tools.yamahacontrol.YamahaControl.PlayInfo_RepeatShuffle;
 
 public final class Device {
 	
 	String address;
-	Inputs inputs;
-	MainPlayCtrl mainPlayCtrl;
 	private BasicStatus basicStatus;
-	
+
+	Inputs inputs;
+	RemoteCtrl remoteCtrl;
+
 	NetRadio netRadio;
 	USB      usb;
 	DLNA     dlna;
@@ -35,8 +33,9 @@ public final class Device {
 	Device(String address) {
 		this.address = address;
 		this.basicStatus = null;
-		this.inputs   = new Inputs  (this);
-		this.mainPlayCtrl = new MainPlayCtrl(this.address);
+		
+		this.inputs     = new Inputs    (this);
+		this.remoteCtrl = new RemoteCtrl(this.address);
 		
 		this.netRadio = new NetRadio(this.address);
 		this.usb      = new USB     (this.address);
@@ -61,7 +60,7 @@ public final class Device {
 			switch (uw) {
 			case Inputs          : inputs.askInputs(); break;
 			case Scenes          : inputs.askScenes(); break;
-			case BasicStatus     : basicStatus       = BasicStatus   .parse(Ctrl.sendGetCommand_Node(address,KnownCommand.General.GetBasicStatus  )); break;
+			case BasicStatus     : basicStatus = BasicStatus.parse(Ctrl.sendGetCommand_Node(address,KnownCommand.General.GetBasicStatus  )); break;
 			
 			case NetRadioListInfo: netRadio.listInfo.update(); break;
 			case NetRadioPlayInfo: netRadio.playInfo.update(); break;
@@ -170,7 +169,7 @@ public final class Device {
 	public void setMute(Value.OnOff volMute) {
 		// [Vol_Mute_On]        PUT[P3]     Main_Zone,Volume,Mute = On
 		// [Vol_Mute_Off]        PUT[P3]     Main_Zone,Volume,Mute = Off
-		Device.sendCommand(getClass(), address, "setMute", KnownCommand.General.SetMute, volMute);
+		Device.sendCommand(getClass(), address, "setMute", KnownCommand.General.SetVolumeMute, volMute);
 	}
 	
 	public Value.PowerState getPowerState() {
@@ -184,11 +183,13 @@ public final class Device {
 		Device.sendCommand(getClass(), address, "setPowerState", KnownCommand.General.GetNSetSystemPower, power);
 	}
 	
-	static class MainPlayCtrl {
+	
+	
+	static class RemoteCtrl {
 	
 		private String address;
 	
-		public MainPlayCtrl(String address) {
+		public RemoteCtrl(String address) {
 			this.address = address;
 		}
 
@@ -307,9 +308,9 @@ public final class Device {
 			GetNSetSystemPower("System,Power_Control,Power"),
 			SetCurrentScene("Main_Zone,Scene,Scene_Sel"),
 			SetCurrentInput("Main_Zone,Input,Input_Sel"),
-			GetBasicStatus("Main_Zone,Basic_Status"),
-			SetVolume("Main_Zone,Volume,Lvl"),
-			SetMute("Main_Zone,Volume,Mute"), // P3: Main_Zone,Volume,Mute
+			GetBasicStatus ("Main_Zone,Basic_Status"),
+			SetVolume      ("Main_Zone,Volume,Lvl" ), // P2: Main_Zone,Volume,Lvl
+			SetVolumeMute  ("Main_Zone,Volume,Mute"), // P3: Main_Zone,Volume,Mute
 			;
 			
 			final private TagList tagList;
@@ -547,7 +548,7 @@ public final class Device {
 		}
 		
 		public enum SleepState implements Value {
-			_120min("120 min"),_90min("90 min"),_60min("60 min"),_30min("30 min"),Off("Off");
+			Last("Last"), _120min("120 min"),_90min("90 min"),_60min("60 min"),_30min("30 min"),Off("Off");
 			private String label;
 			SleepState(String label) { this.label = label; }
 			@Override public String getLabel() { return label; }
@@ -1353,7 +1354,7 @@ public final class Device {
 		}
 	}
 
-	static class PlayInfo_NetRadio extends PlayInfo implements PlayInfo_PlayStop {
+	static class PlayInfo_NetRadio extends PlayInfo implements SubUnits.PlayInfo_PlayStop {
 	
 		Value.ReadyOrNot deviceStatus;
 		Value.PlayStop playState;
@@ -1458,7 +1459,7 @@ public final class Device {
 		
 	}
 
-	static class PlayInfo_AirPlaySpotify extends PlayInfo implements PlayInfo_PlayPauseStopSkip {
+	static class PlayInfo_AirPlaySpotify extends PlayInfo implements SubUnits.PlayInfo_PlayPauseStopSkip {
 		
 		Value.ReadyOrNot deviceStatus;
 		Value.PlayPauseStop playState;
@@ -1570,7 +1571,7 @@ public final class Device {
 		}
 	}
 
-	static class PlayInfoExt<Shuffle extends Enum<Shuffle>&Value> extends PlayInfo implements PlayInfo_PlayPauseStopSkip, PlayInfo_RepeatShuffle<Shuffle> {
+	static class PlayInfoExt<Shuffle extends Enum<Shuffle>&Value> extends PlayInfo implements SubUnits.PlayInfo_PlayPauseStopSkip, SubUnits.PlayInfo_RepeatShuffle<Shuffle> {
 	
 		Value.ReadyOrNot deviceStatus;
 		Value.PlayPauseStop playState;
