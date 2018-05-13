@@ -130,6 +130,7 @@ final class Ctrl {
 	static final int RC_CANT_PARSE_RC_VALUE = -4;
 	
 	static int lastRC = RC_OK;
+	static boolean showCommands = false;
 	
 	static Document sendCommand_controlled(String address, String command) {
 		HttpResponse response = http.sendCommand(address, command);
@@ -149,6 +150,7 @@ final class Ctrl {
 	
 	static int sendPutCommand(String address, Device.KnownCommand knownCommand, String value) {
 		
+		if (showCommands) Log.info(Ctrl.class, "PUT: %s( %s )", knownCommand.toFullString(), value);
 		String command = buildPutCommand(knownCommand.getTagList(), value);
 		sendCommand_controlled(address, command);
 		return lastRC;
@@ -171,6 +173,7 @@ final class Ctrl {
 	
 	public static Node sendGetCommand_Node(String address, Device.KnownCommand knownCommand) {
 		
+		if (showCommands) Log.info(Ctrl.class, "GET: %s", knownCommand.toFullString());
 		String command = buildGetCommand(knownCommand.getTagList());
 		Document document = sendCommand_controlled(address, command);
 		if (lastRC!=RC_OK) return null;

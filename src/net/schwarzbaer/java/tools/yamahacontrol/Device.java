@@ -847,6 +847,7 @@ public final class Device {
 			// PUT[P2]:    Tuner,Play_Control,Preset,Preset_Sel   =   Values [GET[G3]:Tuner,Play_Control,Preset,Preset_Sel_Item]
 			if (preset!=null)
 				sendCommand(getClass(), address, "setPreset", KnownCommand.Special.SetTunerSelectPreset, preset.ID);
+			//new Throwable().printStackTrace();
 		}
 	
 		static class Config extends AbstractConfig {
@@ -1181,20 +1182,20 @@ public final class Device {
 			sb.append("\r\n");
 			sb.append("\r\n");
 			
-			sb.append("Tuning\r\n");
-			sb.append("   Band: ").append(tuningBand==null?"":tuningBand).append("\r\n");
-			sb.append("   Frequency\r\n");
-			sb.append("      Current: ").append(tuningFreqCurrentAutomatic!=null?tuningFreqCurrentAutomatic:tuningFreqCurrentValue==null?"":tuningFreqCurrentValue.toValueStr()).append("\r\n");
-			sb.append("      FM     : ").append(tuningFreqFmAutomatic     !=null?tuningFreqFmAutomatic     :tuningFreqFmValue     ==null?"":tuningFreqFmValue     .toValueStr()).append("\r\n");
-			sb.append("      AM     : ").append(tuningFreqAmAutomatic     !=null?tuningFreqAmAutomatic     :tuningFreqAmValue     ==null?"":tuningFreqAmValue     .toValueStr()).append("\r\n");
-			sb.append("\r\n");
-			
 			sb.append("Program Info\r\n");
 			sb.append("   Genre  : ").append(programType   ==null?"":(" \""+programType   +"\"")).append("\r\n");
 			sb.append("   Service: ").append(programService==null?"":(" \""+convertLatin1(programService,withExtraCharsetConversion)+"\"")).append("\r\n");
 			sb.append("   Text   : ").append(radioTextA    ==null?"":(" \""+convertLatin1(radioTextA    ,withExtraCharsetConversion)+"\"")).append("\r\n");
 			sb.append("          : ").append(radioTextB    ==null?"":(" \""+convertLatin1(radioTextB    ,withExtraCharsetConversion)+"\"")).append("\r\n");
 			sb.append("   Time   : ").append(clockTime     ==null?"":(" \""+clockTime     +"\"")).append("\r\n");
+			sb.append("\r\n");
+			
+			sb.append("Tuning\r\n");
+			sb.append("   Band: ").append(tuningBand==null?"":tuningBand).append("\r\n");
+			sb.append("   Frequency\r\n");
+			sb.append("      Current: ").append(tuningFreqCurrentAutomatic!=null?tuningFreqCurrentAutomatic:tuningFreqCurrentValue==null?"":tuningFreqCurrentValue.toValueStr()).append("\r\n");
+			sb.append("      FM     : ").append(tuningFreqFmAutomatic     !=null?tuningFreqFmAutomatic     :tuningFreqFmValue     ==null?"":tuningFreqFmValue     .toValueStr()).append("\r\n");
+			sb.append("      AM     : ").append(tuningFreqAmAutomatic     !=null?tuningFreqAmAutomatic     :tuningFreqAmValue     ==null?"":tuningFreqAmValue     .toValueStr()).append("\r\n");
 			sb.append("\r\n");
 			
 			return sb.toString();

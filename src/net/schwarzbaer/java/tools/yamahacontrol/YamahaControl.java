@@ -917,7 +917,7 @@ public class YamahaControl {
 			this.device = _device;
 			setEnabledGUI(device!=null);
 			if (device!=null) {
-				scenesPanel.createButtons(device.inputs.getScenes(),this::setScene,dsi->dsi!=null && "W".equals(dsi.rw));
+				scenesPanel.createButtons(device.inputs.getScenes(),this::setScene,dsi->dsi!=null && dsi.rw!=null && dsi.rw.contains("W"));
 				inputsPanel.createButtons(device.inputs.getInputs(),this::setInput,null);
 			}
 			frequentlyUpdate();
@@ -1222,7 +1222,9 @@ public class YamahaControl {
 		private RotaryCtrl tuneCtrl;
 		private ButtonFactory<UpDown> presetButtons;
 		private JComboBox<Device.PlayInfo_Tuner.Preset> presetCmbBx;
+		private boolean presetCmbBx_ignoreSelectionEvent;
 		private JLabel presetLabel;
+		private JButton updatePresetsButton;
 		private JTextField freqAmTxtFld;
 		private JTextField freqFmTxtFld;
 		
@@ -1230,29 +1232,34 @@ public class YamahaControl {
 		private ValueSetter freqAmSetter;
 		private ValueSetter freqFmSetter;
 		private Device.Value.AmFm selectedBand;
+
+
 	
 		public SubUnitTuner() {
 			super("TUNER","Tuner", UpdateWish.TunerPlayInfo);
 			isEnabled = true;
 			selectedBand = null;
+			presetCmbBx_ignoreSelectionEvent = false;
 			freqAmSetter = new ValueSetter(10,(value, isAdjusting) -> {
 				device.tuner.setFreqAM((float)value);
-				SwingUtilities.invokeLater(this::updateFreqAmTxtFld);
-				if (!isAdjusting) {
+				if (isAdjusting)
+					SwingUtilities.invokeLater(this::updateFreqAmTxtFld);
+				else {
 					device.update(getUpdateWishes(UpdateReason.Frequently));
 					SwingUtilities.invokeLater(this::updateGui);
 				}
 			});
 			freqFmSetter = new ValueSetter(10,(value, isAdjusting) -> {
 				device.tuner.setFreqFM((float)value);
-				SwingUtilities.invokeLater(this::updateFreqFmTxtFld);
-				if (!isAdjusting) {
+				if (isAdjusting)
+					SwingUtilities.invokeLater(this::updateFreqFmTxtFld);
+				else {
 					device.update(getUpdateWishes(UpdateReason.Frequently));
 					SwingUtilities.invokeLater(this::updateGui);
 				}
 			});
 		}
-		
+
 		@Override
 		public EnumSet<UpdateWish> getUpdateWishes(UpdateReason reason) {
 			EnumSet<UpdateWish> wishes = super.getUpdateWishes(reason);
@@ -1271,6 +1278,12 @@ public class YamahaControl {
 		}
 
 		@Override
+		public void frequentlyUpdate() {
+			super.frequentlyUpdate();
+			updateTunerGui();
+		}
+		
+		@Override
 		protected UpdateWish getReadyStateUpdateWish() {
 			return UpdateWish.TunerConfig;
 		}
@@ -1288,17 +1301,22 @@ public class YamahaControl {
 		public void setEnabledGUI(boolean enabled) {
 			super.setEnabledGUI(enabled);
 			isEnabled = enabled;
+			
 			bgBand    .setEnabled(enabled);
 			bgScanAM  .setEnabled(enabled);
 			bgScanFM  .setEnabled(enabled);
 			bgScanFMTP.setEnabled(enabled);
+			
 			tuneCtrl  .setEnabled(enabled);
 			freqAmTxtFld.setEnabled(enabled);
 			freqFmTxtFld.setEnabled(enabled);
+			
+			presetLabel  .setEnabled(enabled);
 			presetButtons.setEnabled(enabled);
 			presetCmbBx  .setEnabled(enabled);
-			presetLabel  .setEnabled(enabled);
-			updateGui();
+			updatePresetsButton.setEnabled(enabled);
+			
+			updateTunerGui();
 		}
 
 		@Override
@@ -1311,6 +1329,10 @@ public class YamahaControl {
 
 		private void updateGui() {
 			updatePlayInfo();
+			updateTunerGui();
+		}
+
+		private void updateTunerGui() {
 			if (device==null) return;
 			
 			if (isEnabled)
@@ -1318,7 +1340,9 @@ public class YamahaControl {
 			
 			updateFreqAmTxtFld();
 			updateFreqFmTxtFld();
+			presetCmbBx_ignoreSelectionEvent = true;
 			presetCmbBx.setSelectedItem(device.tuner.playInfo.getCurrentPreset());
+			presetCmbBx_ignoreSelectionEvent = false;
 				
 			if (device.tuner.playInfo.tuningBand==null) {
 				bgScanAM  .setEnabled(false);
@@ -1378,11 +1402,13 @@ public class YamahaControl {
 		}
 
 		private void updateFreqFmTxtFld() {
-			if (device.tuner.playInfo.tuningFreqFmValue!=null) freqFmTxtFld.setText(device.tuner.playInfo.tuningFreqFmValue.toValueStr());
+			if (device.tuner.playInfo.tuningFreqFmValue!=null)
+				freqFmTxtFld.setText(device.tuner.playInfo.tuningFreqFmValue.toValueStr());
 		}
 
 		private void updateFreqAmTxtFld() {
-			if (device.tuner.playInfo.tuningFreqAmValue!=null) freqAmTxtFld.setText(device.tuner.playInfo.tuningFreqAmValue.toValueStr());
+			if (device.tuner.playInfo.tuningFreqAmValue!=null)
+				freqAmTxtFld.setText(device.tuner.playInfo.tuningFreqAmValue.toValueStr());
 		}
 
 		@Override
@@ -1436,24 +1462,37 @@ public class YamahaControl {
 			buttonPanel.add(bgScanFMTP.createButton("Scan Down",Device.Value.ScanTP.TPDown), 3,4, 0,0, 1,1, GridBagConstraints.HORIZONTAL);
 			buttonPanel.add(bgScanFMTP.createButton("Cancel"   ,Device.Value.ScanTP.Cancel), 3,5, 0,0, 1,1, GridBagConstraints.HORIZONTAL);
 			
-			
 			presetButtons = new ButtonFactory<Device.Value.UpDown>(Device.Value.UpDown.class, e->{
 				if (device==null) return;
 				device.tuner.setPreset(e);
 				updateDeviceNGui();
 			});
-			buttonPanel.add(presetLabel = new JLabel("Preset:"), 0,6, 0,0, 1,1, GridBagConstraints.BOTH);
-			buttonPanel.add(presetButtons.createButton("<<",Device.Value.UpDown.Down), 1,6, 0,0, 1,1, GridBagConstraints.HORIZONTAL);
-			buttonPanel.add(presetButtons.createButton(">>",Device.Value.UpDown.Up  ), 3,6, 0,0, 1,1, GridBagConstraints.HORIZONTAL);
 			
 			presetCmbBx = new JComboBox<>();
 			presetCmbBx.addActionListener(e->{
 				if (device==null) return;
+				if (presetCmbBx_ignoreSelectionEvent) return;
 				device.tuner.setPreset((Device.PlayInfo_Tuner.Preset) presetCmbBx.getSelectedItem());
 				updateDeviceNGui();
 			});
-			buttonPanel.add(presetCmbBx, 2,6, 0,0, 1,1, GridBagConstraints.BOTH);
+			updatePresetsButton = YamahaControl.createButton("Update", e->{
+				if (device==null) return;
+				device.update(EnumSet.of(UpdateWish.TunerPresets));
+				presetCmbBx_ignoreSelectionEvent = true;
+				presetCmbBx.setModel(new DefaultComboBoxModel<>(device.tuner.playInfo.presets));
+				presetCmbBx.setSelectedItem(device.tuner.playInfo.getCurrentPreset());
+				presetCmbBx_ignoreSelectionEvent = false;
+			}, true);
 			
+			GridBagPanel presetPanel = new GridBagPanel();
+			presetPanel.add(presetButtons.createButton("<<",Device.Value.UpDown.Down), 0,0, 0,0, 1,1, GridBagConstraints.HORIZONTAL);
+			presetPanel.add(presetCmbBx, 1,0, 1,0, 1,1, GridBagConstraints.BOTH);
+			presetPanel.add(presetButtons.createButton(">>",Device.Value.UpDown.Up  ), 2,0, 0,0, 1,1, GridBagConstraints.HORIZONTAL);
+			presetPanel.add(updatePresetsButton, 3,0, 0,0, 1,1, GridBagConstraints.HORIZONTAL);
+			
+			buttonPanel.add(new JLabel(" "), 0,6, 0,0, 4,1, GridBagConstraints.BOTH);
+			buttonPanel.add(presetLabel = new JLabel("Preset:"), 0,7, 0,0, 1,1, GridBagConstraints.BOTH);
+			buttonPanel.add(presetPanel, 1,7, 0,0, 3,1, GridBagConstraints.BOTH);
 			
 			tuneCtrl = new RotaryCtrl(150,false, -1.0, +1.0, 1.0, 1.0, 1, -90, new RotaryCtrl.ValueListener() {
 				@Override public void valueChanged(double value, boolean isAdjusting) {
