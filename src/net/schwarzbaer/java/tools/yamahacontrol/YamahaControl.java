@@ -40,6 +40,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.function.Predicate;
 
 import javax.activation.DataHandler;
@@ -69,6 +70,7 @@ import javax.swing.filechooser.FileSystemView;
 import net.schwarzbaer.gui.StandardMainWindow;
 import net.schwarzbaer.java.tools.yamahacontrol.Device.UpdateWish;
 import net.schwarzbaer.java.tools.yamahacontrol.Device.Value;
+import net.schwarzbaer.java.tools.yamahacontrol.Device.Value.OnOff;
 
 public class YamahaControl {
 	
@@ -783,7 +785,7 @@ public class YamahaControl {
 			settingsPanel.addTab(tabTitle,createPanel());
 		}
 
-		protected abstract JPanel createPanel();
+		protected abstract JComponent createPanel();
 	}
 	
 	private static class RemoteCtrl extends AbstractSettingSubPanel {
@@ -811,7 +813,7 @@ public class YamahaControl {
 		}
 	
 		@Override
-		protected JPanel createPanel() {
+		protected GridBagPanel createPanel() {
 			GridBagPanel panel = new GridBagPanel();
 			
 			comps.clear();
@@ -907,7 +909,7 @@ public class YamahaControl {
 			createPanels(settingsPanel);
 		}
 
-		@Override protected JPanel createPanel() {
+		@Override protected JComponent createPanel() {
 			throw new UnsupportedOperationException("ScenesAndInputs.createPanel() should not be called.");
 		}
 
@@ -1035,38 +1037,72 @@ public class YamahaControl {
 	
 	private static class Options extends AbstractSettingSubPanel {
 
+		private Vector<JComponent> comps;
 		Options() {
 			super("Options");
+			comps = new Vector<>();
 		}
 
 		@Override
-		protected JPanel createPanel() {
+		protected JScrollPane createPanel() {
+			GridBagPanel systemOptionsPanel = new GridBagPanel();
+			systemOptionsPanel.setBorder(BorderFactory.createTitledBorder("System Options"));
+
+			//systemOptionsPanel.add(systemOptionsPanel, gridx, gridy, weightx, weighty, gridwidth, gridheight, GridBagConstraints.HORIZONTAL);
 			
-			// System Options
+			Function<Value.OnOff, SmallImages> iconSourceOnOff = v->{
+				if (v!=null)
+					switch (v) {
+					case Off: return SmallImages.IconOff;
+					case On : return SmallImages.IconOn;
+					}
+				return SmallImages.IconUnknown;
+			};
+			Function<Value.PowerState, SmallImages> iconSourcePowerState = v->{
+				if (v!=null)
+					switch (v) {
+					case Standby: return SmallImages.IconOff;
+					case On     : return SmallImages.IconOn;
+					}
+				return SmallImages.IconUnknown;
+			};
 			
 			// [Event_On]   PUT[P1]     System,Misc,Event,Notice = On
 			// [Event_Off]  PUT[P1]     System,Misc,Event,Notice = Off
 			// GET[G1]:                 System,Misc,Event,Notice   ->   "On" | "Off"
+			ValueButton<Value.OnOff> eventNoticeButton = new ValueButton<>(iconSourceOnOff,v->{
+				return v;
+			});
 			
 			// Network Update   [Network_Update]   Status   [Update_Status]   
 			// GET[G4]:    System,Misc,Update,Yamaha_Network_Site,Status   ->   "Available" | "Unavailable"
+			JTextField networkUpdateSiteField = new JTextField("Unavailable");
 			
+			addField(systemOptionsPanel,0,"Event Notice",eventNoticeButton);
+			addField(systemOptionsPanel,1,"Network Update Site",networkUpdateSiteField);
+			
+			JTextField networkNameField = new JTextField("");
+			addField(systemOptionsPanel,2,"Network Name",networkNameField,new JButton("Set"));
 			// PUT[P3]:    System,Misc,Network,Network_Name   =   Text: 1..15 (UTF-8)
 			// GET[G2]:    System,Misc,Network,Network_Name   ->   Text: 1..15 (UTF-8)
 			
+			addField(systemOptionsPanel,3,"System Power",new JButton("On"));
 			// [Power_On]        PUT[P2]     System,Power_Control,Power = On
 			// [Power_Standby]   PUT[P2]     System,Power_Control,Power = Standby
 			
+			addField(systemOptionsPanel,4,"Network Standby",new JButton("On"));
 			// [Net_Standby_On]   PUT[P4]     System,Misc,Network,Network_Standby = On
 			// [Net_Standby_Off]  PUT[P4]     System,Misc,Network,Network_Standby = Off
 			// GET[G3]:                       System,Misc,Network,Network_Standby   ->   "On" | "Off"
 			
+			addField(systemOptionsPanel,5,"DMC Control",new JButton("Disable"));
 			// [DMR_Off]  PUT[P5]     System,Misc,Network,DMC_Control = Disable
 			// [DMR_On]   PUT[P5]     System,Misc,Network,DMC_Control = Enable
 			// GET[G5]:               System,Misc,Network,DMC_Control   ->   "Disable" | "Enable"
 			
 			
-			// MainZone Setup
+			GridBagPanel mainZoneSetupPanel = new GridBagPanel();
+			mainZoneSetupPanel.setBorder(BorderFactory.createTitledBorder("MainZone Setup"));
 			
 			// [Power_On]        PUT[P1]     Main_Zone,Power_Control,Power = On
 			// [Power_Standby]   PUT[P1]     Main_Zone,Power_Control,Power = Standby
@@ -1112,8 +1148,56 @@ public class YamahaControl {
 			// GET[G1]:    Main_Zone,Basic_Status   ->   Sound_Video,HDMI,Standby_Through_Info -> "On" | "Off"
 			
 			// TODO Auto-generated method stub
-			JPanel panel = new JPanel();
-			return panel;
+			
+			//panel.add(systemOptionsPanel, gridx, gridy, weightx, weighty, gridwidth, gridheight, fill);
+			GridBagPanel panel = new GridBagPanel();
+			panel.add(systemOptionsPanel, 0,0, 1,1, 1,1, GridBagConstraints.BOTH);
+			panel.add(mainZoneSetupPanel, 0,1, 1,1, 1,1, GridBagConstraints.BOTH);
+			this.comps.add(systemOptionsPanel);
+			this.comps.add(mainZoneSetupPanel);
+			
+			JScrollPane scrollPane = new JScrollPane(panel);
+			scrollPane.setBorder(null);
+			return scrollPane;
+		}
+
+		private void addField(GridBagPanel panel, int rowIndex, String label, JComponent... comps) {
+			JLabel jLabel = new JLabel(label+": ",JLabel.RIGHT);
+			this.comps.add(jLabel);
+			panel.add(jLabel, 0,rowIndex, 0,0, 1,1, GridBagConstraints.HORIZONTAL);
+			for (int i=0; i<comps.length; ++i) {
+				this.comps.add(comps[i]);
+				panel.add(comps[i], i+1,rowIndex, 0,0, 1,1, GridBagConstraints.HORIZONTAL);
+			}
+		}
+		
+		private static class ValueButton<V extends Value> extends JButton {
+			private static final long serialVersionUID = -7733433597611049422L;
+			
+			private V value;
+			private Function<V, SmallImages> iconSource;
+			
+			ValueButton(Function<V,SmallImages> iconSource, Function<V,V> actionListener) {
+				this.iconSource = iconSource;
+				value = null;
+				addActionListener(e->{
+					value = actionListener.apply(value);
+					setTitle();
+					setIcon();
+				});
+				setTitle();
+				setIcon();
+			}
+
+			private void setIcon() {
+				setIcon(smallImages.get(iconSource.apply(value)));
+			}
+
+			private void setTitle() {
+				if (value==null) setText("???");
+				else setText(value.getLabel());
+			}
+			
 		}
 
 		@Override
@@ -1137,8 +1221,7 @@ public class YamahaControl {
 
 		@Override
 		public void setEnabledGUI(boolean enabled) {
-			// TODO Auto-generated method stub
-			
+			comps.forEach(c->c.setEnabled(enabled));
 		}
 	}
 	
