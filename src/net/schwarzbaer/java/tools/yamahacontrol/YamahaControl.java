@@ -1273,6 +1273,8 @@ public class YamahaControl {
 		
 		private class MainZoneSetup {
 			
+			private ValueButton<Value.PowerState> powerButton;
+
 			private GridBagPanel createPanel() {
 				
 				//panel.add(systemOptionsPanel, gridx, gridy, weightx, weighty, gridwidth, gridheight, fill);
@@ -1280,6 +1282,14 @@ public class YamahaControl {
 				// [Power_On]        PUT[P1]     Main_Zone,Power_Control,Power = On
 				// [Power_Standby]   PUT[P1]     Main_Zone,Power_Control,Power = Standby
 				// GET[G1]:    Main_Zone,Basic_Status   ->   Power_Control,Power -> "On" | "Standby"
+				powerButton = new ValueButton<>(ValueButton.IconSourcePowerState,v->{
+					Value.PowerState newValue = v==null?Value.PowerState.On:getNext(v, Value.PowerState.values());
+					device.mainZone.setPowerState(newValue);
+					device.update(EnumSet.of(UpdateWish.BasicStatus));
+					powerButton.setValue(device.mainZone.getPowerState());
+				});
+				powerButton.setMargin(new Insets(0,0,0,0));
+				powerButton.setHorizontalAlignment(SwingConstants.LEFT);
 				
 				// [Sleep_Last]      PUT[P23]     Main_Zone,Power_Control,Sleep = Last
 				// [Sleep_1]         PUT[P23]     Main_Zone,Power_Control,Sleep = 120 min
@@ -1324,6 +1334,7 @@ public class YamahaControl {
 				
 				GridBagPanel mainZoneSetupPanel = new GridBagPanel();
 				mainZoneSetupPanel.setBorder(BorderFactory.createTitledBorder("MainZone Setup"));
+				addField(mainZoneSetupPanel,0,"MainZone Power",powerButton);
 				
 				return mainZoneSetupPanel;
 			}
