@@ -57,7 +57,8 @@ public final class Device {
 		NetRadioPlayInfo, NetRadioListInfo, DLNAPlayInfo, DLNAListInfo,
 		USBListInfo, USBPlayInfo, IPodUSBListInfo, IPodUSBPlayInfo, IPodUSBMode,
 		AirPlayConfig, AirPlayPlayInfo, SpotifyPlayInfo,
-		TunerConfig, TunerPlayInfo, TunerPresets
+		TunerConfig, TunerPlayInfo, TunerPresets,
+		SystemPower
 	}
 	
 	public void update(EnumSet<UpdateWish> updateWishes) {
@@ -67,6 +68,7 @@ public final class Device {
 			case Inputs          : inputs.askInputs(); break;
 			case Scenes          : inputs.askScenes(); break;
 			case BasicStatus     : basicStatus = BasicStatus.parse(Ctrl.sendGetCommand_Node(address,KnownCommand.MainZone.GetBasicStatus  )); break;
+			case SystemPower     : system.updatePowerState(); break;
 			
 			case NetRadioListInfo: netRadio.listInfo.update(); break;
 			case NetRadioPlayInfo: netRadio.playInfo.update(); break;

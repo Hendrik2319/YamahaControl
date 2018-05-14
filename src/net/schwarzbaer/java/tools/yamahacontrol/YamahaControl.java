@@ -62,6 +62,7 @@ import javax.swing.JScrollPane;
 import javax.swing.JTabbedPane;
 import javax.swing.JTextField;
 import javax.swing.JToggleButton;
+import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
 import javax.swing.UnsupportedLookAndFeelException;
@@ -132,17 +133,33 @@ public class YamahaControl {
 	private Device device;
 	private Vector<GuiRegion> guiRegions;
 	private FrequentlyTask frequentlyUpdater;
+	private ValueButton<Value.OnOff> updateBtn;
+	private JLabel updateLabel;
 	
 	YamahaControl() {
 		mainWindow = null;
 		device = null;
 		guiRegions = new Vector<>();
 		frequentlyUpdater = new FrequentlyTask(2000,false,()->{
+			updateLabel.setIcon(smallImages.get(SmallImages.IconOn));
 			updateDevice(UpdateReason.Frequently);
-			SwingUtilities.invokeLater(()->guiRegions.forEach(gr->gr.frequentlyUpdate()));
+			SwingUtilities.invokeLater(()->{
+				guiRegions.forEach(gr->gr.frequentlyUpdate());
+				updateLabel.setIcon(smallImages.get(SmallImages.IconOff));
+			});
 		});
 	}
 	
+	private void startUpdater() {
+		updateBtn.setValue(Value.OnOff.On);
+		frequentlyUpdater.start();
+	}
+
+	private void stopUpdater() {
+		frequentlyUpdater.stop();
+		updateBtn.setValue(Value.OnOff.Off);
+	}
+
 	private void createGUI() {
 		
 		OnOffBtn onOffBtn = new OnOffBtn();
@@ -151,18 +168,34 @@ public class YamahaControl {
 		VolumeCtrl volumeCtrl = new VolumeCtrl();
 		guiRegions.add(volumeCtrl);
 		
+		updateBtn = new ValueButton<Value.OnOff>(ValueButton.IconSourceOnOff, v->{
+			if (v==null) v=Value.OnOff.Off;
+			switch (v) {
+			case Off: startUpdater(); break;
+			case On : stopUpdater (); break;
+			}
+		});
+		updateBtn.setMargin(new Insets(2,3,2,3));
+		updateBtn.setValue(Value.OnOff.Off);
+		updateLabel = new JLabel("Update GUI frequently:",smallImages.get(SmallImages.IconOff),JLabel.LEFT);
+		
+		GridBagPanel updatePanel = new GridBagPanel();
+		updatePanel.add(updateLabel, 0,0, 1,0, 1,1, GridBagConstraints.BOTH);
+		updatePanel.add(updateBtn, 1,0, 0,0, 1,1, GridBagConstraints.HORIZONTAL);
+		
 		GridBagPanel devicePanel = new GridBagPanel();
 		devicePanel.setBorder(BorderFactory.createTitledBorder("Device"));
 		devicePanel.add(createButton("Connect",e->connectToReciever(),true),1,1,GridBagConstraints.BOTH);
 		devicePanel.add(onOffBtn.button,1,GridBagConstraints.REMAINDER,GridBagConstraints.BOTH);
 		devicePanel.add(createButton("Open Command List",e->CommandList.openWindow(device==null?null:device.address),true),1,GridBagConstraints.REMAINDER,GridBagConstraints.BOTH);
+		devicePanel.add(updatePanel,1,GridBagConstraints.REMAINDER,GridBagConstraints.BOTH);
 		
 		JTabbedPane settingsPanel = new JTabbedPane();
 		settingsPanel.setBorder(BorderFactory.createTitledBorder("Settings"));
 		//settingsPanel.setPreferredSize(new Dimension(150,520));
-		new ScenesAndInputs()  .addTo(guiRegions, settingsPanel);
-		new RemoteCtrl().addTo(guiRegions, settingsPanel);
-		new Options()          .addTo(guiRegions, settingsPanel);
+		new ScenesAndInputs().addTo(guiRegions, settingsPanel);
+		new RemoteCtrl()     .addTo(guiRegions, settingsPanel);
+		new Options()        .addTo(guiRegions, settingsPanel);
 		
 		JPanel volumeControlPanel = volumeCtrl.createVolumeControlPanel(200);
 		volumeControlPanel.setBorder(BorderFactory.createTitledBorder("Volume"));
@@ -222,7 +255,7 @@ public class YamahaControl {
 			device = new Device(addr);
 			updateDevice(UpdateReason.Initial);
 			guiRegions.forEach(gr->gr.initGUIafterConnect(device));
-			frequentlyUpdater.start();
+			startUpdater();
 		}
 	}
 
@@ -233,6 +266,9 @@ public class YamahaControl {
 		private Runnable task;
 		private boolean isRunning;
 		private boolean skipFirstWait;
+		@SuppressWarnings("unused") private boolean isInTask;
+		private boolean isInWait;
+		private boolean isInLoop;
 
 		public FrequentlyTask(int interval_ms, boolean skipFirstWait, Runnable task) {
 			this.interval_ms = interval_ms;
@@ -240,38 +276,56 @@ public class YamahaControl {
 			this.task = task;
 			this.stop = false;
 			this.isRunning = false;
+			this.isInTask = false;
+			this.isInWait = false;
+			this.isInLoop = false;
 		}
-
+		
 		public boolean isRunning() {
 			return isRunning;
 		}
 
 		public void start() {
 			stop = false;
-			new Thread(this).start();
+			if (!isInLoop)
+				new Thread(this).start();
 		}
 
 		public void stop() {
 			stop = true;
-			notify();
+			if (isInWait)
+				synchronized (this) { notify(); }
 		}
 
 		@Override
 		public void run() {
 			isRunning = true;
 			synchronized (this) {
+				
 				if (skipFirstWait)
-					task.run();
+					runTask();
+				
 				while (!stop) {
+					isInLoop = true;
+					isInWait = true;
 					long startTime = System.currentTimeMillis();
 					while (!stop && System.currentTimeMillis()-startTime<interval_ms)
 						try { wait(interval_ms-(System.currentTimeMillis()-startTime)); }
 						catch (InterruptedException e) {}
+					isInWait = false;
 					
-					task.run();
+					if (!stop)
+						runTask();
+					isInLoop = false;
 				}
 			}
 			isRunning = false;
+		}
+
+		private void runTask() {
+			isInTask = true;
+			task.run();
+			isInTask = false;
 		}
 	
 	}
@@ -516,6 +570,50 @@ public class YamahaControl {
 			}
 			clearSelection();
 		}
+	}
+
+	static class ValueButton<V extends Value> extends JButton {
+		private static final long serialVersionUID = -7733433597611049422L;
+		
+		private V value;
+		private Function<V, SmallImages> iconSource;
+		
+		ValueButton(Function<V,SmallImages> iconSource, Consumer<V> actionListener) {
+			this.iconSource = iconSource;
+			addActionListener(e->actionListener.accept(value));
+			setValue(null);
+		}
+		
+		public void setValue(V value) {
+			this.value = value;
+			setText(this.value==null?"???":this.value.getLabel());
+			setIcon(smallImages.get(iconSource.apply(this.value)));
+		}
+		
+		static Function<Value.OnOff, SmallImages> IconSourceOnOff = v->{
+			if (v!=null)
+				switch (v) {
+				case Off: return SmallImages.IconOff;
+				case On : return SmallImages.IconOn;
+				}
+			return SmallImages.IconUnknown;
+		};
+		static Function<Value.PowerState, SmallImages> IconSourcePowerState = v->{
+			if (v!=null)
+				switch (v) {
+				case Standby: return SmallImages.IconOff;
+				case On     : return SmallImages.IconOn;
+				}
+			return SmallImages.IconUnknown;
+		};
+		static Function<Value.EnableDisable, SmallImages> IconSourceEnableDisable = v->{
+			if (v!=null)
+				switch (v) {
+				case Disable: return SmallImages.IconOff;
+				case Enable : return SmallImages.IconOn;
+				}
+			return SmallImages.IconUnknown;
+		};
 	}
 
 	enum UpdateReason { Initial, Frequently }
@@ -1059,40 +1157,18 @@ public class YamahaControl {
 
 			//systemOptionsPanel.add(systemOptionsPanel, gridx, gridy, weightx, weighty, gridwidth, gridheight, GridBagConstraints.HORIZONTAL);
 			
-			Function<Value.OnOff, SmallImages> iconSourceOnOff = v->{
-				if (v!=null)
-					switch (v) {
-					case Off: return SmallImages.IconOff;
-					case On : return SmallImages.IconOn;
-					}
-				return SmallImages.IconUnknown;
-			};
-			Function<Value.PowerState, SmallImages> iconSourcePowerState = v->{
-				if (v!=null)
-					switch (v) {
-					case Standby: return SmallImages.IconOff;
-					case On     : return SmallImages.IconOn;
-					}
-				return SmallImages.IconUnknown;
-			};
-			Function<Value.EnableDisable, SmallImages> iconSourceEnableDisable = v->{
-				if (v!=null)
-					switch (v) {
-					case Disable: return SmallImages.IconOff;
-					case Enable : return SmallImages.IconOn;
-					}
-				return SmallImages.IconUnknown;
-			};
 			
 			// [Event_On]   PUT[P1]     System,Misc,Event,Notice = On
 			// [Event_Off]  PUT[P1]     System,Misc,Event,Notice = Off
 			// GET[G1]:                 System,Misc,Event,Notice   ->   "On" | "Off"
-			eventNoticeButton = new ValueButton<>(iconSourceOnOff,v->{
+			eventNoticeButton = new ValueButton<>(ValueButton.IconSourceOnOff,v->{
 				Value.OnOff newValue = v==null?Value.OnOff.On:getNext(v, Value.OnOff.values());
 				device.system.setEventNotice(newValue);
 				device.system.updateEventNotice();
 				eventNoticeButton.setValue(device.system.eventNotice);
 			});
+			eventNoticeButton.setMargin(new Insets(0,0,0,0));
+			eventNoticeButton.setHorizontalAlignment(SwingConstants.LEFT);
 			
 			// Network Update   [Network_Update]   Status   [Update_Status]   
 			// GET[G4]:    System,Misc,Update,Yamaha_Network_Site,Status   ->   "Available" | "Unavailable"
@@ -1110,35 +1186,42 @@ public class YamahaControl {
 				}
 				updateNetworkNameField();
 			},true);
+			networkNameSetButton.setMargin(new Insets(0,0,0,0));
 			
 			// [Power_On]        PUT[P2]     System,Power_Control,Power = On
 			// [Power_Standby]   PUT[P2]     System,Power_Control,Power = Standby
-			systemPowerButton = new ValueButton<>(iconSourcePowerState,v->{
+			systemPowerButton = new ValueButton<>(ValueButton.IconSourcePowerState,v->{
 				Value.PowerState newValue = v==null?Value.PowerState.On:getNext(v, Value.PowerState.values());
 				device.system.setPowerState(newValue);
 				device.system.updatePowerState();
 				systemPowerButton.setValue(device.system.power);
 			});
+			systemPowerButton.setMargin(new Insets(0,0,0,0));
+			systemPowerButton.setHorizontalAlignment(SwingConstants.LEFT);
 			
 			// [Net_Standby_On]   PUT[P4]     System,Misc,Network,Network_Standby = On
 			// [Net_Standby_Off]  PUT[P4]     System,Misc,Network,Network_Standby = Off
 			// GET[G3]:                       System,Misc,Network,Network_Standby   ->   "On" | "Off"
-			networkStandbyButton = new ValueButton<>(iconSourceOnOff,v->{
+			networkStandbyButton = new ValueButton<>(ValueButton.IconSourceOnOff,v->{
 				Value.OnOff newValue = v==null?Value.OnOff.On:getNext(v, Value.OnOff.values());
 				device.system.setNetworkStandby(newValue);
 				device.system.updateNetworkStandby();
 				networkStandbyButton.setValue(device.system.networkStandby);
 			});
+			networkStandbyButton.setMargin(new Insets(0,0,0,0));
+			networkStandbyButton.setHorizontalAlignment(SwingConstants.LEFT);
 			
 			// [DMR_Off]  PUT[P5]     System,Misc,Network,DMC_Control = Disable
 			// [DMR_On]   PUT[P5]     System,Misc,Network,DMC_Control = Enable
 			// GET[G5]:               System,Misc,Network,DMC_Control   ->   "Disable" | "Enable"
-			dmcControlButton = new ValueButton<>(iconSourceEnableDisable,v->{
+			dmcControlButton = new ValueButton<>(ValueButton.IconSourceEnableDisable,v->{
 				Value.EnableDisable newValue = v==null?Value.EnableDisable.Enable:getNext(v, Value.EnableDisable.values());
 				device.system.setDmcControl(newValue);
 				device.system.updateDmcControl();
 				dmcControlButton.setValue(device.system.dmcControl);
 			});
+			dmcControlButton.setMargin(new Insets(0,0,0,0));
+			dmcControlButton.setHorizontalAlignment(SwingConstants.LEFT);
 			
 			JButton updateAllButton = createButton("Update All",e->{
 				device.system.update();
@@ -1212,6 +1295,7 @@ public class YamahaControl {
 			
 			JScrollPane scrollPane = new JScrollPane(panel);
 			scrollPane.setBorder(null);
+			scrollPane.setPreferredSize(new Dimension(150,200));
 			return scrollPane;
 		}
 
@@ -1242,28 +1326,17 @@ public class YamahaControl {
 			}
 		}
 		
-		private static class ValueButton<V extends Value> extends JButton {
-			private static final long serialVersionUID = -7733433597611049422L;
-			
-			private V value;
-			private Function<V, SmallImages> iconSource;
-			
-			ValueButton(Function<V,SmallImages> iconSource, Consumer<V> actionListener) {
-				this.iconSource = iconSource;
-				addActionListener(e->actionListener.accept(value));
-				setValue(null);
-			}
-			
-			public void setValue(V value) {
-				this.value = value;
-				setText(this.value==null?"???":this.value.getLabel());
-				setIcon(smallImages.get(iconSource.apply(this.value)));
-			}
-		}
-
 		@Override
 		public EnumSet<UpdateWish> getUpdateWishes(UpdateReason reason) {
 			EnumSet<UpdateWish> wishes = EnumSet.noneOf(UpdateWish.class);
+			switch (reason) {
+			case Initial:
+				wishes.add(UpdateWish.SystemPower);
+				break;
+			case Frequently:
+				wishes.add(UpdateWish.SystemPower);
+				break;
+			}
 			// TODO Auto-generated method stub
 			return wishes;
 		}
@@ -1278,8 +1351,7 @@ public class YamahaControl {
 
 		@Override
 		public void frequentlyUpdate() {
-			// TODO Auto-generated method stub
-			
+			updateSystemOptions();
 		}
 
 		@Override
