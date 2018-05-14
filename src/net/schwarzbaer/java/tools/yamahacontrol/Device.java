@@ -18,8 +18,11 @@ public final class Device {
 	
 	String address;
 	private BasicStatus basicStatus;
-
-	Inputs inputs;
+	
+	Volume     volume;
+	MainZone   mainZone;
+	SystemOptions system;
+	Inputs     inputs;
 	RemoteCtrl remoteCtrl;
 
 	NetRadio netRadio;
@@ -34,8 +37,11 @@ public final class Device {
 		this.address = address;
 		this.basicStatus = null;
 		
+		this.volume     = new Volume    (this);
+		this.mainZone   = new MainZone  (this);
 		this.inputs     = new Inputs    (this);
 		this.remoteCtrl = new RemoteCtrl(this.address);
+		this.system     = new SystemOptions(this.address);
 		
 		this.netRadio = new NetRadio(this.address);
 		this.usb      = new USB     (this.address);
@@ -60,7 +66,7 @@ public final class Device {
 			switch (uw) {
 			case Inputs          : inputs.askInputs(); break;
 			case Scenes          : inputs.askScenes(); break;
-			case BasicStatus     : basicStatus = BasicStatus.parse(Ctrl.sendGetCommand_Node(address,KnownCommand.General.GetBasicStatus  )); break;
+			case BasicStatus     : basicStatus = BasicStatus.parse(Ctrl.sendGetCommand_Node(address,KnownCommand.MainZone.GetBasicStatus  )); break;
 			
 			case NetRadioListInfo: netRadio.listInfo.update(); break;
 			case NetRadioPlayInfo: netRadio.playInfo.update(); break;
@@ -88,9 +94,19 @@ public final class Device {
 	}
 	
 	public <T extends Value> T askValue(KnownCommand knownCommand, T[] values, String... tagList) {
+		return askValue(address,knownCommand, values, tagList);
+	}
+	
+	public static <T extends Value> T askValue(String address, KnownCommand knownCommand, T[] values, String... tagList) {
 		Node node = Ctrl.sendGetCommand_Node(address,knownCommand);
 		if (node==null) return null;
 		return XML.getSubValue(node,values,tagList);
+	}
+	
+	public static String askValue(String address, KnownCommand knownCommand, String... tagList) {
+		Node node = Ctrl.sendGetCommand_Node(address,knownCommand);
+		if (node==null) return null;
+		return XML.getSubValue(node,tagList);
 	}
 
 	private static class BasicStatus {
@@ -134,55 +150,162 @@ public final class Device {
 			return status;
 		}
 	}
+	
+	static class Volume {
 
-	public NumberWithUnit getVolume() {
-		if (basicStatus==null) return null;
-		return basicStatus.volume;
-	}
-
-	public void setVolume(double value) {
-		if (basicStatus==null) return;
-		if (basicStatus.volume==null) return;
+		private Device device;
 		
-		int currentValue = (int)Math.round(basicStatus.volume.getValue()*2);
-		int newValue     = (int)Math.round(value*2);
-		if (newValue!=currentValue) {
-			// Value 0:   Val = Number: -805..(5)..165
-			// Value 1:   Exp = "1"
-			// Value 2:   Unit = "dB"
-			//String xmlStr = NumberWithUnit.createXML(newValue/2.0,1,"dB");
-			basicStatus.volume.setValue(newValue/2.0f);
-			String xmlStr = basicStatus.volume.createXML();
-			int rc = Ctrl.sendPutCommand(address,KnownCommand.General.SetVolume,xmlStr);
-			if (rc!=Ctrl.RC_OK && rc!=Ctrl.RC_DEVICE_IN_STANDBY)
-				Log.error(getClass(), "setVolume(%f)-> %s %s -> RC:%d", value, KnownCommand.General.SetVolume.tagList, xmlStr, rc);
+		public Volume(Device device) {
+			this.device = device;
+		}
+
+		public NumberWithUnit getVolume() {
+			if (device.basicStatus==null) return null;
+			return device.basicStatus.volume;
+		}
+
+		public void setVolume(double value) {
+			if (device.basicStatus==null) return;
+			if (device.basicStatus.volume==null) return;
+			
+			int currentValue = (int)Math.round(device.basicStatus.volume.getValue()*2);
+			int newValue     = (int)Math.round(value*2);
+			if (newValue!=currentValue) {
+				// Value 0:   Val = Number: -805..(5)..165
+				// Value 1:   Exp = "1"
+				// Value 2:   Unit = "dB"
+				//String xmlStr = NumberWithUnit.createXML(newValue/2.0,1,"dB");
+				device.basicStatus.volume.setValue(newValue/2.0f);
+				String xmlStr = device.basicStatus.volume.createXML();
+				int rc = Ctrl.sendPutCommand(device.address,KnownCommand.MainZone.SetVolume,xmlStr);
+				if (rc!=Ctrl.RC_OK && rc!=Ctrl.RC_DEVICE_IN_STANDBY)
+					Log.error(getClass(), "setVolume(%f)-> %s %s -> RC:%d", value, KnownCommand.MainZone.SetVolume.tagList, xmlStr, rc);
+			}
+		}
+		// Value 0:   Val = Number: -805..(5)..165
+		public static final double MinVolume = -80.5;
+		public static final double MaxVolume =  16.5;
+
+		public Value.OnOff getMute() {
+			if (device.basicStatus==null) return null;
+			return device.basicStatus.volMute;
+		}
+		public void setMute(Value.OnOff volMute) {
+			// [Vol_Mute_On]    PUT[P3]     Main_Zone,Volume,Mute = On
+			// [Vol_Mute_Off]   PUT[P3]     Main_Zone,Volume,Mute = Off
+			Device.sendCommand(getClass(), device.address, "setMute", KnownCommand.MainZone.SetVolumeMute, volMute);
 		}
 	}
-	// Value 0:   Val = Number: -805..(5)..165
-	public static double getMinVolume() { return -80.5; }
-	public static double getMaxVolume() { return  16.5; }
+	
+	static class SystemOptions {
 
-	public Value.OnOff getMute() {
-		if (basicStatus==null) return null;
-		return basicStatus.volMute;
-	}
-	public void setMute(Value.OnOff volMute) {
-		// [Vol_Mute_On]        PUT[P3]     Main_Zone,Volume,Mute = On
-		// [Vol_Mute_Off]        PUT[P3]     Main_Zone,Volume,Mute = Off
-		Device.sendCommand(getClass(), address, "setMute", KnownCommand.General.SetVolumeMute, volMute);
+		private String address;
+		
+		Value.OnOff         eventNotice;
+		Value.AvailableUnavailable yamahaNetworkSiteStatus;
+		String              networkName;
+		Value.PowerState    power;
+		Value.OnOff         networkStandby;
+		Value.EnableDisable dmcControl;
+
+		public SystemOptions(String address) {
+			this.address = address;
+			clearValues();
+		}
+		
+		private void clearValues() {
+			eventNotice = null;
+			yamahaNetworkSiteStatus = null;
+			networkName = null;
+			power = null;
+			networkStandby = null;
+			dmcControl = null;
+		}
+		
+		void update() {
+			clearValues();
+			updateEventNotice();
+			updateYamahaNetworkSiteStatus();
+			updateNetworkName();
+			updatePowerState();
+			updateNetworkStandby();
+			updateDmcControl();
+		}
+		
+		void setEventNotice(Value.OnOff value) {
+			// [Event_On]   PUT[P1]     System,Misc,Event,Notice = On
+			// [Event_Off]  PUT[P1]     System,Misc,Event,Notice = Off
+			Device.sendCommand(getClass(), address, "setEventNotice", KnownCommand.SystemOptions.GetNSetEventNotice, value);
+		}
+		void updateEventNotice() {
+			// GET[G1]:                 System,Misc,Event,Notice   ->   "On" | "Off"
+			eventNotice = askValue(address, KnownCommand.SystemOptions.GetNSetEventNotice, Value.OnOff.values());
+		}
+		
+		void updateYamahaNetworkSiteStatus() {
+			// Network Update   [Network_Update]   Status   [Update_Status]   
+			// GET[G4]:    System,Misc,Update,Yamaha_Network_Site,Status   ->   "Available" | "Unavailable"
+			yamahaNetworkSiteStatus = askValue(address, KnownCommand.SystemOptions.GetYamahaNetworkSiteStatus, Value.AvailableUnavailable.values());
+		}
+		
+		void setNetworkName(String value) {
+			// PUT[P3]:    System,Misc,Network,Network_Name   =   Text: 1..15 (UTF-8)
+			Device.sendCommand(getClass(), address, "setNetworkName", KnownCommand.SystemOptions.GetNSetNetworkName, value);
+		}
+		void updateNetworkName() {
+			// GET[G2]:    System,Misc,Network,Network_Name   ->   Text: 1..15 (UTF-8)
+			networkName = askValue(address, KnownCommand.SystemOptions.GetNSetNetworkName);
+		}
+
+		void setPowerState(Value.PowerState value) {
+			// [Power_On]        PUT[P2]     System,Power_Control,Power = On
+			// [Power_Standby]   PUT[P2]     System,Power_Control,Power = Standby
+			Device.sendCommand(getClass(), address, "setPower", KnownCommand.SystemOptions.GetNSetPower, value);
+		}
+		void updatePowerState() {
+			power = askValue(address, KnownCommand.SystemOptions.GetNSetPower, Value.PowerState.values());
+		}
+
+		void setNetworkStandby(Value.OnOff value) {
+			// [Net_Standby_On]   PUT[P4]     System,Misc,Network,Network_Standby = On
+			// [Net_Standby_Off]  PUT[P4]     System,Misc,Network,Network_Standby = Off
+			Device.sendCommand(getClass(), address, "setNetworkStandby", KnownCommand.SystemOptions.GetNSetNetworkStandby, value);
+		}
+		void updateNetworkStandby() {
+			// GET[G3]:                       System,Misc,Network,Network_Standby   ->   "On" | "Off"
+			networkStandby = askValue(address, KnownCommand.SystemOptions.GetNSetNetworkStandby, Value.OnOff.values());
+		}
+
+		void setDmcControl(Value.EnableDisable value) {
+			// [DMR_Off]  PUT[P5]     System,Misc,Network,DMC_Control = Disable
+			// [DMR_On]   PUT[P5]     System,Misc,Network,DMC_Control = Enable
+			Device.sendCommand(getClass(), address, "setNetworkStandby", KnownCommand.SystemOptions.GetNSetDmcControl, value);
+		}
+		void updateDmcControl() {
+			// GET[G5]:               System,Misc,Network,DMC_Control   ->   "Disable" | "Enable"
+			dmcControl = askValue(address, KnownCommand.SystemOptions.GetNSetDmcControl, Value.EnableDisable.values());
+		}
 	}
 	
-	public Value.PowerState getPowerState() {
-		if (basicStatus==null) return null;
-		return basicStatus.power;
+	static class MainZone {
+
+		private Device device;
+
+		public MainZone(Device device) {
+			this.device = device;
+		}
+		
+		public Value.PowerState getPowerState() {
+			if (device.basicStatus==null) return null;
+			return device.basicStatus.power;
+		}
+		
+		public void setPowerState(Value.PowerState power) {
+			// [Power_On]        PUT[P1]     Main_Zone,Power_Control,Power = On
+			// [Power_Standby]   PUT[P1]     Main_Zone,Power_Control,Power = Standby
+			Device.sendCommand(getClass(), device.address, "setPowerState", KnownCommand.MainZone.SetPower, power);
+		}
 	}
-	
-	public void setPowerState(Value.PowerState power) {
-		// System,Power_Control,Power = On
-		// System,Power_Control,Power = Standby
-		Device.sendCommand(getClass(), address, "setPowerState", KnownCommand.General.GetNSetSystemPower, power);
-	}
-	
 	
 	
 	static class RemoteCtrl {
@@ -225,17 +348,17 @@ public final class Device {
 
 		public boolean hasScenes() { return scenes!=null; }
 		public boolean hasInputs() { return inputs!=null; }
-		public void askScenes() { scenes = getSceneInput(KnownCommand.General.GetSceneItems); }
-		public void askInputs() { inputs = getSceneInput(KnownCommand.General.GetInputItems); }
+		public void askScenes() { scenes = getSceneInput(KnownCommand.MainZone.GetSceneItems); }
+		public void askInputs() { inputs = getSceneInput(KnownCommand.MainZone.GetInputItems); }
 		public DeviceSceneInput[] getScenes() { return scenes; }
 		public DeviceSceneInput[] getInputs() { return inputs; }
 		public void setScene(DeviceSceneInput dsi) {
 			// PUT[P6]:    Main_Zone,Scene,Scene_Sel   =   Values [GET[G4]:Main_Zone,Scene,Scene_Sel_Item]
-			Device.sendCommand(getClass(), device.address, "setScene", KnownCommand.General.SetCurrentScene, dsi.ID);
+			Device.sendCommand(getClass(), device.address, "setScene", KnownCommand.MainZone.SetCurrentScene, dsi.ID);
 		}
 		public void setInput(DeviceSceneInput dsi) {
 			// PUT[P4]:    Main_Zone,Input,Input_Sel   =   Values [GET[G2]:Main_Zone,Input,Input_Sel_Item]
-			Device.sendCommand(getClass(), device.address, "setInput", KnownCommand.General.SetCurrentInput, dsi.ID);
+			Device.sendCommand(getClass(), device.address, "setInput", KnownCommand.MainZone.SetCurrentInput, dsi.ID);
 		}
 
 		public DeviceSceneInput findInput(String inputID) {
@@ -302,23 +425,50 @@ public final class Device {
 		public TagList getTagList();
 		public String toFullString();
 		
-		enum General implements KnownCommand {
-			GetSceneItems("Main_Zone,Scene,Scene_Sel_Item"), // G4: Main_Zone,Scene,Scene_Sel_Item
-			GetInputItems("Main_Zone,Input,Input_Sel_Item"), // G2: Main_Zone,Input,Input_Sel_Item
-			GetNSetSystemPower("System,Power_Control,Power"),
-			SetCurrentScene("Main_Zone,Scene,Scene_Sel"),
-			SetCurrentInput("Main_Zone,Input,Input_Sel"),
-			GetBasicStatus ("Main_Zone,Basic_Status"),
-			SetVolume      ("Main_Zone,Volume,Lvl" ), // P2: Main_Zone,Volume,Lvl
-			SetVolumeMute  ("Main_Zone,Volume,Mute"), // P3: Main_Zone,Volume,Mute
+		enum MainZone implements KnownCommand {
+			SetPower       ("Main_Zone,Power_Control,Power"), // P1:  Main_Zone,Power_Control,Power 
+			SetVolume      ("Main_Zone,Volume,Lvl"         ), // P2:  Main_Zone,Volume,Lvl
+			SetVolumeMute  ("Main_Zone,Volume,Mute"        ), // P3:  Main_Zone,Volume,Mute
+			SetCurrentInput("Main_Zone,Input,Input_Sel"    ), // P4:  Main_Zone,Input,Input_Sel
+			SetCurrentScene("Main_Zone,Scene,Scene_Sel"    ), // P6:  Main_Zone,Scene,Scene_Sel
+			SetBass        ("Main_Zone,Sound_Video,Tone,Bass"      ), // P7:  Main_Zone,Sound_Video,Tone,Bass
+			SetTreble      ("Main_Zone,Sound_Video,Tone,Treble"    ), // P8:  Main_Zone,Sound_Video,Tone,Treble
+			SetSurroundProgram ("Main_Zone,Surround,Program_Sel,Current,Sound_Program"), // P9:  Main_Zone,Surround,Program_Sel,Current,Sound_Program
+			SetSurroundStraight("Main_Zone,Surround,Program_Sel,Current,Straight"     ), // P10: Main_Zone,Surround,Program_Sel,Current,Straight
+			SetSurroundEnhancer("Main_Zone,Surround,Program_Sel,Current,Enhancer"     ), // P11: Main_Zone,Surround,Program_Sel,Current,Enhancer
+			SetAdaptiveDRC ("Main_Zone,Sound_Video,Adaptive_DRC"   ), // P12: Main_Zone,Sound_Video,Adaptive_DRC
+			Set3DCinemaDSP ("Main_Zone,Surround,_3D_Cinema_DSP"    ), // P13: Main_Zone,Surround,_3D_Cinema_DSP
+			SetDirectMode  ("Main_Zone,Sound_Video,Direct,Mode"    ), // P17: Main_Zone,Sound_Video,Direct,Mode
+//			-> SetCursorSelExt("Main_Zone,Cursor_Control,Cursor"   ), // P18: Main_Zone,Cursor_Control,Cursor
+//			-> MenuControl ("Main_Zone,Cursor_Control,Menu_Control"), // P19: Main_Zone,Cursor_Control,Menu_Control
+			SetSleep       ("Main_Zone,Power_Control,Sleep"        ), // P23: Main_Zone,Power_Control,Sleep
+//			-> SetPlayback ("Main_Zone,Play_Control,Playback"      ), // P24: Main_Zone,Play_Control,Playback
+			
+			GetBasicStatus ("Main_Zone,Basic_Status"        ), // G1: Main_Zone,Basic_Status
+			GetInputItems  ("Main_Zone,Input,Input_Sel_Item"), // G2: Main_Zone,Input,Input_Sel_Item
+			GetSceneItems  ("Main_Zone,Scene,Scene_Sel_Item"), // G4: Main_Zone,Scene,Scene_Sel_Item
 			;
 			
 			final private TagList tagList;
-			General(String tagListStr) { tagList = new TagList(tagListStr); }
+			MainZone(String tagListStr) { tagList = new TagList(tagListStr); }
 			@Override public TagList getTagList() { return tagList; }
 			@Override public String toFullString() { return "KnownCommand."+getClass().getSimpleName()+"."+toString(); }
 		}
 		
+		enum SystemOptions implements KnownCommand {
+			GetNSetEventNotice         ("System,Misc,Event,Notice"                     ), // P1: System,Misc,Event,Notice             // G1: System,Misc,Event,Notice
+			GetNSetPower               ("System,Power_Control,Power"                   ), // P2: System,Power_Control,Power
+			GetNSetNetworkName         ("System,Misc,Network,Network_Name"             ), // P3: System,Misc,Network,Network_Name     // G2: System,Misc,Network,Network_Name
+			GetNSetNetworkStandby      ("System,Misc,Network,Network_Standby"          ), // P4: System,Misc,Network,Network_Standby  // G3: System,Misc,Network,Network_Standby
+			GetNSetDmcControl          ("System,Misc,Network,DMC_Control"              ), // P5: System,Misc,Network,DMC_Control      // G5: System,Misc,Network,DMC_Control
+			GetYamahaNetworkSiteStatus ("System,Misc,Update,Yamaha_Network_Site,Status"), // G4: System,Misc,Update,Yamaha_Network_Site,Status
+			;
+			final private TagList tagList;
+			SystemOptions(String tagListStr) { tagList = new TagList(tagListStr); }
+			@Override public TagList getTagList() { return tagList; }
+			@Override public String toFullString() { return "KnownCommand."+getClass().getSimpleName()+"."+toString(); }
+		}
+
 		enum MenuControl implements KnownCommand {
 			MainZone("Main_Zone,Cursor_Control,Menu_Control"), // P19: Main_Zone,Cursor_Control,Menu_Control
 			;
@@ -329,6 +479,7 @@ public final class Device {
 		}
 		
 		enum Config implements KnownCommand {
+			MainZone("Main_Zone,Config"),
 			NetRadio("NET_RADIO,Config"),
 			USB     (      "USB,Config"),
 			DLNA    (   "SERVER,Config"),
@@ -478,13 +629,21 @@ public final class Device {
 			@Override public String toFullString() { return "KnownCommand."+getClass().getSimpleName()+"."+toString(); }
 		}
 		
-		enum Special implements KnownCommand {
+		enum Presets implements KnownCommand {
 			GetUSBPresets       (     "USB,Play_Control,Preset,Preset_Sel_Item"), // G4: USB,Play_Control,Preset,Preset_Sel_Item
 			SetUSBSelectPreset  (     "USB,Play_Control,Preset,Preset_Sel"     ), // P4: USB,Play_Control,Preset,Preset_Sel
 			GetDLNAPresets      (  "SERVER,Play_Control,Preset,Preset_Sel_Item"), // G4: SERVER,Play_Control,Preset,Preset_Sel_Item
 			SetDLNASelectPreset (  "SERVER,Play_Control,Preset,Preset_Sel"     ), // P4: SERVER,Play_Control,Preset,Preset_Sel
 			GetTunerPresets     (   "Tuner,Play_Control,Preset,Preset_Sel_Item"), // G3: Tuner,Play_Control,Preset,Preset_Sel_Item
 			SetTunerSelectPreset(   "Tuner,Play_Control,Preset,Preset_Sel"     ), // P2: Tuner,Play_Control,Preset,Preset_Sel
+			;
+			final private TagList tagList;
+			Presets(String tagListStr) { tagList = new TagList(tagListStr); }
+			@Override public TagList getTagList() { return tagList; }
+			@Override public String toFullString() { return "KnownCommand."+getClass().getSimpleName()+"."+toString(); }
+		}
+		
+		enum Special implements KnownCommand {
 			SetIPodUSBMode      ("iPod_USB,Play_Control,iPod_Mode"             ), // P10: iPod_USB,Play_Control,iPod_Mode
 			;
 			final private TagList tagList;
@@ -499,18 +658,21 @@ public final class Device {
 
 		public String getLabel();
 		
-		public enum OnOff            implements Value { On, Off           ; @Override public String getLabel() { return toString(); }  } 
-		public enum PowerState       implements Value { On, Standby       ; @Override public String getLabel() { return toString(); }  }
-		public enum PlayStop         implements Value { Play, Stop        ; @Override public String getLabel() { return toString(); }  }
-		public enum PlayPauseStop    implements Value { Play, Pause, Stop ; @Override public String getLabel() { return toString(); }  }
-		public enum AlbumCoverFormat implements Value { BMP, YMF          ; @Override public String getLabel() { return toString(); }  }
-		public enum ReadyOrBusy      implements Value { Ready, Busy       ; @Override public String getLabel() { return toString(); }  }
-		public enum OffOneAll        implements Value { Off, One, All     ; @Override public String getLabel() { return toString(); }  } 
-		public enum ShuffleIPod      implements Value { Off, Songs, Albums; @Override public String getLabel() { return toString(); }  } 
-		public enum IPodMode         implements Value { Normal, Extended  ; @Override public String getLabel() { return toString(); }  }
-		public enum NegateAssert     implements Value { Negate, Assert    ; @Override public String getLabel() { return toString(); }  }
-		public enum AmFm             implements Value { AM, FM            ; @Override public String getLabel() { return toString(); }  }
-		public enum UpDown           implements Value { Up, Down          ; @Override public String getLabel() { return toString(); }  }
+		public enum EnableDisable        implements Value { Enable, Disable       ; @Override public String getLabel() { return toString(); }  } 
+		public enum OnOff                implements Value { On, Off               ; @Override public String getLabel() { return toString(); }  } 
+		public enum PowerState           implements Value { On, Standby           ; @Override public String getLabel() { return toString(); }  }
+		public enum PlayStop             implements Value { Play, Stop            ; @Override public String getLabel() { return toString(); }  }
+		public enum PlayPauseStop        implements Value { Play, Pause, Stop     ; @Override public String getLabel() { return toString(); }  }
+		public enum AlbumCoverFormat     implements Value { BMP, YMF              ; @Override public String getLabel() { return toString(); }  }
+		public enum ReadyOrBusy          implements Value { Ready, Busy           ; @Override public String getLabel() { return toString(); }  }
+		public enum OffOneAll            implements Value { Off, One, All         ; @Override public String getLabel() { return toString(); }  } 
+		public enum ShuffleIPod          implements Value { Off, Songs, Albums    ; @Override public String getLabel() { return toString(); }  } 
+		public enum IPodMode             implements Value { Normal, Extended      ; @Override public String getLabel() { return toString(); }  }
+		public enum NegateAssert         implements Value { Negate, Assert        ; @Override public String getLabel() { return toString(); }  }
+		public enum AmFm                 implements Value { AM, FM                ; @Override public String getLabel() { return toString(); }  }
+		public enum UpDown               implements Value { Up, Down              ; @Override public String getLabel() { return toString(); }  }
+		public enum AvailableUnavailable implements Value { Available, Unavailable; @Override public String getLabel() { return toString(); }  }
+		
 		
 		public enum FreqAutoTP implements Value {
 			AutoUp("Auto Up"),AutoDown("Auto Down"),TPUp("TP Up"),TPDown("TP Down");
@@ -782,7 +944,7 @@ public final class Device {
 		public Tuner(String address) {
 			this.address = address;
 			this.config   = new Config        (         address, KnownCommand.Config.Tuner);
-			this.playInfo = new PlayInfo_Tuner("Tuner", address, KnownCommand.GetPlayInfo.Tuner, KnownCommand.Special.GetTunerPresets);
+			this.playInfo = new PlayInfo_Tuner("Tuner", address, KnownCommand.GetPlayInfo.Tuner, KnownCommand.Presets.GetTunerPresets);
 		}
 
 		public void setScanAM(Value.ScanFreq value) {
@@ -841,13 +1003,13 @@ public final class Device {
 			// [Plus_1]        PUT[P2]     Tuner,Play_Control,Preset,Preset_Sel = Up
 			// [Minus_1]       PUT[P2]     Tuner,Play_Control,Preset,Preset_Sel = Down
 			if (value!=null)
-				sendCommand(getClass(), address, "setPreset", KnownCommand.Special.SetTunerSelectPreset, value.getLabel());
+				sendCommand(getClass(), address, "setPreset", KnownCommand.Presets.SetTunerSelectPreset, value.getLabel());
 		}
 
 		public void setPreset(PlayInfo_Tuner.Preset preset) {
 			// PUT[P2]:    Tuner,Play_Control,Preset,Preset_Sel   =   Values [GET[G3]:Tuner,Play_Control,Preset,Preset_Sel_Item]
 			if (preset!=null)
-				sendCommand(getClass(), address, "setPreset", KnownCommand.Special.SetTunerSelectPreset, preset.ID);
+				sendCommand(getClass(), address, "setPreset", KnownCommand.Presets.SetTunerSelectPreset, preset.ID);
 			//new Throwable().printStackTrace();
 		}
 	

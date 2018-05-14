@@ -14,6 +14,7 @@ import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.Map.Entry;
 import java.util.Vector;
+import java.util.function.BiConsumer;
 import java.util.function.Predicate;
 
 import javax.swing.BorderFactory;
@@ -106,11 +107,17 @@ public class CommandList {
 		NodeFunction(node->(node!=null)),
 		PutCommand    (node->(node instanceof ParsedTreeNode_Exp.CallablePutCommandNode)),
 		GetCommand    (node->(node instanceof ParsedTreeNode_Exp.CallableGetCommandNode)),
-		GetCommandSave(node->(node instanceof ParsedTreeNode_Exp.CallableGetCommandNode));
+		GetCommandSave(node->(node instanceof ParsedTreeNode_Exp.CallableGetCommandNode)),
+		MenuWithCommandList(node->isNodeWithCommandList(node)),
+		;
 		
 		private Predicate<Object> checkClickedNode;
 		ContextMenuItemType( Predicate<Object> checkClickedNode ) {
 			this.checkClickedNode = checkClickedNode;
+		}
+		private static boolean isNodeWithCommandList(Object node) {
+			if (!(node instanceof ParsedTreeNode_Exp.MenuNode)) return false;
+			return ((ParsedTreeNode_Exp.MenuNode)node).cmdListNode!=null;
 		}
 	}
 	
@@ -178,6 +185,8 @@ public class CommandList {
 		contextMenu.add(ContextMenuItemType.GetCommand    , "Test Get Command", e->testCommand(contextMenu.getClickedTreeNode(),false));
 		contextMenu.add(ContextMenuItemType.GetCommandSave, "Test Get Command (Save Response)", e->testCommand(contextMenu.getClickedTreeNode(),true));
 		contextMenu.add(ContextMenuItemType.PutCommand    , "Test Put Command", e->testCommand(contextMenu.getClickedTreeNode(),false));
+		contextMenu.addSeparator();
+		contextMenu.add(ContextMenuItemType.MenuWithCommandList, "Show Command Usage", e->showCommandUsage(contextMenu.getClickedTreeNode()));
 
 		selectedTreeViewType = TreeViewType.Parsed;
 		JComboBox<TreeViewType> treeViewTypeComboBox = YamahaControl.createComboBox(TreeViewType.values(),null);
@@ -207,12 +216,21 @@ public class CommandList {
 		contentPane.add(northPanel,BorderLayout.NORTH);
 		contentPane.add(treeScrollPane,BorderLayout.CENTER);
 		
-		mainWindow = new JFrame("YamahaControl - CommandList");
+		mainWindow = new JFrame("CommandList");
 		mainWindow.setContentPane(contentPane);
 		mainWindow.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 		mainWindow.pack();
 		mainWindow.setLocationRelativeTo(null);
 		mainWindow.setVisible(true);
+	}
+
+	private void showCommandUsage(Object clickedTreeNode) {
+		if (!(clickedTreeNode instanceof ParsedTreeNode_Exp.MenuNode)) return;
+		ParsedTreeNode_Exp.BaseCommandListNode cmdListNode = ((ParsedTreeNode_Exp.MenuNode)clickedTreeNode).cmdListNode;
+		if (cmdListNode==null) return;
+		
+		expandBranch();
+		cmdListNode.showUsageInCommands(treeModel,true);
 	}
 
 	private void testCommand(Object clickedTreeNode, boolean saveResponse) {
@@ -712,6 +730,10 @@ public class CommandList {
 				cmdNode.used = true;
 				return cmdNode.tagList;
 			}
+
+			public void forEach(BiConsumer<? super String, ? super BaseCommandDefineNode> consumer) {
+				commandNodes.forEach(consumer);
+			}
 		}
 		
 		private static class BaseCommandListNode extends ElementNode {
@@ -723,6 +745,14 @@ public class CommandList {
 				this.commands = null;
 				parseAttributes((attrName, attrValue) -> false);
 				createChildren();
+			}
+
+			public void showUsageInCommands(DefaultTreeModel treeModel, boolean enable) {
+				if (commands == null) return;
+				commands.forEach((key,node)->{
+					node.showUsage(enable);
+					treeModel.nodeChanged(node);
+				});
 			}
 
 			@Override public String toString() { return "Command List"; }
@@ -762,15 +792,17 @@ public class CommandList {
 
 		private static class BaseCommandDefineNode extends ElementNode implements CallableGetCommandNode {
 		
-			@SuppressWarnings("unused") public boolean used;
 			public String id;
 			public TagList tagList;
+			private boolean showUsage;
+			public boolean used;
 
 			public BaseCommandDefineNode(ParsedTreeNode_Exp parent, Element node) {
 				super(parent,node, ParsedTreeIcon.Command_GET);
 				this.id = null;
 				this.tagList = null;
 				this.used = false;
+				this.showUsage = false;
 				
 				// <Define ID="P7">command</Define>
 				parseAttributes((attrName, attrValue) -> { if ("ID".equals(attrName)) { id=attrValue; return true; } return false; });
@@ -789,7 +821,11 @@ public class CommandList {
 				tagList = new TagList(tagListStr);
 			}
 			
-			@Override public String toString() { return String.format("%s%s: %s", ""/*used?"":"[unused] "*/, id, tagList); }
+			public void showUsage(boolean showUsage) {
+				this.showUsage = showUsage;
+			}
+
+			@Override public String toString() { return String.format("%s%s: %s", !showUsage||used?"":"[unused] ", id, tagList); }
 			@Override protected void createChildren() { throw new UnsupportedOperationException("Calling CommandNode.createChildren() is not allowed."); }
 
 			@Override
