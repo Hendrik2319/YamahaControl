@@ -1136,157 +1136,212 @@ public class YamahaControl {
 
 		private Vector<JComponent> comps;
 		private Device device;
+		private SystemOptions systemOptions;
+		private MainZoneSetup mainZoneSetup;
 		
-		private ValueButton<Value.OnOff> eventNoticeButton;
-		private JTextField networkUpdateSiteField;
-		private JTextField networkNameField;
-		private ValueButton<Value.PowerState> systemPowerButton;
-		private ValueButton<Value.OnOff> networkStandbyButton;
-		private ValueButton<Value.EnableDisable> dmcControlButton;
 		
 		Options() {
 			super("Options");
 			device = null;
 			comps = new Vector<>();
+			systemOptions = null;
 		}
+		
+		private class SystemOptions {
+			private ValueButton<Value.OnOff> eventNoticeButton;
+			private JTextField networkUpdateSiteField;
+			private JTextField networkNameField;
+			private ValueButton<Value.PowerState> systemPowerButton;
+			private ValueButton<Value.OnOff> networkStandbyButton;
+			private ValueButton<Value.EnableDisable> dmcControlButton;
+			
+			
+			public SystemOptions() {
+				this.eventNoticeButton = null;
+				this.networkUpdateSiteField = null;
+				this.networkNameField = null;
+				this.systemPowerButton = null;
+				this.networkStandbyButton = null;
+				this.dmcControlButton = null;
+			}
 
+
+			private GridBagPanel createPanel() {
+				//systemOptionsPanel.add(systemOptionsPanel, gridx, gridy, weightx, weighty, gridwidth, gridheight, GridBagConstraints.HORIZONTAL);
+				
+				// [Event_On]   PUT[P1]     System,Misc,Event,Notice = On
+				// [Event_Off]  PUT[P1]     System,Misc,Event,Notice = Off
+				// GET[G1]:                 System,Misc,Event,Notice   ->   "On" | "Off"
+				eventNoticeButton = new ValueButton<>(ValueButton.IconSourceOnOff,v->{
+					Value.OnOff newValue = v==null?Value.OnOff.On:getNext(v, Value.OnOff.values());
+					device.system.setEventNotice(newValue);
+					device.system.updateEventNotice();
+					eventNoticeButton.setValue(device.system.eventNotice);
+				});
+				eventNoticeButton.setMargin(new Insets(0,0,0,0));
+				eventNoticeButton.setHorizontalAlignment(SwingConstants.LEFT);
+				
+				// Network Update   [Network_Update]   Status   [Update_Status]   
+				// GET[G4]:    System,Misc,Update,Yamaha_Network_Site,Status   ->   "Available" | "Unavailable"
+				networkUpdateSiteField = new JTextField("Unavailable");
+				networkUpdateSiteField.setEditable(false);
+				
+				// PUT[P3]:    System,Misc,Network,Network_Name   =   Text: 1..15 (UTF-8)
+				// GET[G2]:    System,Misc,Network,Network_Name   ->   Text: 1..15 (UTF-8)
+				networkNameField = new JTextField("");
+				JButton networkNameSetButton = createButton("Set",e->{
+					String networkName = networkNameField.getText();
+					if (!networkName.isEmpty()) {
+						device.system.setNetworkName(networkName.substring(0, 15));
+						device.system.updateNetworkName();
+					}
+					updateNetworkNameField();
+				},true);
+				networkNameSetButton.setMargin(new Insets(0,0,0,0));
+				
+				// [Power_On]        PUT[P2]     System,Power_Control,Power = On
+				// [Power_Standby]   PUT[P2]     System,Power_Control,Power = Standby
+				systemPowerButton = new ValueButton<>(ValueButton.IconSourcePowerState,v->{
+					Value.PowerState newValue = v==null?Value.PowerState.On:getNext(v, Value.PowerState.values());
+					device.system.setPowerState(newValue);
+					device.system.updatePowerState();
+					systemPowerButton.setValue(device.system.power);
+				});
+				systemPowerButton.setMargin(new Insets(0,0,0,0));
+				systemPowerButton.setHorizontalAlignment(SwingConstants.LEFT);
+				
+				// [Net_Standby_On]   PUT[P4]     System,Misc,Network,Network_Standby = On
+				// [Net_Standby_Off]  PUT[P4]     System,Misc,Network,Network_Standby = Off
+				// GET[G3]:                       System,Misc,Network,Network_Standby   ->   "On" | "Off"
+				networkStandbyButton = new ValueButton<>(ValueButton.IconSourceOnOff,v->{
+					Value.OnOff newValue = v==null?Value.OnOff.On:getNext(v, Value.OnOff.values());
+					device.system.setNetworkStandby(newValue);
+					device.system.updateNetworkStandby();
+					networkStandbyButton.setValue(device.system.networkStandby);
+				});
+				networkStandbyButton.setMargin(new Insets(0,0,0,0));
+				networkStandbyButton.setHorizontalAlignment(SwingConstants.LEFT);
+				
+				// [DMR_Off]  PUT[P5]     System,Misc,Network,DMC_Control = Disable
+				// [DMR_On]   PUT[P5]     System,Misc,Network,DMC_Control = Enable
+				// GET[G5]:               System,Misc,Network,DMC_Control   ->   "Disable" | "Enable"
+				dmcControlButton = new ValueButton<>(ValueButton.IconSourceEnableDisable,v->{
+					Value.EnableDisable newValue = v==null?Value.EnableDisable.Enable:getNext(v, Value.EnableDisable.values());
+					device.system.setDmcControl(newValue);
+					device.system.updateDmcControl();
+					dmcControlButton.setValue(device.system.dmcControl);
+				});
+				dmcControlButton.setMargin(new Insets(0,0,0,0));
+				dmcControlButton.setHorizontalAlignment(SwingConstants.LEFT);
+				
+				JButton updateAllButton = createButton("Update All",e->{
+					device.system.update();
+					updatePanel();
+				},true);
+				comps.add(updateAllButton);
+				
+				GridBagPanel systemOptionsPanel = new GridBagPanel();
+				systemOptionsPanel.setBorder(BorderFactory.createTitledBorder("System Options"));
+				systemOptionsPanel.add(updateAllButton, 0,0, 0,0, 1,1, GridBagConstraints.HORIZONTAL);
+				addField(systemOptionsPanel,1,"Event Notice"       ,eventNoticeButton);
+				addField(systemOptionsPanel,2,"Network Update Site",networkUpdateSiteField);
+				addField(systemOptionsPanel,3,"Network Name"       ,networkNameField,networkNameSetButton);
+				addField(systemOptionsPanel,4,"System Power"       ,systemPowerButton);
+				addField(systemOptionsPanel,5,"Network Standby"    ,networkStandbyButton);
+				addField(systemOptionsPanel,6,"DMC Control"        ,dmcControlButton);
+				
+				return systemOptionsPanel;
+			}
+
+			private void updatePanel() {
+				updateNetworkNameField();
+				updateNetworkUpdateSiteField();
+				eventNoticeButton   .setValue(device.system.eventNotice);
+				systemPowerButton   .setValue(device.system.power);
+				networkStandbyButton.setValue(device.system.networkStandby);
+				dmcControlButton    .setValue(device.system.dmcControl);
+			}
+
+			private void updateNetworkUpdateSiteField() {
+				networkUpdateSiteField.setText(device.system.yamahaNetworkSiteStatus==null?"???":device.system.yamahaNetworkSiteStatus.getLabel());
+			}
+
+			private void updateNetworkNameField() {
+				networkNameField.setText(device.system.networkName==null?"???":device.system.networkName);
+			}
+		}
+		
+		private class MainZoneSetup {
+			
+			private GridBagPanel createPanel() {
+				
+				//panel.add(systemOptionsPanel, gridx, gridy, weightx, weighty, gridwidth, gridheight, fill);
+				
+				// [Power_On]        PUT[P1]     Main_Zone,Power_Control,Power = On
+				// [Power_Standby]   PUT[P1]     Main_Zone,Power_Control,Power = Standby
+				// GET[G1]:    Main_Zone,Basic_Status   ->   Power_Control,Power -> "On" | "Standby"
+				
+				// [Sleep_Last]      PUT[P23]     Main_Zone,Power_Control,Sleep = Last
+				// [Sleep_1]         PUT[P23]     Main_Zone,Power_Control,Sleep = 120 min
+				// [Sleep_2]         PUT[P23]     Main_Zone,Power_Control,Sleep = 90 min
+				// [Sleep_3]         PUT[P23]     Main_Zone,Power_Control,Sleep = 60 min
+				// [Sleep_4]         PUT[P23]     Main_Zone,Power_Control,Sleep = 30 min
+				// [Sleep_Off]       PUT[P23]     Main_Zone,Power_Control,Sleep = Off
+				// GET[G1]:    Main_Zone,Basic_Status   ->   Power_Control,Sleep -> "120 min" | "90 min" | "60 min" | "30 min" | "Off"
+				
+				// PUT[P9]:    Main_Zone,Surround,Program_Sel,Current,Sound_Program   =   "Hall in Munich" | "Hall in Vienna" | "Chamber" | "Cellar Club" | "The Roxy Theatre" | "The Bottom Line" | "Sports" | "Action Game" | "Roleplaying Game" | "Music Video" | "Standard" | "Spectacle" | "Sci-Fi" | "Adventure" | "Drama" | "Mono Movie" | "Surround Decoder" | "2ch Stereo" | "5ch Stereo"
+				// GET[G1]:    Main_Zone,Basic_Status   ->   Surround,Program_Sel,Current,Sound_Program -> "Hall in Munich" | "Hall in Vienna" | "Chamber" | "Cellar Club" | "The Roxy Theatre" | "The Bottom Line" | "Sports" | "Action Game" | "Roleplaying Game" | "Music Video" | "Standard" | "Spectacle" | "Sci-Fi" | "Adventure" | "Drama" | "Mono Movie" | "Surround Decoder" | "2ch Stereo" | "5ch Stereo"
+				
+				// [Straight_On]    PUT[P10]     Main_Zone,Surround,Program_Sel,Current,Straight = On
+				// [Straight_Off]   PUT[P10]     Main_Zone,Surround,Program_Sel,Current,Straight = Off
+				// GET[G1]:    Main_Zone,Basic_Status   ->   Surround,Program_Sel,Current,Straight -> "On" | "Off"
+				
+				// [Enhancer_On]    PUT[P11]     Main_Zone,Surround,Program_Sel,Current,Enhancer = On
+				// [Enhancer_Off]   PUT[P11]     Main_Zone,Surround,Program_Sel,Current,Enhancer = Off
+				// GET[G1]:    Main_Zone,Basic_Status   ->   Surround,Program_Sel,Current,Enhancer -> "On" | "Off"
+				
+				// PUT[P7]:    Main_Zone,Sound_Video,Tone,Bass                  =   Number:-60..(5)..60 / Exp:"1" / Unit:"dB"
+				// GET[G1]:    Main_Zone,Basic_Status -> Sound_Video,Tone,Bass  ->  Number:-60..(5)..60 / Exp:"1" / Unit:"dB"
+				
+				// PUT[P8]:    Main_Zone,Sound_Video,Tone,Treble                  =   Number:-60..(5)..60 / Exp:"1" / Unit:"dB"
+				// GET[G1]:    Main_Zone,Basic_Status -> Sound_Video,Tone,Treble  ->  Number:-60..(5)..60 / Exp:"1" / Unit:"dB"
+				
+				// [Adaptive_DRC_Auto]   PUT[P12]     Main_Zone,Sound_Video,Adaptive_DRC = Auto
+				// [Adaptive_DRC_Off]    PUT[P12]     Main_Zone,Sound_Video,Adaptive_DRC = Off
+				// GET[G1]:    Main_Zone,Basic_Status   ->   Sound_Video,Adaptive_DRC -> "Auto" | "Off"
+				
+				// [CINEMA_DSP_3D_Auto]  PUT[P13]     Main_Zone,Surround,_3D_Cinema_DSP = Auto
+				// [CINEMA_DSP_3D_Off]   PUT[P13]     Main_Zone,Surround,_3D_Cinema_DSP = Off
+				// GET[G1]:    Main_Zone,Basic_Status   ->   Surround,_3D_Cinema_DSP -> "Auto" | "Off"
+				
+				// [Direct_On]           PUT[P17]     Main_Zone,Sound_Video,Direct,Mode = On
+				// [Direct_Off]          PUT[P17]     Main_Zone,Sound_Video,Direct,Mode = Off
+				// GET[G1]:    Main_Zone,Basic_Status   ->   Sound_Video,Direct,Mode -> "On" | "Off"
+				
+				// GET[G1]:    Main_Zone,Basic_Status   ->   Sound_Video,HDMI,Standby_Through_Info -> "On" | "Off"
+				
+				// TODO Auto-generated method stub
+				
+				GridBagPanel mainZoneSetupPanel = new GridBagPanel();
+				mainZoneSetupPanel.setBorder(BorderFactory.createTitledBorder("MainZone Setup"));
+				
+				return mainZoneSetupPanel;
+			}
+
+			public void updatePanel() {
+				// TODO Auto-generated method stub
+				
+			}
+		}
+		
 		@Override
 		protected JScrollPane createPanel() {
-			GridBagPanel systemOptionsPanel = new GridBagPanel();
-			systemOptionsPanel.setBorder(BorderFactory.createTitledBorder("System Options"));
-
-			//systemOptionsPanel.add(systemOptionsPanel, gridx, gridy, weightx, weighty, gridwidth, gridheight, GridBagConstraints.HORIZONTAL);
+			systemOptions = new SystemOptions();
+			GridBagPanel systemOptionsPanel = systemOptions.createPanel();
 			
+			mainZoneSetup = new MainZoneSetup();
+			GridBagPanel mainZoneSetupPanel = mainZoneSetup.createPanel();
 			
-			// [Event_On]   PUT[P1]     System,Misc,Event,Notice = On
-			// [Event_Off]  PUT[P1]     System,Misc,Event,Notice = Off
-			// GET[G1]:                 System,Misc,Event,Notice   ->   "On" | "Off"
-			eventNoticeButton = new ValueButton<>(ValueButton.IconSourceOnOff,v->{
-				Value.OnOff newValue = v==null?Value.OnOff.On:getNext(v, Value.OnOff.values());
-				device.system.setEventNotice(newValue);
-				device.system.updateEventNotice();
-				eventNoticeButton.setValue(device.system.eventNotice);
-			});
-			eventNoticeButton.setMargin(new Insets(0,0,0,0));
-			eventNoticeButton.setHorizontalAlignment(SwingConstants.LEFT);
-			
-			// Network Update   [Network_Update]   Status   [Update_Status]   
-			// GET[G4]:    System,Misc,Update,Yamaha_Network_Site,Status   ->   "Available" | "Unavailable"
-			networkUpdateSiteField = new JTextField("Unavailable");
-			networkUpdateSiteField.setEditable(false);
-			
-			// PUT[P3]:    System,Misc,Network,Network_Name   =   Text: 1..15 (UTF-8)
-			// GET[G2]:    System,Misc,Network,Network_Name   ->   Text: 1..15 (UTF-8)
-			networkNameField = new JTextField("");
-			JButton networkNameSetButton = createButton("Set",e->{
-				String networkName = networkNameField.getText();
-				if (!networkName.isEmpty()) {
-					device.system.setNetworkName(networkName.substring(0, 15));
-					device.system.updateNetworkName();
-				}
-				updateNetworkNameField();
-			},true);
-			networkNameSetButton.setMargin(new Insets(0,0,0,0));
-			
-			// [Power_On]        PUT[P2]     System,Power_Control,Power = On
-			// [Power_Standby]   PUT[P2]     System,Power_Control,Power = Standby
-			systemPowerButton = new ValueButton<>(ValueButton.IconSourcePowerState,v->{
-				Value.PowerState newValue = v==null?Value.PowerState.On:getNext(v, Value.PowerState.values());
-				device.system.setPowerState(newValue);
-				device.system.updatePowerState();
-				systemPowerButton.setValue(device.system.power);
-			});
-			systemPowerButton.setMargin(new Insets(0,0,0,0));
-			systemPowerButton.setHorizontalAlignment(SwingConstants.LEFT);
-			
-			// [Net_Standby_On]   PUT[P4]     System,Misc,Network,Network_Standby = On
-			// [Net_Standby_Off]  PUT[P4]     System,Misc,Network,Network_Standby = Off
-			// GET[G3]:                       System,Misc,Network,Network_Standby   ->   "On" | "Off"
-			networkStandbyButton = new ValueButton<>(ValueButton.IconSourceOnOff,v->{
-				Value.OnOff newValue = v==null?Value.OnOff.On:getNext(v, Value.OnOff.values());
-				device.system.setNetworkStandby(newValue);
-				device.system.updateNetworkStandby();
-				networkStandbyButton.setValue(device.system.networkStandby);
-			});
-			networkStandbyButton.setMargin(new Insets(0,0,0,0));
-			networkStandbyButton.setHorizontalAlignment(SwingConstants.LEFT);
-			
-			// [DMR_Off]  PUT[P5]     System,Misc,Network,DMC_Control = Disable
-			// [DMR_On]   PUT[P5]     System,Misc,Network,DMC_Control = Enable
-			// GET[G5]:               System,Misc,Network,DMC_Control   ->   "Disable" | "Enable"
-			dmcControlButton = new ValueButton<>(ValueButton.IconSourceEnableDisable,v->{
-				Value.EnableDisable newValue = v==null?Value.EnableDisable.Enable:getNext(v, Value.EnableDisable.values());
-				device.system.setDmcControl(newValue);
-				device.system.updateDmcControl();
-				dmcControlButton.setValue(device.system.dmcControl);
-			});
-			dmcControlButton.setMargin(new Insets(0,0,0,0));
-			dmcControlButton.setHorizontalAlignment(SwingConstants.LEFT);
-			
-			JButton updateAllButton = createButton("Update All",e->{
-				device.system.update();
-				updateSystemOptions();
-			},true);
-			comps.add(updateAllButton);
-			
-			systemOptionsPanel.add(updateAllButton, 0,0, 0,0, 1,1, GridBagConstraints.HORIZONTAL);
-			addField(systemOptionsPanel,1,"Event Notice"       ,eventNoticeButton);
-			addField(systemOptionsPanel,2,"Network Update Site",networkUpdateSiteField);
-			addField(systemOptionsPanel,3,"Network Name"       ,networkNameField,networkNameSetButton);
-			addField(systemOptionsPanel,4,"System Power"       ,systemPowerButton);
-			addField(systemOptionsPanel,5,"Network Standby"    ,networkStandbyButton);
-			addField(systemOptionsPanel,6,"DMC Control"        ,dmcControlButton);
-			
-			
-			GridBagPanel mainZoneSetupPanel = new GridBagPanel();
-			mainZoneSetupPanel.setBorder(BorderFactory.createTitledBorder("MainZone Setup"));
-			
-			// [Power_On]        PUT[P1]     Main_Zone,Power_Control,Power = On
-			// [Power_Standby]   PUT[P1]     Main_Zone,Power_Control,Power = Standby
-			// GET[G1]:    Main_Zone,Basic_Status   ->   Power_Control,Power -> "On" | "Standby"
-			
-			// [Sleep_Last]      PUT[P23]     Main_Zone,Power_Control,Sleep = Last
-			// [Sleep_1]         PUT[P23]     Main_Zone,Power_Control,Sleep = 120 min
-			// [Sleep_2]         PUT[P23]     Main_Zone,Power_Control,Sleep = 90 min
-			// [Sleep_3]         PUT[P23]     Main_Zone,Power_Control,Sleep = 60 min
-			// [Sleep_4]         PUT[P23]     Main_Zone,Power_Control,Sleep = 30 min
-			// [Sleep_Off]       PUT[P23]     Main_Zone,Power_Control,Sleep = Off
-			// GET[G1]:    Main_Zone,Basic_Status   ->   Power_Control,Sleep -> "120 min" | "90 min" | "60 min" | "30 min" | "Off"
-			
-			// PUT[P9]:    Main_Zone,Surround,Program_Sel,Current,Sound_Program   =   "Hall in Munich" | "Hall in Vienna" | "Chamber" | "Cellar Club" | "The Roxy Theatre" | "The Bottom Line" | "Sports" | "Action Game" | "Roleplaying Game" | "Music Video" | "Standard" | "Spectacle" | "Sci-Fi" | "Adventure" | "Drama" | "Mono Movie" | "Surround Decoder" | "2ch Stereo" | "5ch Stereo"
-			// GET[G1]:    Main_Zone,Basic_Status   ->   Surround,Program_Sel,Current,Sound_Program -> "Hall in Munich" | "Hall in Vienna" | "Chamber" | "Cellar Club" | "The Roxy Theatre" | "The Bottom Line" | "Sports" | "Action Game" | "Roleplaying Game" | "Music Video" | "Standard" | "Spectacle" | "Sci-Fi" | "Adventure" | "Drama" | "Mono Movie" | "Surround Decoder" | "2ch Stereo" | "5ch Stereo"
-			
-			// [Straight_On]    PUT[P10]     Main_Zone,Surround,Program_Sel,Current,Straight = On
-			// [Straight_Off]   PUT[P10]     Main_Zone,Surround,Program_Sel,Current,Straight = Off
-			// GET[G1]:    Main_Zone,Basic_Status   ->   Surround,Program_Sel,Current,Straight -> "On" | "Off"
-			
-			// [Enhancer_On]    PUT[P11]     Main_Zone,Surround,Program_Sel,Current,Enhancer = On
-			// [Enhancer_Off]   PUT[P11]     Main_Zone,Surround,Program_Sel,Current,Enhancer = Off
-			// GET[G1]:    Main_Zone,Basic_Status   ->   Surround,Program_Sel,Current,Enhancer -> "On" | "Off"
-			
-			// PUT[P7]:    Main_Zone,Sound_Video,Tone,Bass                  =   Number:-60..(5)..60 / Exp:"1" / Unit:"dB"
-			// GET[G1]:    Main_Zone,Basic_Status -> Sound_Video,Tone,Bass  ->  Number:-60..(5)..60 / Exp:"1" / Unit:"dB"
-			
-			// PUT[P8]:    Main_Zone,Sound_Video,Tone,Treble                  =   Number:-60..(5)..60 / Exp:"1" / Unit:"dB"
-			// GET[G1]:    Main_Zone,Basic_Status -> Sound_Video,Tone,Treble  ->  Number:-60..(5)..60 / Exp:"1" / Unit:"dB"
-			
-			// [Adaptive_DRC_Auto]   PUT[P12]     Main_Zone,Sound_Video,Adaptive_DRC = Auto
-			// [Adaptive_DRC_Off]    PUT[P12]     Main_Zone,Sound_Video,Adaptive_DRC = Off
-			// GET[G1]:    Main_Zone,Basic_Status   ->   Sound_Video,Adaptive_DRC -> "Auto" | "Off"
-			
-			// [CINEMA_DSP_3D_Auto]  PUT[P13]     Main_Zone,Surround,_3D_Cinema_DSP = Auto
-			// [CINEMA_DSP_3D_Off]   PUT[P13]     Main_Zone,Surround,_3D_Cinema_DSP = Off
-			// GET[G1]:    Main_Zone,Basic_Status   ->   Surround,_3D_Cinema_DSP -> "Auto" | "Off"
-			
-			// [Direct_On]           PUT[P17]     Main_Zone,Sound_Video,Direct,Mode = On
-			// [Direct_Off]          PUT[P17]     Main_Zone,Sound_Video,Direct,Mode = Off
-			// GET[G1]:    Main_Zone,Basic_Status   ->   Sound_Video,Direct,Mode -> "On" | "Off"
-			
-			// GET[G1]:    Main_Zone,Basic_Status   ->   Sound_Video,HDMI,Standby_Through_Info -> "On" | "Off"
-			
-			// TODO Auto-generated method stub
-			
-			//panel.add(systemOptionsPanel, gridx, gridy, weightx, weighty, gridwidth, gridheight, fill);
 			GridBagPanel panel = new GridBagPanel();
 			panel.add(systemOptionsPanel, 0,0, 1,1, 1,1, GridBagConstraints.BOTH);
 			panel.add(mainZoneSetupPanel, 0,1, 1,1, 1,1, GridBagConstraints.BOTH);
@@ -1297,23 +1352,6 @@ public class YamahaControl {
 			scrollPane.setBorder(null);
 			scrollPane.setPreferredSize(new Dimension(150,200));
 			return scrollPane;
-		}
-
-		private void updateSystemOptions() {
-			updateNetworkNameField();
-			updateNetworkUpdateSiteField();
-			eventNoticeButton   .setValue(device.system.eventNotice);
-			systemPowerButton   .setValue(device.system.power);
-			networkStandbyButton.setValue(device.system.networkStandby);
-			dmcControlButton    .setValue(device.system.dmcControl);
-		}
-
-		private void updateNetworkUpdateSiteField() {
-			networkUpdateSiteField.setText(device.system.yamahaNetworkSiteStatus==null?"???":device.system.yamahaNetworkSiteStatus.getLabel());
-		}
-
-		private void updateNetworkNameField() {
-			networkNameField.setText(device.system.networkName==null?"???":device.system.networkName);
 		}
 
 		private void addField(GridBagPanel panel, int rowIndex, String label, JComponent... comps) {
@@ -1337,7 +1375,6 @@ public class YamahaControl {
 				wishes.add(UpdateWish.SystemPower);
 				break;
 			}
-			// TODO Auto-generated method stub
 			return wishes;
 		}
 
@@ -1346,12 +1383,14 @@ public class YamahaControl {
 			this.device = device;
 			setEnabledGUI(this.device!=null);
 			if (this.device!=null) this.device.system.update();
-			updateSystemOptions();
+			systemOptions.updatePanel();
+			mainZoneSetup.updatePanel();
 		}
 
 		@Override
 		public void frequentlyUpdate() {
-			updateSystemOptions();
+			systemOptions.updatePanel();
+			mainZoneSetup.updatePanel();
 		}
 
 		@Override
