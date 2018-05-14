@@ -3,6 +3,7 @@ package net.schwarzbaer.java.tools.yamahacontrol;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.Locale;
@@ -17,11 +18,10 @@ import net.schwarzbaer.java.tools.yamahacontrol.YamahaControl.Log;
 public final class Device {
 	
 	String address;
-	private BasicStatus basicStatus;
 	
 	Volume     volume;
 	MainZone   mainZone;
-	SystemOptions system;
+	SystemOpts system;
 	Inputs     inputs;
 	RemoteCtrl remoteCtrl;
 
@@ -35,13 +35,12 @@ public final class Device {
 	
 	Device(String address) {
 		this.address = address;
-		this.basicStatus = null;
 		
 		this.volume     = new Volume    (this);
-		this.mainZone   = new MainZone  (this);
 		this.inputs     = new Inputs    (this);
 		this.remoteCtrl = new RemoteCtrl(this.address);
-		this.system     = new SystemOptions(this.address);
+		this.mainZone   = new MainZone  (this.address);
+		this.system     = new SystemOpts(this.address);
 		
 		this.netRadio = new NetRadio(this.address);
 		this.usb      = new USB     (this.address);
@@ -53,32 +52,39 @@ public final class Device {
 	}
 	
 	enum UpdateWish {
-		BasicStatus, Scenes, Inputs,
-		NetRadioPlayInfo, NetRadioListInfo, DLNAPlayInfo, DLNAListInfo,
-		USBListInfo, USBPlayInfo, IPodUSBListInfo, IPodUSBPlayInfo, IPodUSBMode,
-		AirPlayConfig, AirPlayPlayInfo, SpotifyPlayInfo,
-		TunerConfig, TunerPlayInfo, TunerPresets,
-		SystemPower
+		BasicStatus, Scenes, Inputs, System, SystemPower,
+		NetRadioConfig, NetRadioPlayInfo, NetRadioListInfo,
+		DLNAConfig, DLNAPlayInfo, DLNAListInfo,
+		USBConfig, USBListInfo, USBPlayInfo,
+		IPodUSBConfig, IPodUSBListInfo, IPodUSBPlayInfo, IPodUSBMode,
+		AirPlayConfig, AirPlayPlayInfo, SpotifyConfig, SpotifyPlayInfo,
+		TunerConfig, TunerPlayInfo, TunerPresets
 	}
 	
 	public void update(EnumSet<UpdateWish> updateWishes) {
 		//System.out.println("Device.update("+updateWishes+")");
-		updateWishes.forEach(uw->{
+		for (UpdateWish uw: updateWishes) {
 			switch (uw) {
 			case Inputs          : inputs.askInputs(); break;
 			case Scenes          : inputs.askScenes(); break;
-			case BasicStatus     : basicStatus = BasicStatus.parse(Ctrl.sendGetCommand_Node(address,KnownCommand.MainZone.GetBasicStatus  )); break;
+			
+			case BasicStatus     : mainZone.basicStatus.update(); break;
+			case System          : system.update(); break;
 			case SystemPower     : system.updatePowerState(); break;
 			
+			case NetRadioConfig  : netRadio.updateConfig(); break;
 			case NetRadioListInfo: netRadio.listInfo.update(); break;
 			case NetRadioPlayInfo: netRadio.playInfo.update(); break;
 			
+			case USBConfig       : usb     .updateConfig(); break;
 			case USBListInfo     : usb     .listInfo.update(); break;
 			case USBPlayInfo     : usb     .playInfo.update(); break;
 			
+			case DLNAConfig      : dlna    .updateConfig(); break;
 			case DLNAListInfo    : dlna    .listInfo.update(); break;
 			case DLNAPlayInfo    : dlna    .playInfo.update(); break;
 			
+			case IPodUSBConfig   : iPodUSB .updateConfig(); break;
 			case IPodUSBListInfo : iPodUSB .listInfo.update(); break;
 			case IPodUSBPlayInfo : iPodUSB .playInfo.update(); break;
 			case IPodUSBMode     : iPodUSB.updateMode(); break;
@@ -90,9 +96,12 @@ public final class Device {
 			case AirPlayConfig   : airPlay .config  .update(); break;
 			case AirPlayPlayInfo : airPlay .playInfo.update(); break;
 			
+			case SpotifyConfig   : spotify .updateConfig(); break;
 			case SpotifyPlayInfo : spotify .playInfo.update(); break;
 			}
-		});
+			//Log.info(getClass(), "update -> %s", Ctrl.getRCcode(Ctrl.lastRC));
+			if (Ctrl.lastRC==Ctrl.RC_CONNECT_TIMEOUT) break;
+		}
 	}
 	
 	public <T extends Value> T askValue(KnownCommand knownCommand, T[] values, String... tagList) {
@@ -111,48 +120,6 @@ public final class Device {
 		return XML.getSubValue(node,tagList);
 	}
 
-	private static class BasicStatus {
-
-		private Value.PowerState power;
-		@SuppressWarnings("unused") private Value.SleepState sleep;
-		private NumberWithUnit volume;
-		private Value.OnOff volMute;
-		private String currentInput;
-		@SuppressWarnings("unused") private Inputs.DeviceSceneInput inputInfo;
-
-		public BasicStatus() {
-			this.power = null;
-			this.sleep = null;
-			this.volume = null;
-			this.volMute = null;
-			this.currentInput = null;
-			this.inputInfo = null;
-		}
-
-		public static BasicStatus parse(Node node) {
-			BasicStatus status = new BasicStatus();
-			XML.forEachChild(node, value->{
-				switch (value.getNodeName()) {
-				case "Power_Control":
-					status.power = XML.getSubValue(value,Value.PowerState.values(),"Power");
-					status.sleep = XML.getSubValue(value,Value.SleepState.values(),"Sleep");
-					break;
-				case "Volume":
-					status.volume = NumberWithUnit.parse(value,"Lvl");
-					status.volMute = XML.getSubValue(value,Value.OnOff.values(),"Mute");
-					break;
-				case "Input":
-					status.currentInput = XML.getSubValue(value,"Input_Sel");
-					Node inputInfoNode = XML.getSubNode(value, "Input_Sel_Item_Info");
-					if (inputInfoNode==null) status.inputInfo = null;
-					else status.inputInfo = Inputs.DeviceSceneInput.parse(inputInfoNode);
-					break;
-				}
-			});
-			return status;
-		}
-	}
-	
 	static class Volume {
 
 		private Device device;
@@ -162,26 +129,24 @@ public final class Device {
 		}
 
 		public NumberWithUnit getVolume() {
-			if (device.basicStatus==null) return null;
-			return device.basicStatus.volume;
+			return device.mainZone.basicStatus.volume;
 		}
 
 		public void setVolume(double value) {
-			if (device.basicStatus==null) return;
-			if (device.basicStatus.volume==null) return;
+			if (device.mainZone.basicStatus.volume==null) return;
 			
-			int currentValue = (int)Math.round(device.basicStatus.volume.getValue()*2);
+			int currentValue = (int)Math.round(device.mainZone.basicStatus.volume.getValue()*2);
 			int newValue     = (int)Math.round(value*2);
 			if (newValue!=currentValue) {
 				// Value 0:   Val = Number: -805..(5)..165
 				// Value 1:   Exp = "1"
 				// Value 2:   Unit = "dB"
 				//String xmlStr = NumberWithUnit.createXML(newValue/2.0,1,"dB");
-				device.basicStatus.volume.setValue(newValue/2.0f);
-				String xmlStr = device.basicStatus.volume.createXML();
+				device.mainZone.basicStatus.volume.setValue(newValue/2.0f);
+				String xmlStr = device.mainZone.basicStatus.volume.createXML();
 				int rc = Ctrl.sendPutCommand(device.address,KnownCommand.MainZone.SetVolume,xmlStr);
 				if (rc!=Ctrl.RC_OK && rc!=Ctrl.RC_DEVICE_IN_STANDBY)
-					Log.error(getClass(), "setVolume(%f)-> %s %s -> RC:%d", value, KnownCommand.MainZone.SetVolume.tagList, xmlStr, rc);
+					Log.error(getClass(), "setVolume(%f)-> %s %s -> RC: %s", value, KnownCommand.MainZone.SetVolume.tagList, xmlStr, Ctrl.getRCcode(rc));
 			}
 		}
 		// Value 0:   Val = Number: -805..(5)..165
@@ -189,8 +154,7 @@ public final class Device {
 		public static final double MaxVolume =  16.5;
 
 		public Value.OnOff getMute() {
-			if (device.basicStatus==null) return null;
-			return device.basicStatus.volMute;
+			return device.mainZone.basicStatus.volMute;
 		}
 		public void setMute(Value.OnOff volMute) {
 			// [Vol_Mute_On]    PUT[P3]     Main_Zone,Volume,Mute = On
@@ -199,7 +163,7 @@ public final class Device {
 		}
 	}
 	
-	static class SystemOptions {
+	static class SystemOpts {
 
 		private String address;
 		
@@ -210,7 +174,7 @@ public final class Device {
 		Value.OnOff         networkStandby;
 		Value.EnableDisable dmcControl;
 
-		public SystemOptions(String address) {
+		public SystemOpts(String address) {
 			this.address = address;
 			clearValues();
 		}
@@ -227,11 +191,11 @@ public final class Device {
 		void update() {
 			clearValues();
 			updateEventNotice();
-			updateYamahaNetworkSiteStatus();
-			updateNetworkName();
-			updatePowerState();
-			updateNetworkStandby();
-			updateDmcControl();
+			if (Ctrl.lastRC!=Ctrl.RC_CONNECT_TIMEOUT) updateYamahaNetworkSiteStatus();
+			if (Ctrl.lastRC!=Ctrl.RC_CONNECT_TIMEOUT) updateNetworkName();
+			if (Ctrl.lastRC!=Ctrl.RC_CONNECT_TIMEOUT) updatePowerState();
+			if (Ctrl.lastRC!=Ctrl.RC_CONNECT_TIMEOUT) updateNetworkStandby();
+			if (Ctrl.lastRC!=Ctrl.RC_CONNECT_TIMEOUT) updateDmcControl();
 		}
 		
 		void setEventNotice(Value.OnOff value) {
@@ -291,21 +255,256 @@ public final class Device {
 	
 	static class MainZone {
 
-		private Device device;
-
-		public MainZone(Device device) {
-			this.device = device;
+		private String address;
+		BasicStatus basicStatus;
+		
+		public MainZone(String address) {
+			this.address = address;
+			this.basicStatus = new BasicStatus(address);
 		}
 		
-		public Value.PowerState getPowerState() {
-			if (device.basicStatus==null) return null;
-			return device.basicStatus.power;
-		}
-		
-		public void setPowerState(Value.PowerState power) {
+		public void setPowerState(Value.PowerState value) {
 			// [Power_On]        PUT[P1]     Main_Zone,Power_Control,Power = On
 			// [Power_Standby]   PUT[P1]     Main_Zone,Power_Control,Power = Standby
-			Device.sendCommand(getClass(), device.address, "setPowerState", KnownCommand.MainZone.SetPower, power);
+			if (value!=null)
+				Device.sendCommand(getClass(), address, "setPowerState", KnownCommand.MainZone.SetPower, value);
+		}
+
+		public void setSleep(Value.SleepState value) {
+			// [Sleep_Last]      PUT[P23]     Main_Zone,Power_Control,Sleep = Last
+			// [Sleep_1]         PUT[P23]     Main_Zone,Power_Control,Sleep = 120 min
+			// [Sleep_2]         PUT[P23]     Main_Zone,Power_Control,Sleep = 90 min
+			// [Sleep_3]         PUT[P23]     Main_Zone,Power_Control,Sleep = 60 min
+			// [Sleep_4]         PUT[P23]     Main_Zone,Power_Control,Sleep = 30 min
+			// [Sleep_Off]       PUT[P23]     Main_Zone,Power_Control,Sleep = Off
+			if (value!=null)
+				Device.sendCommand(getClass(), address, "setSleep", KnownCommand.MainZone.SetSleep, value);
+		}
+
+		public void setSurroundProgram(Value.SurroundProgram value) {
+			// PUT[P9]:    Main_Zone,Surround,Program_Sel,Current,Sound_Program   =   "Hall in Munich" | "Hall in Vienna" | "Chamber" | "Cellar Club" | "The Roxy Theatre" | "The Bottom Line" | "Sports" | "Action Game" | "Roleplaying Game" | "Music Video" | "Standard" | "Spectacle" | "Sci-Fi" | "Adventure" | "Drama" | "Mono Movie" | "Surround Decoder" | "2ch Stereo" | "5ch Stereo"
+			if (value!=null)
+				Device.sendCommand(getClass(), address, "setSurroundProgram", KnownCommand.MainZone.SetSurroundProgram, value);
+		}
+
+		public void setSurroundStraight(Value.OnOff value) {
+			// [Straight_On]    PUT[P10]     Main_Zone,Surround,Program_Sel,Current,Straight = On
+			// [Straight_Off]   PUT[P10]     Main_Zone,Surround,Program_Sel,Current,Straight = Off
+			if (value!=null)
+				Device.sendCommand(getClass(), address, "setSurroundStraight", KnownCommand.MainZone.SetSurroundStraight, value);
+		}
+
+		public void setSurroundEnhancer(Value.OnOff value) {
+			// [Enhancer_On]    PUT[P11]     Main_Zone,Surround,Program_Sel,Current,Enhancer = On
+			// [Enhancer_Off]   PUT[P11]     Main_Zone,Surround,Program_Sel,Current,Enhancer = Off
+			if (value!=null)
+				Device.sendCommand(getClass(), address, "setSurroundEnhancer", KnownCommand.MainZone.SetSurroundEnhancer, value);
+		}
+
+		public void setBass(float value) {
+			// PUT[P7]:    Main_Zone,Sound_Video,Tone,Bass                  =   Number:-60..(5)..60 / Exp:"1" / Unit:"dB"
+			int number = Math.round(value*2)*5;
+			number = Math.max(-60, Math.min(number, 60));
+			NumberWithUnit nwu = new NumberWithUnit(number, 1, "dB");
+			if (basicStatus.bass!=null && number==basicStatus.bass.number) return;
+			basicStatus.bass = nwu;
+			Device.sendCommand(getClass(), address, "setBass", KnownCommand.MainZone.SetBass, String.format(Locale.ENGLISH, "%1.2f->%s", value, nwu), nwu.createXML());
+		}
+
+		public void setTreble(float value) {
+			// PUT[P8]:    Main_Zone,Sound_Video,Tone,Treble                  =   Number:-60..(5)..60 / Exp:"1" / Unit:"dB"
+			int number = Math.round(value*2)*5;
+			number = Math.max(-60, Math.min(number, 60));
+			NumberWithUnit nwu = new NumberWithUnit(number, 1, "dB");
+			if (basicStatus.treble!=null && number==basicStatus.treble.number) return;
+			basicStatus.treble = nwu;
+			Device.sendCommand(getClass(), address, "setTreble", KnownCommand.MainZone.SetTreble, String.format(Locale.ENGLISH, "%1.2f->%s", value, nwu), nwu.createXML());
+		}
+
+		public void setAdaptiveDRC(Value.AutoOff value) {
+			// [Adaptive_DRC_Auto]   PUT[P12]     Main_Zone,Sound_Video,Adaptive_DRC = Auto
+			// [Adaptive_DRC_Off]    PUT[P12]     Main_Zone,Sound_Video,Adaptive_DRC = Off
+			if (value!=null)
+				Device.sendCommand(getClass(), address, "setAdaptiveDRC", KnownCommand.MainZone.SetAdaptiveDRC, value);
+		}
+
+		public void set3DCinemaDSP(Value.AutoOff value) {
+			// [CINEMA_DSP_3D_Auto]  PUT[P13]     Main_Zone,Surround,_3D_Cinema_DSP = Auto
+			// [CINEMA_DSP_3D_Off]   PUT[P13]     Main_Zone,Surround,_3D_Cinema_DSP = Off
+			if (value!=null)
+				Device.sendCommand(getClass(), address, "set3DCinemaDSP", KnownCommand.MainZone.Set3DCinemaDSP, value);
+		}
+
+		public void setDirectMode(Value.OnOff value) {
+			// [Direct_On]           PUT[P17]     Main_Zone,Sound_Video,Direct,Mode = On
+			// [Direct_Off]          PUT[P17]     Main_Zone,Sound_Video,Direct,Mode = Off
+			if (value!=null)
+				Device.sendCommand(getClass(), address, "setDirectMode", KnownCommand.MainZone.SetDirectMode, value);
+		}
+
+		static class BasicStatus {
+			
+			private String address;
+		
+			Value.PowerState power;
+			Value.SleepState sleep;
+			NumberWithUnit volume;
+			Value.OnOff volMute;
+			String currentInput;
+			Inputs.DeviceSceneInput inputInfo;
+			Value.SurroundProgram surroundProgram;
+			Value.OnOff surroundStraight;
+			Value.OnOff surroundEnhancer;
+			Value.AutoOff cinemaDSP;
+			Value.OnOff hdmiStandbyThrough;
+			Value.OnOff directMode;
+			Value.AutoOff adaptiveDRC;
+			NumberWithUnit bass;
+			NumberWithUnit treble;
+		
+			public BasicStatus(String address) {
+				this.address = address;
+				clearValues();
+			}
+
+			private void clearValues() {
+				power = null;
+				sleep = null;
+				volume = null;
+				volMute = null;
+				currentInput = null;
+				inputInfo = null;
+				surroundProgram = null;
+				surroundStraight = null;
+				surroundEnhancer = null;
+				cinemaDSP = null;
+				hdmiStandbyThrough = null;
+				directMode = null;
+				adaptiveDRC = null;
+				bass = null;
+				treble = null;
+			}
+			
+			public void update() {
+				parse(Ctrl.sendGetCommand_Node(address,KnownCommand.MainZone.GetBasicStatus));
+			}
+			private void parse(Node node) {
+				clearValues();
+				XML.forEachChild(node, value->{
+					switch (value.getNodeName()) {
+					case "Power_Control":
+						// GET[G1]:    Main_Zone,Basic_Status   ->   Power_Control,Power -> "On" | "Standby"
+						// GET[G1]:    Main_Zone,Basic_Status   ->   Power_Control,Sleep -> "120 min" | "90 min" | "60 min" | "30 min" | "Off"
+						power = XML.getSubValue(value,Value.PowerState.values(),"Power");
+						sleep = XML.getSubValue(value,Value.SleepState.values(),"Sleep");
+						break;
+					case "Volume":
+						volume = NumberWithUnit.parse(value,"Lvl");
+						volMute = XML.getSubValue(value,Value.OnOff.values(),"Mute");
+						break;
+					case "Input":
+						currentInput = XML.getSubValue(value,"Input_Sel");
+						Node inputInfoNode = XML.getSubNode(value, "Input_Sel_Item_Info");
+						if (inputInfoNode==null) inputInfo = null;
+						else inputInfo = Inputs.DeviceSceneInput.parse(inputInfoNode);
+						break;
+						
+					case "Surround":
+						XML.forEachChild(value, surroundChild->{
+							switch (surroundChild.getNodeName()) {
+							case "Program_Sel":
+								XML.forEachChild(surroundChild, programSelChild->{
+									switch (programSelChild.getNodeName()) {
+									case "Current":
+										XML.forEachChild(programSelChild, currentChild->{
+											switch (currentChild.getNodeName()) {
+											case "Sound_Program":
+												// GET[G1]:    Main_Zone,Basic_Status   ->   Surround,Program_Sel,Current,Sound_Program -> "Hall in Munich" | "Hall in Vienna" | "Chamber" | "Cellar Club" | "The Roxy Theatre" | "The Bottom Line" | "Sports" | "Action Game" | "Roleplaying Game" | "Music Video" | "Standard" | "Spectacle" | "Sci-Fi" | "Adventure" | "Drama" | "Mono Movie" | "Surround Decoder" | "2ch Stereo" | "5ch Stereo"
+												surroundProgram = XML.getSubValue(currentChild,Value.SurroundProgram.values());
+												break;
+											case "Straight":
+												// GET[G1]:    Main_Zone,Basic_Status   ->   Surround,Program_Sel,Current,Straight -> "On" | "Off"
+												surroundStraight = XML.getSubValue(currentChild,Value.OnOff.values());
+												break;
+											case "Enhancer":
+												// GET[G1]:    Main_Zone,Basic_Status   ->   Surround,Program_Sel,Current,Enhancer -> "On" | "Off"
+												surroundEnhancer = XML.getSubValue(currentChild,Value.OnOff.values());
+												break;
+											}
+										});
+										break;
+									}
+								});
+								break;
+								
+							case "_3D_Cinema_DSP":
+								// GET[G1]:    Main_Zone,Basic_Status   ->   Surround,_3D_Cinema_DSP -> "Auto" | "Off"
+								cinemaDSP = XML.getSubValue(surroundChild,Value.AutoOff.values());
+								break;
+							}
+						});
+						break;
+						
+					case "Sound_Video":
+						XML.forEachChild(value, soundVideoChild->{
+							switch (soundVideoChild.getNodeName()) {
+							case "Tone":
+								XML.forEachChild(soundVideoChild, toneChild->{
+									switch (toneChild.getNodeName()) {
+									case "Bass":
+										// GET[G1]:    Main_Zone,Basic_Status -> Sound_Video,Tone,Bass  ->  Number:-60..(5)..60 / Exp:"1" / Unit:"dB"
+										bass = NumberWithUnit.parse(toneChild);
+										break;
+										
+									case "Treble":
+										// GET[G1]:    Main_Zone,Basic_Status -> Sound_Video,Tone,Treble  ->  Number:-60..(5)..60 / Exp:"1" / Unit:"dB"
+										treble = NumberWithUnit.parse(toneChild);
+										break;
+									}
+								});
+								break;
+								
+							case "Direct":
+								XML.forEachChild(soundVideoChild, directChild->{
+									switch (directChild.getNodeName()) {
+									case "Mode":
+										// GET[G1]:    Main_Zone,Basic_Status   ->   Sound_Video,Direct,Mode -> "On" | "Off"
+										directMode = XML.getSubValue(directChild,Value.OnOff.values());
+										break;
+									}
+								});
+								break;
+								
+							case "HDMI":
+								XML.forEachChild(soundVideoChild, hdmiChild->{
+									switch (hdmiChild.getNodeName()) {
+									case "Standby_Through_Info":
+										// GET[G1]:    Main_Zone,Basic_Status   ->   Sound_Video,HDMI,Standby_Through_Info -> "On" | "Off"
+										hdmiStandbyThrough = XML.getSubValue(hdmiChild,Value.OnOff.values());
+										break;
+										
+									case "Output":
+										XML.forEachChild(hdmiChild, outputChild->{
+											switch (outputChild.getNodeName()) {
+											case "OUT_1":
+												break;
+											}
+										});
+										break;
+									}
+								});
+								break;
+							case "Adaptive_DRC":
+								// GET[G1]:    Main_Zone,Basic_Status   ->   Sound_Video,Adaptive_DRC -> "Auto" | "Off"
+								adaptiveDRC = XML.getSubValue(soundVideoChild,Value.AutoOff.values());
+								break;
+							}
+						});
+						break;
+						
+					}
+				});
+			}
 		}
 	}
 	
@@ -374,10 +573,10 @@ public final class Device {
 
 		public DeviceSceneInput getCurrentInput() {
 			// GET[G1]:    Main_Zone,Basic_Status   ->   Input,Input_Sel -> Values [GET[G2]:Main_Zone,Input,Input_Sel_Item]
-			if (device.basicStatus==null) return null;
-			if (device.basicStatus.currentInput==null) return null;
+			if (inputs==null) return null;
+			if (device.mainZone.basicStatus.currentInput==null) return null;
 			for (DeviceSceneInput dsi:inputs)
-				if (device.basicStatus.currentInput.equals(dsi.ID))
+				if (device.mainZone.basicStatus.currentInput.equals(dsi.ID))
 					return dsi;
 			return null;
 		}
@@ -661,6 +860,7 @@ public final class Device {
 		public String getLabel();
 		
 		public enum EnableDisable        implements Value { Enable, Disable       ; @Override public String getLabel() { return toString(); }  } 
+		public enum AutoOff              implements Value { Auto, Off             ; @Override public String getLabel() { return toString(); }  } 
 		public enum OnOff                implements Value { On, Off               ; @Override public String getLabel() { return toString(); }  } 
 		public enum PowerState           implements Value { On, Standby           ; @Override public String getLabel() { return toString(); }  }
 		public enum PlayStop             implements Value { Play, Stop            ; @Override public String getLabel() { return toString(); }  }
@@ -675,6 +875,22 @@ public final class Device {
 		public enum UpDown               implements Value { Up, Down              ; @Override public String getLabel() { return toString(); }  }
 		public enum AvailableUnavailable implements Value { Available, Unavailable; @Override public String getLabel() { return toString(); }  }
 		
+		public static class SurroundProgram implements Value {
+			
+			// PUT[P9]:    Main_Zone,Surround,Program_Sel,Current,Sound_Program   =   "Hall in Munich" | "Hall in Vienna" | "Chamber" | "Cellar Club" | "The Roxy Theatre" | "The Bottom Line" | "Sports" | "Action Game" | "Roleplaying Game" | "Music Video" | "Standard" | "Spectacle" | "Sci-Fi" | "Adventure" | "Drama" | "Mono Movie" | "Surround Decoder" | "2ch Stereo" | "5ch Stereo"
+			private static String[] labels = new String[] {"Hall in Munich","Hall in Vienna","Chamber","Cellar Club","The Roxy Theatre","The Bottom Line","Sports","Action Game","Roleplaying Game","Music Video","Standard","Spectacle","Sci-Fi","Adventure","Drama","Mono Movie","Surround Decoder","2ch Stereo","5ch Stereo"};
+			private static SurroundProgram[] values = Arrays.stream(labels).map(str->new SurroundProgram(str)).toArray(n->new SurroundProgram[n]);
+			public static SurroundProgram[] values() { return values; }
+			
+			private String label;
+			private SurroundProgram(String label) { this.label = label; }
+			@Override public String getLabel() { return label; }
+			@Override public String toString() { return label; }
+			@Override public boolean equals(Object obj) {
+				if (!(obj instanceof SurroundProgram)) return false;
+				return label.equals(((SurroundProgram)obj).label);
+			}
+		}
 		
 		public enum FreqAutoTP implements Value {
 			AutoUp("Auto Up"),AutoDown("Auto Down"),TPUp("TP Up"),TPDown("TP Down");
@@ -712,7 +928,7 @@ public final class Device {
 		}
 		
 		public enum SleepState implements Value {
-			Last("Last"), _120min("120 min"),_90min("90 min"),_60min("60 min"),_30min("30 min"),Off("Off");
+			Last("Last"),Off("Off"),_30min("30 min"),_60min("60 min"),_90min("90 min"),_120min("120 min");
 			private String label;
 			SleepState(String label) { this.label = label; }
 			@Override public String getLabel() { return label; }
@@ -829,48 +1045,68 @@ public final class Device {
 		}
 	}
 	
-	static class NetRadio {
+	static class SubUnitWithSimpleReadyState {
+		
+		private KnownCommand.Config configCmd;
+		protected String address;
+		Value.ReadyOrNot deviceStatus;
+
+		SubUnitWithSimpleReadyState( String address, KnownCommand.Config configCmd ) {
+			this.address = address;
+			this.configCmd = configCmd;
+			this.deviceStatus = null;
+		}
+		
+		public void updateConfig() {
+			// GET:    #######,Config   ->   Feature_Availability -> "Ready" | "Not Ready"
+			deviceStatus = askValue(address, configCmd, Value.ReadyOrNot.values(), "Feature_Availability");
+		}
+	}
+	
+	static class NetRadio extends SubUnitWithSimpleReadyState {
 		
 		ListInfo          listInfo;
 		PlayInfo_NetRadio playInfo;
 		
 		public NetRadio(String address) {
+			super(address, KnownCommand.Config.NetRadio);
 			this.listInfo = new ListInfo         (             address, KnownCommand.GetListInfo.NetRadio, KnownCommand.SetDirectSel.NetRadio, KnownCommand.SetCursorSel.NetRadio, KnownCommand.SetPageSel.NetRadio, KnownCommand.JumpToLine.NetRadio);
 			this.playInfo = new PlayInfo_NetRadio("Net Radio", address, KnownCommand.GetPlayInfo.NetRadio, KnownCommand.SetPlayback.NetRadio);
 		}
 	}
 	
-	static class USB {
+	static class USB extends SubUnitWithSimpleReadyState {
 		
 		ListInfo listInfo;
 		PlayInfoExt<Value.OnOff> playInfo;
 		
 		public USB(String address) {
+			super(address, KnownCommand.Config.USB);
 			this.listInfo = new ListInfo     (       address, KnownCommand.GetListInfo.USB, KnownCommand.SetDirectSel.USB, KnownCommand.SetCursorSel.USB, KnownCommand.SetPageSel.USB, KnownCommand.JumpToLine.USB);
 			this.playInfo = new PlayInfoExt<>("USB", address, KnownCommand.GetPlayInfo.USB, KnownCommand.SetPlayback.USB, KnownCommand.SetRepeat.USB, KnownCommand.SetShuffle.USB, Value.OnOff.values());
 		}
 	}
 	
-	static class DLNA {
+	static class DLNA extends SubUnitWithSimpleReadyState {
 		
 		ListInfo listInfo;
 		PlayInfoExt<Value.OnOff> playInfo;
 		
 		public DLNA(String address) {
+			super(address, KnownCommand.Config.DLNA);
 			this.listInfo = new ListInfo     (        address, KnownCommand.GetListInfo.DLNA, KnownCommand.SetDirectSel.DLNA, KnownCommand.SetCursorSel.DLNA, KnownCommand.SetPageSel.DLNA, KnownCommand.JumpToLine.DLNA);
 			this.playInfo = new PlayInfoExt<>("DLNA", address, KnownCommand.GetPlayInfo.DLNA, KnownCommand.SetPlayback.DLNA, KnownCommand.SetRepeat.DLNA, KnownCommand.SetShuffle.DLNA, Value.OnOff.values());
 		}
 	}
 	
-	static class IPodUSB {
+	static class IPodUSB extends SubUnitWithSimpleReadyState {
 		
 		Value.IPodMode mode;
 		ListInfo listInfo;
 		PlayInfoExt<Value.ShuffleIPod> playInfo;
-		private String address;
 		
 		public IPodUSB(String address) {
-			this.address = address;
+			super(address, KnownCommand.Config.IPodUSB);
 			this.listInfo = new ListInfo     (            address, KnownCommand.GetListInfo.IPodUSB, KnownCommand.SetDirectSel.IPodUSB, KnownCommand.SetCursorSel.IPodUSB, KnownCommand.SetPageSel.IPodUSB, KnownCommand.JumpToLine.IPodUSB);
 			this.playInfo = new PlayInfoExt<>("iPod USB", address, KnownCommand.GetPlayInfo.IPodUSB, KnownCommand.SetPlayback.IPodUSB, KnownCommand.SetRepeat.IPodUSB, KnownCommand.SetShuffle.IPodUSB, Value.ShuffleIPod.values());
 		}
@@ -929,11 +1165,12 @@ public final class Device {
 		}
 	}
 
-	static class Spotify {
+	static class Spotify extends SubUnitWithSimpleReadyState {
 		
 		PlayInfo_AirPlaySpotify playInfo;
 		
 		public Spotify(String address) {
+			super(address, KnownCommand.Config.Spotify);
 			this.playInfo = new PlayInfo_AirPlaySpotify("Spotify", address, KnownCommand.GetPlayInfo.Spotify, KnownCommand.SetPlayback.Spotify);
 		}
 	}
@@ -1890,76 +2127,76 @@ public final class Device {
 		// [Band_AM]        PUT[P3]     Tuner,Play_Control,Tuning,Band = AM
 		// [Band_FM]        PUT[P3]     Tuner,Play_Control,Tuning,Band = FM
 		int rc = Ctrl.sendPutCommand(address, cmd, value.getLabel());
-		if (rc!=Ctrl.RC_OK || debug_verbose) Log.log( logType, callerClass, "sendSetBand( %s ): %s -> RC: %d", value, cmd.toFullString(), rc);
+		if (rc!=Ctrl.RC_OK || debug_verbose) Log.log( logType, callerClass, "sendSetBand( %s ): %s -> RC: %s", value, cmd.toFullString(), Ctrl.getRCcode(rc));
 	}
 
 	private static void sendCommand(Class<?> callerClass, String address, String function, KnownCommand cmd, String valueSourceStr, String xmlStr) {
 		int rc = Ctrl.sendPutCommand(address, cmd, xmlStr);
-		if (rc!=Ctrl.RC_OK || debug_verbose) Log.log( logType, callerClass, "%s( %s->%s ): %s -> RC: %d", function, valueSourceStr, xmlStr, cmd.toFullString(), rc);
+		if (rc!=Ctrl.RC_OK || debug_verbose) Log.log( logType, callerClass, "%s( %s->%s ): %s -> RC: %s", function, valueSourceStr, xmlStr, cmd.toFullString(), Ctrl.getRCcode(rc));
 	}
 
 	private static void sendCommand(Class<?> callerClass, String address, String function, KnownCommand cmd, String value) {
 		int rc = Ctrl.sendPutCommand(address, cmd, value);
-		if (rc!=Ctrl.RC_OK || debug_verbose) Log.log( logType, callerClass, "%s( %s ): %s -> RC: %d", function, value, cmd.toFullString(), rc);
+		if (rc!=Ctrl.RC_OK || debug_verbose) Log.log( logType, callerClass, "%s( %s ): %s -> RC: %s", function, value, cmd.toFullString(), Ctrl.getRCcode(rc));
 	}
 
 	private static void sendCommand(Class<?> callerClass, String address, String function, KnownCommand cmd, Value value) {
 		int rc = Ctrl.sendPutCommand(address, cmd, value.getLabel());
-		if (rc!=Ctrl.RC_OK || debug_verbose) Log.log( logType, callerClass, "%s( %s ): %s -> RC: %d", function, value, cmd.toFullString(), rc);
+		if (rc!=Ctrl.RC_OK || debug_verbose) Log.log( logType, callerClass, "%s( %s ): %s -> RC: %s", function, value, cmd.toFullString(), Ctrl.getRCcode(rc));
 	}
 
 	private static void sendMenuControl(Class<?> callerClass, String address, KnownCommand.MenuControl cmd, Value.MainZoneMenuControl value) {
 		int rc = Ctrl.sendPutCommand(address, cmd, value.getLabel());
-		if (rc!=Ctrl.RC_OK || debug_verbose) Log.log( logType, callerClass, "sendMenuControl( %s ): %s -> RC: %d", value, cmd.toFullString(), rc);
+		if (rc!=Ctrl.RC_OK || debug_verbose) Log.log( logType, callerClass, "sendMenuControl( %s ): %s -> RC: %s", value, cmd.toFullString(), Ctrl.getRCcode(rc));
 	}
 
 	private static void sendDirectSelect(Class<?> callerClass, String address, KnownCommand.SetDirectSel cmd, String value) {
 		int rc = Ctrl.sendPutCommand(address, cmd, value);
-		if (rc!=Ctrl.RC_OK || debug_verbose) Log.log( logType, callerClass, "sendDirectSelect( %s ): %s -> RC: %d", value, cmd.toFullString(), rc);
+		if (rc!=Ctrl.RC_OK || debug_verbose) Log.log( logType, callerClass, "sendDirectSelect( %s ): %s -> RC: %s", value, cmd.toFullString(), Ctrl.getRCcode(rc));
 	}
 
 	private static void sendJumpToLine(Class<?> callerClass, String address, KnownCommand.JumpToLine cmd, int value) {
 		int rc = Ctrl.sendPutCommand(address, cmd, ""+value);
-		if (rc!=Ctrl.RC_OK || debug_verbose) Log.log( logType, callerClass, "sendJumpToLine( %d ): %s -> RC: %d", value, cmd.toFullString(), rc);
+		if (rc!=Ctrl.RC_OK || debug_verbose) Log.log( logType, callerClass, "sendJumpToLine( %d ): %s -> RC: %s", value, cmd.toFullString(), Ctrl.getRCcode(rc));
 	}
 
 	private static void sendCursorSelect(Class<?> callerClass, String address, KnownCommand.SetCursorSelExt cmd, Value.CursorSelectExt value) {
 		int rc = Ctrl.sendPutCommand(address, cmd, value.getLabel());
-		if (rc!=Ctrl.RC_OK || debug_verbose) Log.log( logType, callerClass, "sendCursorSelect( %s ): %s -> RC: %d", value, cmd.toFullString(), rc);
+		if (rc!=Ctrl.RC_OK || debug_verbose) Log.log( logType, callerClass, "sendCursorSelect( %s ): %s -> RC: %s", value, cmd.toFullString(), Ctrl.getRCcode(rc));
 	}
 
 	private static void sendCursorSelect(Class<?> callerClass, String address, KnownCommand.SetCursorSel cmd, Value.CursorSelect value) {
 		int rc = Ctrl.sendPutCommand(address, cmd, value.getLabel());
-		if (rc!=Ctrl.RC_OK || debug_verbose) Log.log( logType, callerClass, "sendCursorSelect( %s ): %s -> RC: %d", value, cmd.toFullString(), rc);
+		if (rc!=Ctrl.RC_OK || debug_verbose) Log.log( logType, callerClass, "sendCursorSelect( %s ): %s -> RC: %s", value, cmd.toFullString(), Ctrl.getRCcode(rc));
 	}
 
 	private static void sendPageSelect(Class<?> callerClass, String address, KnownCommand.SetPageSel cmd, Value.PageSelect value) {
 		int rc = Ctrl.sendPutCommand(address, cmd, value.getLabel());
-		if (rc!=Ctrl.RC_OK || debug_verbose) Log.log( logType, callerClass, "sendPageSelect( %s ): %s -> RC: %d", value, cmd.toFullString(), rc);
+		if (rc!=Ctrl.RC_OK || debug_verbose) Log.log( logType, callerClass, "sendPageSelect( %s ): %s -> RC: %s", value, cmd.toFullString(), Ctrl.getRCcode(rc));
 	}
 
 	private static void sendPlayback(Class<?> callerClass, String address, KnownCommand.SetPlayback cmd, Value.PlayStop value) {
 		int rc = Ctrl.sendPutCommand(address, cmd, value.getLabel());
-		if (rc!=Ctrl.RC_OK || debug_verbose) Log.log( logType, callerClass, "sendPlayback(%s): %s -> RC: %d", value, cmd.toFullString(), rc);
+		if (rc!=Ctrl.RC_OK || debug_verbose) Log.log( logType, callerClass, "sendPlayback(%s): %s -> RC: %s", value, cmd.toFullString(), Ctrl.getRCcode(rc));
 	}
 
 	private static void sendPlayback(Class<?> callerClass, String address, KnownCommand.SetPlayback cmd, Value.PlayPauseStop value) {
 		int rc = Ctrl.sendPutCommand(address, cmd, value.getLabel());
-		if (rc!=Ctrl.RC_OK || debug_verbose) Log.log( logType, callerClass, "sendPlayback(%s): %s -> RC: %d", value, cmd.toFullString(), rc);
+		if (rc!=Ctrl.RC_OK || debug_verbose) Log.log( logType, callerClass, "sendPlayback(%s): %s -> RC: %s", value, cmd.toFullString(), Ctrl.getRCcode(rc));
 	}
 
 	private static void sendPlayback(Class<?> callerClass, String address, KnownCommand.SetPlayback cmd, Value.SkipFwdRev value) {
 		int rc = Ctrl.sendPutCommand(address, cmd, value.getLabel());
-		if (rc!=Ctrl.RC_OK || debug_verbose) Log.log( logType, callerClass, "sendPlayback(%s): %s -> RC: %d", value, cmd.toFullString(), rc);
+		if (rc!=Ctrl.RC_OK || debug_verbose) Log.log( logType, callerClass, "sendPlayback(%s): %s -> RC: %s", value, cmd.toFullString(), Ctrl.getRCcode(rc));
 	}
 
 	private static void sendRepeat(Class<?> callerClass, String address, KnownCommand.SetRepeat cmd, Value.OffOneAll value) {
 		int rc = Ctrl.sendPutCommand(address, cmd, value.getLabel());
-		if (rc!=Ctrl.RC_OK || debug_verbose) Log.log( logType, callerClass, "sendRepeat(%s): %s -> RC: %d", value, cmd.toFullString(), rc);
+		if (rc!=Ctrl.RC_OK || debug_verbose) Log.log( logType, callerClass, "sendRepeat(%s): %s -> RC: %s", value, cmd.toFullString(), Ctrl.getRCcode(rc));
 	}
 
 	private static <Shuffle extends Enum<Shuffle>&Value> void sendShuffle(Class<?> callerClass, String address, KnownCommand.SetShuffle cmd, Shuffle value) {
 		int rc = Ctrl.sendPutCommand(address, cmd, value.getLabel());
-		if (rc!=Ctrl.RC_OK || debug_verbose) Log.log( logType, callerClass, "sendShuffle(%s): %s -> RC: %d", value, cmd.toFullString(), rc);
+		if (rc!=Ctrl.RC_OK || debug_verbose) Log.log( logType, callerClass, "sendShuffle(%s): %s -> RC: %s", value, cmd.toFullString(), Ctrl.getRCcode(rc));
 	}
 }

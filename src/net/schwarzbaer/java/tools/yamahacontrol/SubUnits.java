@@ -49,11 +49,14 @@ final class SubUnits {
 	
 		private JButton activateBtn;
 		private Device.Inputs.DeviceSceneInput activateInput;
+
+		private UpdateWish readyStateUpdateWish;
 	
-		protected AbstractSubUnit(String inputID, String tabTitle) {
+		protected AbstractSubUnit(String inputID, String tabTitle, UpdateWish readyStateUpdateWish) {
 			super(new BorderLayout(3,3));
 			this.inputID = inputID;
 			this.tabTitle = tabTitle;
+			this.readyStateUpdateWish = readyStateUpdateWish;
 			this.activateInput = null;
 		}
 	
@@ -103,21 +106,19 @@ final class SubUnits {
 	
 		@Override
 		public EnumSet<UpdateWish> getUpdateWishes(YamahaControl.UpdateReason reason) {
-			UpdateWish updateWish = getReadyStateUpdateWish();
-			if (updateWish!=null) return EnumSet.of(updateWish);
+			if (readyStateUpdateWish!=null) return EnumSet.of(readyStateUpdateWish);
 			return EnumSet.noneOf(UpdateWish.class);
 		}
 	
 		protected JPanel createContentPanel() { return new JPanel(); }
-		protected UpdateWish getReadyStateUpdateWish() { return null; }
 	
 		protected abstract Boolean getReadyState();
-		protected Boolean askReadyState(Device.KnownCommand.Config cmd) {
-			if (device==null) return null;
-			// GET:    #######,Config   ->   Feature_Availability -> "Ready" | "Not Ready"
-			Value.ReadyOrNot readyState = device.askValue(cmd, Value.ReadyOrNot.values(), "Feature_Availability");
-			return readyState==null?null:(readyState==Value.ReadyOrNot.Ready);
-		}
+//		protected Boolean askReadyState(Device.KnownCommand.Config cmd) {
+//			if (device==null) return null;
+//			// GET:    #######,Config   ->   Feature_Availability -> "Ready" | "Not Ready"
+//			Value.ReadyOrNot readyState = device.askValue(cmd, Value.ReadyOrNot.values(), "Feature_Availability");
+//			return readyState==null?null:(readyState==Value.ReadyOrNot.Ready);
+//		}
 	
 		@Override public void setEnabledGUI(boolean enabled) { /*setEnabled(enabled);*/ }
 	}
@@ -126,15 +127,15 @@ final class SubUnits {
 		private static final long serialVersionUID = -8583320100311806933L;
 	
 		public SubUnitNetRadio() {
-			super("NET RADIO","Net Radio",UpdateWish.NetRadioListInfo,UpdateWish.NetRadioPlayInfo);
+			super("NET RADIO", "Net Radio", UpdateWish.NetRadioConfig, UpdateWish.NetRadioListInfo, UpdateWish.NetRadioPlayInfo);
 			modules.add(new PlayButtonModule(this, this));
 			withExtraCharsetConversion = true;
 		}
 	
 		@Override
 		protected Boolean getReadyState() {
-			// GET[G3]:    NET_RADIO,Config   ->   Feature_Availability -> "Ready" | "Not Ready"
-			return askReadyState(Device.KnownCommand.Config.NetRadio);
+			if (device==null) return null;
+			return device.netRadio.deviceStatus==null?null:(device.netRadio.deviceStatus==Value.ReadyOrNot.Ready);
 		}
 	
 		@Override public    Device.PlayInfo_NetRadio getPlayInfo()              { return device==null?null:device.netRadio.playInfo; }
@@ -157,13 +158,13 @@ final class SubUnits {
 		private static final long serialVersionUID = 2909543552931897755L;
 	
 		public SubUnitUSB() {
-			super("USB","USB Device",UpdateWish.USBListInfo,UpdateWish.USBPlayInfo,Value.OnOff.values());
+			super("USB", "USB Device", UpdateWish.USBConfig, UpdateWish.USBListInfo, UpdateWish.USBPlayInfo, Value.OnOff.values());
 		}
 		
 		@Override
 		protected Boolean getReadyState() {
-			// GET[G3]:    USB,Config   ->   Feature_Availability -> "Ready" | "Not Ready"
-			return askReadyState(Device.KnownCommand.Config.USB);
+			if (device==null) return null;
+			return device.usb.deviceStatus==null?null:(device.usb.deviceStatus==Value.ReadyOrNot.Ready);
 		}
 		
 		@Override public    Device.PlayInfoExt<Value.OnOff> getPlayInfo()              { return device==null?null:device.usb.playInfo; }
@@ -174,13 +175,13 @@ final class SubUnits {
 		private static final long serialVersionUID = -4585259335586086032L;
 	
 		public SubUnitDLNA() {
-			super("SERVER","DLNA Server",UpdateWish.DLNAListInfo,UpdateWish.DLNAPlayInfo,Value.OnOff.values());
+			super("SERVER", "DLNA Server", UpdateWish.DLNAConfig, UpdateWish.DLNAListInfo, UpdateWish.DLNAPlayInfo, Value.OnOff.values());
 		}
 		
 		@Override
 		protected Boolean getReadyState() {
-			// GET[G3]:    SERVER,Config   ->   Feature_Availability -> "Ready" | "Not Ready"
-			return askReadyState(Device.KnownCommand.Config.DLNA);
+			if (device==null) return null;
+			return device.dlna.deviceStatus==null?null:(device.dlna.deviceStatus==Value.ReadyOrNot.Ready);
 		}
 		
 		@Override public    Device.PlayInfoExt<Value.OnOff> getPlayInfo()              { return device==null?null:device.dlna.playInfo; }
@@ -192,14 +193,14 @@ final class SubUnits {
 		private JButton modeBtn;
 	
 		public SubUnitIPodUSB() {
-			super("iPod (USB)","iPod (USB) [untested]",UpdateWish.IPodUSBListInfo,UpdateWish.IPodUSBPlayInfo,Value.ShuffleIPod.values());
+			super("iPod (USB)", "iPod (USB) [untested]", UpdateWish.IPodUSBConfig, UpdateWish.IPodUSBListInfo, UpdateWish.IPodUSBPlayInfo, Value.ShuffleIPod.values());
 			setExtraButtons(this);
 		}
 	
 		@Override
 		protected Boolean getReadyState() {
-			// GET[G3]:    iPod_USB,Config   ->   Feature_Availability -> "Ready" | "Not Ready"
-			return askReadyState(Device.KnownCommand.Config.IPodUSB);
+			if (device==null) return null;
+			return device.iPodUSB.deviceStatus==null?null:(device.iPodUSB.deviceStatus==Value.ReadyOrNot.Ready);
 		}
 		
 		@Override
@@ -249,7 +250,7 @@ final class SubUnits {
 	
 	
 		public SubUnitTuner() {
-			super("TUNER","Tuner", UpdateWish.TunerPlayInfo);
+			super("TUNER","Tuner", UpdateWish.TunerConfig, UpdateWish.TunerPlayInfo);
 			isEnabled = true;
 			selectedBand = null;
 			presetCmbBx_ignoreSelectionEvent = false;
@@ -294,11 +295,6 @@ final class SubUnits {
 		public void frequentlyUpdate() {
 			super.frequentlyUpdate();
 			updateTunerGui();
-		}
-		
-		@Override
-		protected UpdateWish getReadyStateUpdateWish() {
-			return UpdateWish.TunerConfig;
 		}
 	
 		@Override
@@ -532,15 +528,10 @@ final class SubUnits {
 	
 		// [Source_Device | SD_AirPlay | AirPlay]   
 		public SubUnitAirPlay() {
-			super("AirPlay","AirPlay [untested]",UpdateWish.AirPlayPlayInfo);
+			super("AirPlay", "AirPlay [untested]", UpdateWish.AirPlayConfig, UpdateWish.AirPlayPlayInfo);
 		}
 		
 		@Override public Device.PlayInfo_AirPlaySpotify getPlayInfo() { return device==null?null:device.airPlay.playInfo; }
-	
-		@Override
-		protected UpdateWish getReadyStateUpdateWish() {
-			return UpdateWish.AirPlayConfig;
-		}
 	
 		@Override
 		protected Boolean getReadyState() {
@@ -556,15 +547,15 @@ final class SubUnits {
 		private static final long serialVersionUID = -869960569061323838L;
 	
 		public SubUnitSpotify() {
-			super("Spotify","Spotify [untested]",UpdateWish.SpotifyPlayInfo);
+			super("Spotify", "Spotify [untested]", UpdateWish.SpotifyConfig, UpdateWish.SpotifyPlayInfo);
 		}
 		
 		@Override public Device.PlayInfo_AirPlaySpotify getPlayInfo() { return device==null?null:device.spotify.playInfo; }
 	
 		@Override
 		protected Boolean getReadyState() {
-			// GET[G3]:    Spotify,Config   ->   Feature_Availability -> "Ready" | "Not Ready"
-			return askReadyState(Device.KnownCommand.Config.Spotify);
+			if (device==null) return null;
+			return device.spotify.deviceStatus==null?null:(device.spotify.deviceStatus==Value.ReadyOrNot.Ready);
 		}
 	}
 
@@ -811,8 +802,8 @@ final class SubUnits {
 	
 		protected boolean withExtraCharsetConversion;
 		
-		protected AbstractSubUnit_Play(String inputID, String tabTitle, UpdateWish playInfoUpdateWish) {
-			super(inputID, tabTitle);
+		protected AbstractSubUnit_Play(String inputID, String tabTitle, UpdateWish readyStateUpdateWish, UpdateWish playInfoUpdateWish) {
+			super(inputID, tabTitle, readyStateUpdateWish);
 			this.playInfoUpdateWish = playInfoUpdateWish;
 			comps = new Vector<>();
 			modules = new Vector<>();
@@ -939,8 +930,8 @@ final class SubUnits {
 			protected UpdateWish listInfoUpdateWish;
 	
 		
-			public AbstractSubUnit_ListPlay(String inputID, String tabTitle, UpdateWish listInfoUpdateWish, UpdateWish playInfoUpdateWish) {
-				super(inputID, tabTitle, playInfoUpdateWish);
+			public AbstractSubUnit_ListPlay(String inputID, String tabTitle, UpdateWish readyStateUpdateWish, UpdateWish listInfoUpdateWish, UpdateWish playInfoUpdateWish) {
+				super(inputID, tabTitle, readyStateUpdateWish, playInfoUpdateWish);
 				this.listInfoUpdateWish = listInfoUpdateWish;
 			}
 	
@@ -1014,8 +1005,8 @@ final class SubUnits {
 		private static final long serialVersionUID = 8830354607137619068L;
 		private ButtonModule lastModule;
 		
-		public AbstractSubUnit_PlayInfoExt(String inputID, String tabTitle, UpdateWish listInfoUpdateWish, UpdateWish playInfoUpdateWish, Shuffle[] shuffleValues) {
-			super(inputID, tabTitle, listInfoUpdateWish, playInfoUpdateWish);
+		public AbstractSubUnit_PlayInfoExt(String inputID, String tabTitle, UpdateWish readyStateUpdateWish, UpdateWish listInfoUpdateWish, UpdateWish playInfoUpdateWish, Shuffle[] shuffleValues) {
+			super(inputID, tabTitle, readyStateUpdateWish, listInfoUpdateWish, playInfoUpdateWish);
 			modules.add( new PlayButtonModuleExt(this, null));
 			modules.add( lastModule = new ReapeatShuffleButtonModule<Shuffle>(this, shuffleValues, null));
 		}
@@ -1031,8 +1022,8 @@ final class SubUnits {
 		private static final long serialVersionUID = -1847669703849102028L;
 		private ButtonModule lastModule;
 	
-		public AbstractSubUnit_AirPlaySpotify(String inputID, String tabTitle, UpdateWish playInfoUpdateWish) {
-			super(inputID, tabTitle, playInfoUpdateWish);
+		public AbstractSubUnit_AirPlaySpotify(String inputID, String tabTitle, UpdateWish readyStateUpdateWish, UpdateWish playInfoUpdateWish) {
+			super(inputID, tabTitle, readyStateUpdateWish, playInfoUpdateWish);
 			modules.add( lastModule = new PlayButtonModuleExt(this, null));
 		}
 		

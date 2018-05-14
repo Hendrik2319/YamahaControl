@@ -9,9 +9,11 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
+import java.net.ConnectException;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.ProtocolException;
+import java.net.SocketTimeoutException;
 import java.net.URL;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
@@ -128,13 +130,29 @@ final class Ctrl {
 	static final int RC_CANT_PARSE_XML = -2;
 	static final int RC_CANT_FIND_RC_ATTR = -3;
 	static final int RC_CANT_PARSE_RC_VALUE = -4;
+	static final int RC_CONNECT_TIMEOUT = -5;
 	
+	public static String getRCcode(int rc) {
+		switch (rc) {
+		case RC_DEVICE_IN_STANDBY   : return "DEVICE IN STANDBY";
+		case RC_OK                  : return "OK";
+		case RC_NO_RESPONSE         : return "NO RESPONSE";
+		case RC_CANT_PARSE_XML      : return "CANT PARSE XML";
+		case RC_CANT_FIND_RC_ATTR   : return "CANT FIND RC ATTR";
+		case RC_CANT_PARSE_RC_VALUE : return "CANT PARSE RC VALUE";
+		case RC_CONNECT_TIMEOUT     : return "CONNECT TIMEOUT";
+		}
+		return "Unknown "+rc;
+	}
+
 	static int lastRC = RC_OK;
 	static boolean showCommands = false;
 	
 	static Document sendCommand_controlled(String address, String command) {
+		lastRC = RC_OK;
+				
 		HttpResponse response = http.sendCommand(address, command);
-		if (response==null) { lastRC = RC_NO_RESPONSE; return null; }
+		if (response==null) { if (lastRC==RC_OK) lastRC = RC_NO_RESPONSE; return null; }
 		
 		Document document = XML.parse(response.string);
 		if (document==null) { lastRC = RC_CANT_PARSE_XML; return null; }
@@ -309,7 +327,24 @@ final class Ctrl {
 				if (!successful) return null;
 			}
 			
+			connection.setConnectTimeout(2000);
 			try { connection.connect(); }
+			catch (ConnectException e) {
+				if (e.getMessage().equals("Connection timed out: connect")) {
+					lastRC = RC_CONNECT_TIMEOUT;
+					if (verboseOnError) System.err.println("ConnectTimeout");
+				} else
+					e.printStackTrace();
+				return null;
+			}
+			catch (SocketTimeoutException e) {
+				if (e.getMessage().equals("connect timed out")) {
+					lastRC = RC_CONNECT_TIMEOUT;
+					if (verboseOnError) System.err.println("SocketTimeout");
+				} else
+					e.printStackTrace();
+				return null;
+			}
 			catch (IOException e) { e.printStackTrace(); return null; }
 			
 			if (writeRequestContent!=null) {
@@ -317,12 +352,22 @@ final class Ctrl {
 				if (!successful) { if (verboseOnError) showConnection(connection); connection.disconnect(); return null; }
 			}
 			
+			int httpResponseCode;
+			try { httpResponseCode = connection.getResponseCode(); } catch (IOException e1) { httpResponseCode=111111; }
+			if (httpResponseCode!=200) {
+				lastRC = httpResponseCode;
+				String responseMessage;
+				try { responseMessage = connection.getResponseMessage(); } catch (IOException e) { responseMessage="????"; }
+				if (verboseOnError) System.err.println("HTTP Response: "+httpResponseCode+" \""+responseMessage+"\"");
+				return null;
+			}
+			
 			Object content;
-			if (connection.getContentLength()==0)
-				content = null;
-			else
+			if (connection.getContentLength()>0)
 				try { content = connection.getContent(); }
 				catch (IOException e) { if (verboseOnError) showConnection(connection); e.printStackTrace(); connection.disconnect(); return null; }
+			else
+				content = null;
 			if (verbose) System.out.println("Content: "+content);
 			
 			HttpResponse response = null;

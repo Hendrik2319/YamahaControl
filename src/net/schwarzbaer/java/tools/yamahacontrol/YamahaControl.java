@@ -28,6 +28,7 @@ import java.io.PrintWriter;
 import java.io.Reader;
 import java.io.StringWriter;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.EnumSet;
@@ -50,6 +51,7 @@ import javax.swing.ButtonGroup;
 import javax.swing.Icon;
 import javax.swing.ImageIcon;
 import javax.swing.JButton;
+import javax.swing.JCheckBox;
 import javax.swing.JCheckBoxMenuItem;
 import javax.swing.JComboBox;
 import javax.swing.JComponent;
@@ -71,6 +73,9 @@ import javax.swing.filechooser.FileSystemView;
 import net.schwarzbaer.gui.StandardMainWindow;
 import net.schwarzbaer.java.tools.yamahacontrol.Device.UpdateWish;
 import net.schwarzbaer.java.tools.yamahacontrol.Device.Value;
+import net.schwarzbaer.java.tools.yamahacontrol.Device.Value.AutoOff;
+import net.schwarzbaer.java.tools.yamahacontrol.Device.Value.OnOff;
+import net.schwarzbaer.java.tools.yamahacontrol.Device.Value.SurroundProgram;
 
 public class YamahaControl {
 	
@@ -133,8 +138,8 @@ public class YamahaControl {
 	private Device device;
 	private Vector<GuiRegion> guiRegions;
 	private FrequentlyTask frequentlyUpdater;
-	private ValueButton<Value.OnOff> updateBtn;
 	private JLabel updateLabel;
+	private JCheckBox updateChkBx;
 	
 	YamahaControl() {
 		mainWindow = null;
@@ -151,13 +156,13 @@ public class YamahaControl {
 	}
 	
 	private void startUpdater() {
-		updateBtn.setValue(Value.OnOff.On);
+		updateChkBx.setSelected(true);
 		frequentlyUpdater.start();
 	}
 
 	private void stopUpdater() {
 		frequentlyUpdater.stop();
-		updateBtn.setValue(Value.OnOff.Off);
+		updateChkBx.setSelected(false);
 	}
 
 	private void createGUI() {
@@ -168,27 +173,35 @@ public class YamahaControl {
 		VolumeCtrl volumeCtrl = new VolumeCtrl();
 		guiRegions.add(volumeCtrl);
 		
-		updateBtn = new ValueButton<Value.OnOff>(ValueButton.IconSourceOnOff, v->{
-			if (v==null) v=Value.OnOff.Off;
-			switch (v) {
-			case Off: startUpdater(); break;
-			case On : stopUpdater (); break;
-			}
+//		updateBtn = new ValueButton<Value.OnOff>(ValueButton.IconSourceOnOff, v->{
+//			if (v==null) v=Value.OnOff.Off;
+//			switch (v) {
+//			case Off: startUpdater(); break;
+//			case On : stopUpdater (); break;
+//			}
+//		});
+//		updateBtn.setMargin(new Insets(2,3,2,3));
+//		updateBtn.setValue(Value.OnOff.Off);
+		
+		updateChkBx = new JCheckBox("Update GUI frequently",false);
+		updateChkBx.addActionListener(e->{
+			if (updateChkBx.isSelected()) startUpdater();
+			else stopUpdater ();
 		});
-		updateBtn.setMargin(new Insets(2,3,2,3));
-		updateBtn.setValue(Value.OnOff.Off);
-		updateLabel = new JLabel("Update GUI frequently:",smallImages.get(SmallImages.IconOff),JLabel.LEFT);
+		updateLabel = new JLabel(smallImages.get(SmallImages.IconOff),JLabel.LEFT);
 		
 		GridBagPanel updatePanel = new GridBagPanel();
-		updatePanel.add(updateLabel, 0,0, 1,0, 1,1, GridBagConstraints.BOTH);
-		updatePanel.add(updateBtn, 1,0, 0,0, 1,1, GridBagConstraints.HORIZONTAL);
+		updatePanel.add(updateChkBx, 0,0, 0,0, 1,1, GridBagConstraints.HORIZONTAL);
+		updatePanel.add(updateLabel, 1,0, 1,0, 1,1, GridBagConstraints.BOTH);
+//		updatePanel.add(updateLabel, 0,0, 1,0, 1,1, GridBagConstraints.BOTH);
+//		updatePanel.add(updateBtn, 1,0, 0,0, 1,1, GridBagConstraints.HORIZONTAL);
 		
 		GridBagPanel devicePanel = new GridBagPanel();
 		devicePanel.setBorder(BorderFactory.createTitledBorder("Device"));
-		devicePanel.add(createButton("Connect",e->connectToReciever(),true),1,1,GridBagConstraints.BOTH);
-		devicePanel.add(onOffBtn.button,1,GridBagConstraints.REMAINDER,GridBagConstraints.BOTH);
-		devicePanel.add(createButton("Open Command List",e->CommandList.openWindow(device==null?null:device.address),true),1,GridBagConstraints.REMAINDER,GridBagConstraints.BOTH);
-		devicePanel.add(updatePanel,1,GridBagConstraints.REMAINDER,GridBagConstraints.BOTH);
+		devicePanel.add(createButton("Connect",e->connectToReciever(),true),0,1,GridBagConstraints.BOTH);
+		devicePanel.add(onOffBtn.button,0,GridBagConstraints.REMAINDER,GridBagConstraints.BOTH);
+		devicePanel.add(createButton("Open Command List",e->CommandList.openWindow(device==null?null:device.address),true),0,GridBagConstraints.REMAINDER,GridBagConstraints.BOTH);
+		devicePanel.add(updatePanel,0,GridBagConstraints.REMAINDER,GridBagConstraints.BOTH);
 		
 		JTabbedPane settingsPanel = new JTabbedPane();
 		settingsPanel.setBorder(BorderFactory.createTitledBorder("Settings"));
@@ -244,6 +257,7 @@ public class YamahaControl {
 	}
 
 	private void updateDevice(UpdateReason reason) {
+		//Log.info(getClass(), "updateDevice( %s )", reason);
 		EnumSet<UpdateWish> updateWishes = EnumSet.noneOf(UpdateWish.class);
 		guiRegions.forEach((GuiRegion gr)->updateWishes.addAll(gr.getUpdateWishes(reason)));
 		device.update(updateWishes);
@@ -571,10 +585,55 @@ public class YamahaControl {
 			clearSelection();
 		}
 	}
+	
+	static class ValueComboBox<V extends Value> extends JComboBox<String> {
+		private static final long serialVersionUID = 8993527380901830503L;
+		
+		private boolean isSetting;
+		private V[] values;
+		
+		ValueComboBox(V[] values, Consumer<V> actionListener) {
+			super(convert(values));
+			this.values = values;
+			isSetting = false;
+			addActionListener(e->{
+				if (isSetting) return;
+				actionListener.accept(getSelected());
+			});
+		}
+
+		public V getSelected() {
+			int index = getSelectedIndex();
+			return index<0?null:values[index];
+		}
+		
+		public void setSelected(V value) {
+			isSetting = true;
+			if (value==null)
+				setSelectedIndex(-1);
+			else {
+				boolean found = false;
+				for (int i=0; i<values.length; ++i)
+					if (value.equals(values[i])) {
+						setSelectedIndex(i);
+						found = true;
+						break;
+					}
+				if (!found)
+					setSelectedIndex(-1);
+			}
+			isSetting = false;
+		}
+
+		private static <V extends Value> String[] convert(V[] values) {
+			return Arrays.stream(values).map(v->v.getLabel()).toArray(n->new String[n]);
+		}
+		
+	}
 
 	static class ValueButton<V extends Value> extends JButton {
 		private static final long serialVersionUID = -7733433597611049422L;
-		
+
 		private V value;
 		private Function<V, SmallImages> iconSource;
 		
@@ -590,7 +649,7 @@ public class YamahaControl {
 			setIcon(smallImages.get(iconSource.apply(this.value)));
 		}
 		
-		static Function<Value.OnOff, SmallImages> IconSourceOnOff = v->{
+		static final Function<Value.OnOff, SmallImages> IconSourceOnOff = v->{
 			if (v!=null)
 				switch (v) {
 				case Off: return SmallImages.IconOff;
@@ -598,7 +657,15 @@ public class YamahaControl {
 				}
 			return SmallImages.IconUnknown;
 		};
-		static Function<Value.PowerState, SmallImages> IconSourcePowerState = v->{
+		static final Function<AutoOff, SmallImages> IconSourceAutoOff = v->{
+			if (v!=null)
+				switch (v) {
+				case Off : return SmallImages.IconOff;
+				case Auto: return SmallImages.IconOn;
+				}
+			return SmallImages.IconUnknown;
+		};
+		static final Function<Value.PowerState, SmallImages> IconSourcePowerState = v->{
 			if (v!=null)
 				switch (v) {
 				case Standby: return SmallImages.IconOff;
@@ -606,7 +673,7 @@ public class YamahaControl {
 				}
 			return SmallImages.IconUnknown;
 		};
-		static Function<Value.EnableDisable, SmallImages> IconSourceEnableDisable = v->{
+		static final Function<Value.EnableDisable, SmallImages> IconSourceEnableDisable = v->{
 			if (v!=null)
 				switch (v) {
 				case Disable: return SmallImages.IconOff;
@@ -718,7 +785,7 @@ public class YamahaControl {
 			frequentlyUpdate();
 		}
 		@Override public void frequentlyUpdate() {
-			setOnOffButton(device==null?null:device.mainZone.getPowerState());
+			setOnOffButton(device==null?null:device.mainZone.basicStatus.power);
 		}
 		@Override public EnumSet<UpdateWish> getUpdateWishes(UpdateReason reason) {
 			return EnumSet.of( UpdateWish.BasicStatus );
@@ -738,12 +805,12 @@ public class YamahaControl {
 
 		private void toggleOnOff() {
 			if (device!=null) {
-				Value.PowerState powerState = device.mainZone.getPowerState();
-				if (powerState==null) device.mainZone.setPowerState(Value.PowerState.On);
-				else device.mainZone.setPowerState(getNext(powerState,Value.PowerState.values()));
+				Value.PowerState powerState = device.mainZone.basicStatus.power;
+				powerState = powerState==null ? Value.PowerState.On : getNext(powerState,Value.PowerState.values());
+				device.mainZone.setPowerState(powerState);
 				device.update(EnumSet.of( UpdateWish.BasicStatus ));
 			}
-			setOnOffButton(device==null?null:device.mainZone.getPowerState());
+			setOnOffButton(device==null?null:device.mainZone.basicStatus.power);
 		}
 	}
 	
@@ -915,41 +982,41 @@ public class YamahaControl {
 			
 			comps.clear();
 			int row=0;
-			panel.add(new JLabel(" "), 0,row++, 1,0, 3,1, GridBagConstraints.HORIZONTAL);
+			panel.add(new JLabel(" "), 0,row++, 0,0, 3,1, GridBagConstraints.HORIZONTAL);
 			
 			GridBagPanel setupPanel = new GridBagPanel();
 			setupPanel.add(createButton(Value.MainZoneMenuControl.Setup  ), 0,0, 1,0, 1,1, GridBagConstraints.HORIZONTAL);
 			setupPanel.add(createButton(Value.MainZoneMenuControl.Option ), 1,0, 1,0, 1,1, GridBagConstraints.HORIZONTAL);
-			panel.add(setupPanel, 0,row++, 1,0, 3,1, GridBagConstraints.HORIZONTAL);
+			panel.add(setupPanel, 0,row++, 0,0, 3,1, GridBagConstraints.HORIZONTAL);
 			
-			panel.add(new JLabel(" "), 0,row++, 1,0, 3,1, GridBagConstraints.HORIZONTAL);
+			panel.add(new JLabel(" "), 0,row++, 0,0, 3,1, GridBagConstraints.HORIZONTAL);
 			
-			panel.add(createButton(Value.CursorSelectExt.Up    ), 1,row++, 1,0, 1,1, GridBagConstraints.HORIZONTAL);
-			panel.add(createButton(Value.CursorSelectExt.Left  ), 0,row  , 1,0, 1,1, GridBagConstraints.HORIZONTAL);
-			panel.add(createButton(Value.CursorSelectExt.Sel   ), 1,row  , 1,0, 1,1, GridBagConstraints.HORIZONTAL);
-			panel.add(createButton(Value.CursorSelectExt.Right ), 2,row++, 1,0, 1,1, GridBagConstraints.HORIZONTAL);
-			panel.add(createButton(Value.CursorSelectExt.Down  ), 1,row++, 1,0, 1,1, GridBagConstraints.HORIZONTAL);
+			panel.add(createButton(Value.CursorSelectExt.Up    ), 1,row++, 0,0, 1,1, GridBagConstraints.HORIZONTAL);
+			panel.add(createButton(Value.CursorSelectExt.Left  ), 0,row  , 0,0, 1,1, GridBagConstraints.HORIZONTAL);
+			panel.add(createButton(Value.CursorSelectExt.Sel   ), 1,row  , 0,0, 1,1, GridBagConstraints.HORIZONTAL);
+			panel.add(createButton(Value.CursorSelectExt.Right ), 2,row++, 0,0, 1,1, GridBagConstraints.HORIZONTAL);
+			panel.add(createButton(Value.CursorSelectExt.Down  ), 1,row++, 0,0, 1,1, GridBagConstraints.HORIZONTAL);
 			
-			panel.add(new JLabel(" "), 0,row++, 1,0, 3,1, GridBagConstraints.HORIZONTAL);
+			panel.add(new JLabel(" "), 0,row++, 0,0, 3,1, GridBagConstraints.HORIZONTAL);
 			
 			GridBagPanel row4Panel = new GridBagPanel();
 			row4Panel.add(createButton(Value.CursorSelectExt.Return     ), 0,0, 1,0, 1,1, GridBagConstraints.HORIZONTAL);
 			row4Panel.add(createButton(Value.MainZoneMenuControl.Display), 1,0, 1,0, 1,1, GridBagConstraints.HORIZONTAL);
 			row4Panel.add(createButton(Value.CursorSelectExt.Home       ), 0,1, 1,0, 2,1, GridBagConstraints.HORIZONTAL);
-			panel.add(row4Panel, 0,row++, 1,0, 3,1, GridBagConstraints.HORIZONTAL);
+			panel.add(row4Panel, 0,row++, 0,0, 3,1, GridBagConstraints.HORIZONTAL);
 			
-			panel.add(new JLabel(" "), 0,row++, 1,0, 3,1, GridBagConstraints.HORIZONTAL);
+			panel.add(new JLabel(" "), 0,row++, 0,0, 3,1, GridBagConstraints.HORIZONTAL);
 			
-			panel.add(createButton(Value.PlayPauseStop.Play    ), 0,row  , 1,0, 1,1, GridBagConstraints.HORIZONTAL);
-			panel.add(createButton(Value.PlayPauseStop.Pause   ), 1,row  , 1,0, 1,1, GridBagConstraints.HORIZONTAL);
-			panel.add(createButton(Value.PlayPauseStop.Stop    ), 2,row++, 1,0, 1,1, GridBagConstraints.HORIZONTAL);
+			panel.add(createButton(Value.PlayPauseStop.Play    ), 0,row  , 0,0, 1,1, GridBagConstraints.HORIZONTAL);
+			panel.add(createButton(Value.PlayPauseStop.Pause   ), 1,row  , 0,0, 1,1, GridBagConstraints.HORIZONTAL);
+			panel.add(createButton(Value.PlayPauseStop.Stop    ), 2,row++, 0,0, 1,1, GridBagConstraints.HORIZONTAL);
 			
 			GridBagPanel skipPanel = new GridBagPanel();
 			skipPanel.add(createButton(Value.SkipFwdRev.SkipRev,"<<"), 0,0, 1,0, 1,1, GridBagConstraints.HORIZONTAL);
 			skipPanel.add(createButton(Value.SkipFwdRev.SkipFwd,">>"), 1,0, 1,0, 1,1, GridBagConstraints.HORIZONTAL);
-			panel.add(skipPanel, 0,row++, 1,0, 3,1, GridBagConstraints.HORIZONTAL);
+			panel.add(skipPanel, 0,row++, 0,0, 3,1, GridBagConstraints.HORIZONTAL);
 			
-			panel.add(new JLabel(" "), 0,row++, 1,1, 3,1, GridBagConstraints.BOTH);
+			panel.add(new JLabel(" "), 0,row++, 0,1, 3,1, GridBagConstraints.BOTH);
 			
 			return panel;
 		}
@@ -1105,27 +1172,28 @@ public class YamahaControl {
 				add(new JLabel(itemName,JLabel.CENTER),0,1,GridBagConstraints.HORIZONTAL);
 				add(new JLabel("ID",JLabel.CENTER),1,GridBagConstraints.REMAINDER,GridBagConstraints.HORIZONTAL);
 				
-				for (Device.Inputs.DeviceSceneInput dsi:dsiArr) {
-					if (filter!=null && !filter.test(dsi)) continue;
-					
-					String title = dsi.title==null?"<???>":dsi.title.trim();
-					
-					AbstractButton button;
-					if (createNormalButtons) {
-						button = createButton(title, e->setFunction.accept(dsi), true);
-					} else {
-						JToggleButton tButton = createToggleButton(title, e->setFunction.accept(dsi), true, bg);
-						buttons.put(dsi,tButton);
-						button = tButton;
+				if (dsiArr!=null)
+					for (Device.Inputs.DeviceSceneInput dsi:dsiArr) {
+						if (filter!=null && !filter.test(dsi)) continue;
+						
+						String title = dsi.title==null?"<???>":dsi.title.trim();
+						
+						AbstractButton button;
+						if (createNormalButtons) {
+							button = createButton(title, e->setFunction.accept(dsi), true);
+						} else {
+							JToggleButton tButton = createToggleButton(title, e->setFunction.accept(dsi), true, bg);
+							buttons.put(dsi,tButton);
+							button = tButton;
+						}
+						
+						JTextField textField = new JTextField("["+dsi.ID+"]");
+						textField.setEditable(false);
+						
+						add(button,0,1,GridBagConstraints.HORIZONTAL);
+						add(textField,1,GridBagConstraints.REMAINDER,GridBagConstraints.BOTH);
+						//add(new JLabel(dsi.rw),0,GridBagConstraints.REMAINDER,GridBagConstraints.BOTH);
 					}
-					
-					JTextField textField = new JTextField("["+dsi.ID+"]");
-					textField.setEditable(false);
-					
-					add(button,0,1,GridBagConstraints.HORIZONTAL);
-					add(textField,1,GridBagConstraints.REMAINDER,GridBagConstraints.BOTH);
-					//add(new JLabel(dsi.rw),0,GridBagConstraints.REMAINDER,GridBagConstraints.BOTH);
-				}
 				gbc.weighty=1;
 				add(new JLabel(""),1,GridBagConstraints.REMAINDER,GridBagConstraints.BOTH);
 			}
@@ -1138,6 +1206,7 @@ public class YamahaControl {
 		private Device device;
 		private SystemOptions systemOptions;
 		private MainZoneSetup mainZoneSetup;
+		private Insets defaultButtonInsets;
 		
 		
 		Options() {
@@ -1145,8 +1214,42 @@ public class YamahaControl {
 			device = null;
 			comps = new Vector<>();
 			systemOptions = null;
+			defaultButtonInsets = new Insets(2,3,2,3);
 		}
 		
+		@Override
+		public EnumSet<UpdateWish> getUpdateWishes(UpdateReason reason) {
+			EnumSet<UpdateWish> wishes = EnumSet.noneOf(UpdateWish.class);
+			switch (reason) {
+			case Initial:
+				wishes.add(UpdateWish.System);
+				break;
+			case Frequently:
+				wishes.add(UpdateWish.System);
+				break;
+			}
+			return wishes;
+		}
+
+		@Override
+		public void initGUIafterConnect(Device device) {
+			this.device = device;
+			setEnabledGUI(this.device!=null);
+			systemOptions.updatePanel();
+			mainZoneSetup.updatePanel();
+		}
+
+		@Override
+		public void frequentlyUpdate() {
+			systemOptions.updatePanel();
+			mainZoneSetup.updatePanel();
+		}
+
+		@Override
+		public void setEnabledGUI(boolean enabled) {
+			comps.forEach(c->c.setEnabled(enabled));
+		}
+
 		private class SystemOptions {
 			private ValueButton<Value.OnOff> eventNoticeButton;
 			private JTextField networkUpdateSiteField;
@@ -1178,7 +1281,7 @@ public class YamahaControl {
 					device.system.updateEventNotice();
 					eventNoticeButton.setValue(device.system.eventNotice);
 				});
-				eventNoticeButton.setMargin(new Insets(0,0,0,0));
+				eventNoticeButton.setMargin(defaultButtonInsets);
 				eventNoticeButton.setHorizontalAlignment(SwingConstants.LEFT);
 				
 				// Network Update   [Network_Update]   Status   [Update_Status]   
@@ -1197,7 +1300,7 @@ public class YamahaControl {
 					}
 					updateNetworkNameField();
 				},true);
-				networkNameSetButton.setMargin(new Insets(0,0,0,0));
+				networkNameSetButton.setMargin(defaultButtonInsets);
 				
 				// [Power_On]        PUT[P2]     System,Power_Control,Power = On
 				// [Power_Standby]   PUT[P2]     System,Power_Control,Power = Standby
@@ -1207,7 +1310,7 @@ public class YamahaControl {
 					device.system.updatePowerState();
 					systemPowerButton.setValue(device.system.power);
 				});
-				systemPowerButton.setMargin(new Insets(0,0,0,0));
+				systemPowerButton.setMargin(defaultButtonInsets);
 				systemPowerButton.setHorizontalAlignment(SwingConstants.LEFT);
 				
 				// [Net_Standby_On]   PUT[P4]     System,Misc,Network,Network_Standby = On
@@ -1219,7 +1322,7 @@ public class YamahaControl {
 					device.system.updateNetworkStandby();
 					networkStandbyButton.setValue(device.system.networkStandby);
 				});
-				networkStandbyButton.setMargin(new Insets(0,0,0,0));
+				networkStandbyButton.setMargin(defaultButtonInsets);
 				networkStandbyButton.setHorizontalAlignment(SwingConstants.LEFT);
 				
 				// [DMR_Off]  PUT[P5]     System,Misc,Network,DMC_Control = Disable
@@ -1231,18 +1334,18 @@ public class YamahaControl {
 					device.system.updateDmcControl();
 					dmcControlButton.setValue(device.system.dmcControl);
 				});
-				dmcControlButton.setMargin(new Insets(0,0,0,0));
+				dmcControlButton.setMargin(defaultButtonInsets);
 				dmcControlButton.setHorizontalAlignment(SwingConstants.LEFT);
 				
-				JButton updateAllButton = createButton("Update All",e->{
-					device.system.update();
-					updatePanel();
-				},true);
-				comps.add(updateAllButton);
+//				JButton updateAllButton = createButton("Update All",e->{
+//					device.system.update();
+//					updatePanel();
+//				},true);
+//				comps.add(updateAllButton);
 				
 				GridBagPanel systemOptionsPanel = new GridBagPanel();
 				systemOptionsPanel.setBorder(BorderFactory.createTitledBorder("System Options"));
-				systemOptionsPanel.add(updateAllButton, 0,0, 0,0, 1,1, GridBagConstraints.HORIZONTAL);
+//				systemOptionsPanel.add(updateAllButton, 0,0, 0,0, 1,1, GridBagConstraints.HORIZONTAL);
 				addField(systemOptionsPanel,1,"Event Notice"       ,eventNoticeButton);
 				addField(systemOptionsPanel,2,"Network Update Site",networkUpdateSiteField);
 				addField(systemOptionsPanel,3,"Network Name"       ,networkNameField,networkNameSetButton);
@@ -1274,6 +1377,13 @@ public class YamahaControl {
 		private class MainZoneSetup {
 			
 			private ValueButton<Value.PowerState> powerButton;
+			private ValueComboBox<Value.SleepState> sleepSelect;
+			private ValueComboBox<SurroundProgram> surroundProgramSelect;
+			private ValueButton<OnOff> surroundStraightButton;
+			private ValueButton<OnOff> surroundEnhancerButton;
+			private ValueButton<AutoOff> adaptiveDRCButton;
+			private ValueButton<AutoOff> cinemaDSPButton;
+			private ValueButton<OnOff> directModeButton;
 
 			private GridBagPanel createPanel() {
 				
@@ -1286,9 +1396,9 @@ public class YamahaControl {
 					Value.PowerState newValue = v==null?Value.PowerState.On:getNext(v, Value.PowerState.values());
 					device.mainZone.setPowerState(newValue);
 					device.update(EnumSet.of(UpdateWish.BasicStatus));
-					powerButton.setValue(device.mainZone.getPowerState());
+					powerButton.setValue(device.mainZone.basicStatus.power);
 				});
-				powerButton.setMargin(new Insets(0,0,0,0));
+				powerButton.setMargin(defaultButtonInsets);
 				powerButton.setHorizontalAlignment(SwingConstants.LEFT);
 				
 				// [Sleep_Last]      PUT[P23]     Main_Zone,Power_Control,Sleep = Last
@@ -1298,50 +1408,114 @@ public class YamahaControl {
 				// [Sleep_4]         PUT[P23]     Main_Zone,Power_Control,Sleep = 30 min
 				// [Sleep_Off]       PUT[P23]     Main_Zone,Power_Control,Sleep = Off
 				// GET[G1]:    Main_Zone,Basic_Status   ->   Power_Control,Sleep -> "120 min" | "90 min" | "60 min" | "30 min" | "Off"
+				sleepSelect = new ValueComboBox<>(Value.SleepState.values(), v->{
+					device.mainZone.setSleep(v);
+					device.update(EnumSet.of(UpdateWish.BasicStatus));
+					sleepSelect.setSelected(device.mainZone.basicStatus.sleep);
+				});
 				
 				// PUT[P9]:    Main_Zone,Surround,Program_Sel,Current,Sound_Program   =   "Hall in Munich" | "Hall in Vienna" | "Chamber" | "Cellar Club" | "The Roxy Theatre" | "The Bottom Line" | "Sports" | "Action Game" | "Roleplaying Game" | "Music Video" | "Standard" | "Spectacle" | "Sci-Fi" | "Adventure" | "Drama" | "Mono Movie" | "Surround Decoder" | "2ch Stereo" | "5ch Stereo"
 				// GET[G1]:    Main_Zone,Basic_Status   ->   Surround,Program_Sel,Current,Sound_Program -> "Hall in Munich" | "Hall in Vienna" | "Chamber" | "Cellar Club" | "The Roxy Theatre" | "The Bottom Line" | "Sports" | "Action Game" | "Roleplaying Game" | "Music Video" | "Standard" | "Spectacle" | "Sci-Fi" | "Adventure" | "Drama" | "Mono Movie" | "Surround Decoder" | "2ch Stereo" | "5ch Stereo"
+				surroundProgramSelect = new ValueComboBox<Value.SurroundProgram>(Value.SurroundProgram.values(), v->{
+					device.mainZone.setSurroundProgram(v);
+					device.update(EnumSet.of(UpdateWish.BasicStatus));
+					surroundProgramSelect.setSelected(device.mainZone.basicStatus.surroundProgram);
+				});
 				
 				// [Straight_On]    PUT[P10]     Main_Zone,Surround,Program_Sel,Current,Straight = On
 				// [Straight_Off]   PUT[P10]     Main_Zone,Surround,Program_Sel,Current,Straight = Off
 				// GET[G1]:    Main_Zone,Basic_Status   ->   Surround,Program_Sel,Current,Straight -> "On" | "Off"
+				surroundStraightButton = new ValueButton<Value.OnOff>(ValueButton.IconSourceOnOff,v->{
+					Value.OnOff newValue = v==null?Value.OnOff.On:getNext(v, Value.OnOff.values());
+					device.mainZone.setSurroundStraight(newValue);
+					device.update(EnumSet.of(UpdateWish.BasicStatus));
+					surroundStraightButton.setValue(device.mainZone.basicStatus.surroundStraight);
+				});
+				surroundStraightButton.setMargin(defaultButtonInsets);
+				surroundStraightButton.setHorizontalAlignment(SwingConstants.LEFT);
 				
 				// [Enhancer_On]    PUT[P11]     Main_Zone,Surround,Program_Sel,Current,Enhancer = On
 				// [Enhancer_Off]   PUT[P11]     Main_Zone,Surround,Program_Sel,Current,Enhancer = Off
 				// GET[G1]:    Main_Zone,Basic_Status   ->   Surround,Program_Sel,Current,Enhancer -> "On" | "Off"
+				surroundEnhancerButton = new ValueButton<Value.OnOff>(ValueButton.IconSourceOnOff,v->{
+					Value.OnOff newValue = v==null?Value.OnOff.On:getNext(v, Value.OnOff.values());
+					device.mainZone.setSurroundEnhancer(newValue);
+					device.update(EnumSet.of(UpdateWish.BasicStatus));
+					surroundEnhancerButton.setValue(device.mainZone.basicStatus.surroundEnhancer);
+				});
+				surroundEnhancerButton.setMargin(defaultButtonInsets);
+				surroundEnhancerButton.setHorizontalAlignment(SwingConstants.LEFT);
 				
 				// PUT[P7]:    Main_Zone,Sound_Video,Tone,Bass                  =   Number:-60..(5)..60 / Exp:"1" / Unit:"dB"
 				// GET[G1]:    Main_Zone,Basic_Status -> Sound_Video,Tone,Bass  ->  Number:-60..(5)..60 / Exp:"1" / Unit:"dB"
+				// TODO
 				
 				// PUT[P8]:    Main_Zone,Sound_Video,Tone,Treble                  =   Number:-60..(5)..60 / Exp:"1" / Unit:"dB"
 				// GET[G1]:    Main_Zone,Basic_Status -> Sound_Video,Tone,Treble  ->  Number:-60..(5)..60 / Exp:"1" / Unit:"dB"
+				// TODO
 				
 				// [Adaptive_DRC_Auto]   PUT[P12]     Main_Zone,Sound_Video,Adaptive_DRC = Auto
 				// [Adaptive_DRC_Off]    PUT[P12]     Main_Zone,Sound_Video,Adaptive_DRC = Off
 				// GET[G1]:    Main_Zone,Basic_Status   ->   Sound_Video,Adaptive_DRC -> "Auto" | "Off"
+				adaptiveDRCButton = new ValueButton<Value.AutoOff>(ValueButton.IconSourceAutoOff,v->{
+					Value.AutoOff newValue = v==null?Value.AutoOff.Auto:getNext(v, Value.AutoOff.values());
+					device.mainZone.setAdaptiveDRC(newValue);
+					device.update(EnumSet.of(UpdateWish.BasicStatus));
+					adaptiveDRCButton.setValue(device.mainZone.basicStatus.adaptiveDRC);
+				});
+				adaptiveDRCButton.setMargin(defaultButtonInsets);
+				adaptiveDRCButton.setHorizontalAlignment(SwingConstants.LEFT);
 				
 				// [CINEMA_DSP_3D_Auto]  PUT[P13]     Main_Zone,Surround,_3D_Cinema_DSP = Auto
 				// [CINEMA_DSP_3D_Off]   PUT[P13]     Main_Zone,Surround,_3D_Cinema_DSP = Off
 				// GET[G1]:    Main_Zone,Basic_Status   ->   Surround,_3D_Cinema_DSP -> "Auto" | "Off"
+				cinemaDSPButton = new ValueButton<Value.AutoOff>(ValueButton.IconSourceAutoOff,v->{
+					Value.AutoOff newValue = v==null?Value.AutoOff.Auto:getNext(v, Value.AutoOff.values());
+					device.mainZone.set3DCinemaDSP(newValue);
+					device.update(EnumSet.of(UpdateWish.BasicStatus));
+					cinemaDSPButton.setValue(device.mainZone.basicStatus.cinemaDSP);
+				});
+				cinemaDSPButton.setMargin(defaultButtonInsets);
+				cinemaDSPButton.setHorizontalAlignment(SwingConstants.LEFT);
 				
 				// [Direct_On]           PUT[P17]     Main_Zone,Sound_Video,Direct,Mode = On
 				// [Direct_Off]          PUT[P17]     Main_Zone,Sound_Video,Direct,Mode = Off
 				// GET[G1]:    Main_Zone,Basic_Status   ->   Sound_Video,Direct,Mode -> "On" | "Off"
+				directModeButton = new ValueButton<Value.OnOff>(ValueButton.IconSourceOnOff,v->{
+					Value.OnOff newValue = v==null?Value.OnOff.On:getNext(v, Value.OnOff.values());
+					device.mainZone.setDirectMode(newValue);
+					device.update(EnumSet.of(UpdateWish.BasicStatus));
+					directModeButton.setValue(device.mainZone.basicStatus.directMode);
+				});
+				directModeButton.setMargin(defaultButtonInsets);
+				directModeButton.setHorizontalAlignment(SwingConstants.LEFT);
 				
 				// GET[G1]:    Main_Zone,Basic_Status   ->   Sound_Video,HDMI,Standby_Through_Info -> "On" | "Off"
-				
-				// TODO Auto-generated method stub
+				// TODO
 				
 				GridBagPanel mainZoneSetupPanel = new GridBagPanel();
 				mainZoneSetupPanel.setBorder(BorderFactory.createTitledBorder("MainZone Setup"));
-				addField(mainZoneSetupPanel,0,"MainZone Power",powerButton);
+				addField(mainZoneSetupPanel,0,"MainZone Power"   ,powerButton           );
+				addField(mainZoneSetupPanel,1,"Sleep"            ,sleepSelect           );
+				addField(mainZoneSetupPanel,2,"Surround Program" ,surroundProgramSelect );
+				addField(mainZoneSetupPanel,3,"Straight"         ,surroundStraightButton);
+				addField(mainZoneSetupPanel,4,"Surround Enhancer",surroundEnhancerButton);
+				addField(mainZoneSetupPanel,5,"Adaptive DRC"     ,adaptiveDRCButton     );
+				addField(mainZoneSetupPanel,6,"3D Cinema DSP"    ,cinemaDSPButton       );
+				addField(mainZoneSetupPanel,7,"Direct Mode"      ,directModeButton      );
 				
 				return mainZoneSetupPanel;
 			}
 
 			public void updatePanel() {
-				// TODO Auto-generated method stub
-				
+				powerButton           .setValue(device.mainZone.basicStatus.power);
+				sleepSelect           .setSelected(device.mainZone.basicStatus.sleep);
+				surroundProgramSelect .setSelected(device.mainZone.basicStatus.surroundProgram);
+				surroundStraightButton.setValue(device.mainZone.basicStatus.surroundStraight);
+				surroundEnhancerButton.setValue(device.mainZone.basicStatus.surroundEnhancer);
+				adaptiveDRCButton     .setValue(device.mainZone.basicStatus.adaptiveDRC);
+				cinemaDSPButton       .setValue(device.mainZone.basicStatus.cinemaDSP);
+				directModeButton      .setValue(device.mainZone.basicStatus.directMode);
 			}
 		}
 		
@@ -1361,52 +1535,18 @@ public class YamahaControl {
 			
 			JScrollPane scrollPane = new JScrollPane(panel);
 			scrollPane.setBorder(null);
-			scrollPane.setPreferredSize(new Dimension(150,200));
+			//scrollPane.setPreferredSize(new Dimension(150,200));
 			return scrollPane;
 		}
 
 		private void addField(GridBagPanel panel, int rowIndex, String label, JComponent... comps) {
-			JLabel jLabel = new JLabel(label+": ",JLabel.RIGHT);
+			JLabel jLabel = new JLabel(label+" : ",JLabel.RIGHT);
 			this.comps.add(jLabel);
 			panel.add(jLabel, 0,rowIndex, 0,0, 1,1, GridBagConstraints.HORIZONTAL);
 			for (int i=0; i<comps.length; ++i) {
 				this.comps.add(comps[i]);
 				panel.add(comps[i], i+1,rowIndex, 0,0, 1,1, GridBagConstraints.HORIZONTAL);
 			}
-		}
-		
-		@Override
-		public EnumSet<UpdateWish> getUpdateWishes(UpdateReason reason) {
-			EnumSet<UpdateWish> wishes = EnumSet.noneOf(UpdateWish.class);
-			switch (reason) {
-			case Initial:
-				wishes.add(UpdateWish.SystemPower);
-				break;
-			case Frequently:
-				wishes.add(UpdateWish.SystemPower);
-				break;
-			}
-			return wishes;
-		}
-
-		@Override
-		public void initGUIafterConnect(Device device) {
-			this.device = device;
-			setEnabledGUI(this.device!=null);
-			if (this.device!=null) this.device.system.update();
-			systemOptions.updatePanel();
-			mainZoneSetup.updatePanel();
-		}
-
-		@Override
-		public void frequentlyUpdate() {
-			systemOptions.updatePanel();
-			mainZoneSetup.updatePanel();
-		}
-
-		@Override
-		public void setEnabledGUI(boolean enabled) {
-			comps.forEach(c->c.setEnabled(enabled));
 		}
 	}
 	

@@ -205,6 +205,7 @@ final class XML {
 	}
 	
 	public static void forEachChild(Node node, Consumer<Node> consumer) {
+		if (node==null) return;
 		NodeList childNodes = node.getChildNodes();
 		for (int i=0; i<childNodes.getLength(); ++i)
 			consumer.accept(childNodes.item(i));
