@@ -61,6 +61,7 @@ import javax.swing.JPanel;
 import javax.swing.JProgressBar;
 import javax.swing.JScrollBar;
 import javax.swing.JScrollPane;
+import javax.swing.JSlider;
 import javax.swing.JTabbedPane;
 import javax.swing.JTextField;
 import javax.swing.JToggleButton;
@@ -73,9 +74,6 @@ import javax.swing.filechooser.FileSystemView;
 import net.schwarzbaer.gui.StandardMainWindow;
 import net.schwarzbaer.java.tools.yamahacontrol.Device.UpdateWish;
 import net.schwarzbaer.java.tools.yamahacontrol.Device.Value;
-import net.schwarzbaer.java.tools.yamahacontrol.Device.Value.AutoOff;
-import net.schwarzbaer.java.tools.yamahacontrol.Device.Value.OnOff;
-import net.schwarzbaer.java.tools.yamahacontrol.Device.Value.SurroundProgram;
 
 public class YamahaControl {
 	
@@ -657,7 +655,7 @@ public class YamahaControl {
 				}
 			return SmallImages.IconUnknown;
 		};
-		static final Function<AutoOff, SmallImages> IconSourceAutoOff = v->{
+		static final Function<Value.AutoOff, SmallImages> IconSourceAutoOff = v->{
 			if (v!=null)
 				switch (v) {
 				case Off : return SmallImages.IconOff;
@@ -977,7 +975,7 @@ public class YamahaControl {
 		}
 	
 		@Override
-		protected GridBagPanel createPanel() {
+		protected JScrollPane createPanel() {
 			GridBagPanel panel = new GridBagPanel();
 			
 			comps.clear();
@@ -1018,7 +1016,10 @@ public class YamahaControl {
 			
 			panel.add(new JLabel(" "), 0,row++, 0,1, 3,1, GridBagConstraints.BOTH);
 			
-			return panel;
+			JScrollPane scrollPane = new JScrollPane(panel);
+			scrollPane.setBorder(null);
+			//scrollPane.setPreferredSize(new Dimension(150,200));
+			return scrollPane;
 		}
 	
 		private JButton createButton(Value.CursorSelectExt cursor) {
@@ -1286,12 +1287,12 @@ public class YamahaControl {
 				
 				// Network Update   [Network_Update]   Status   [Update_Status]   
 				// GET[G4]:    System,Misc,Update,Yamaha_Network_Site,Status   ->   "Available" | "Unavailable"
-				networkUpdateSiteField = new JTextField("Unavailable");
+				networkUpdateSiteField = new JTextField("");
 				networkUpdateSiteField.setEditable(false);
 				
 				// PUT[P3]:    System,Misc,Network,Network_Name   =   Text: 1..15 (UTF-8)
 				// GET[G2]:    System,Misc,Network,Network_Name   ->   Text: 1..15 (UTF-8)
-				networkNameField = new JTextField("");
+				networkNameField = new JTextField("",8);
 				JButton networkNameSetButton = createButton("Set",e->{
 					String networkName = networkNameField.getText();
 					if (!networkName.isEmpty()) {
@@ -1345,13 +1346,14 @@ public class YamahaControl {
 				
 				GridBagPanel systemOptionsPanel = new GridBagPanel();
 				systemOptionsPanel.setBorder(BorderFactory.createTitledBorder("System Options"));
-//				systemOptionsPanel.add(updateAllButton, 0,0, 0,0, 1,1, GridBagConstraints.HORIZONTAL);
-				addField(systemOptionsPanel,1,"Event Notice"       ,eventNoticeButton);
-				addField(systemOptionsPanel,2,"Network Update Site",networkUpdateSiteField);
-				addField(systemOptionsPanel,3,"Network Name"       ,networkNameField,networkNameSetButton);
-				addField(systemOptionsPanel,4,"System Power"       ,systemPowerButton);
-				addField(systemOptionsPanel,5,"Network Standby"    ,networkStandbyButton);
-				addField(systemOptionsPanel,6,"DMC Control"        ,dmcControlButton);
+				int row = 0;
+//				systemOptionsPanel.add(updateAllButton, 0,row++, 0,0, 1,1, GridBagConstraints.HORIZONTAL);
+				addField(systemOptionsPanel,row++,"System Power"       ,2,systemPowerButton);
+				addField(systemOptionsPanel,row++,"Network Standby"    ,2,networkStandbyButton);
+				addField(systemOptionsPanel,row++,"Network Name"       ,networkNameField,networkNameSetButton);
+				addField(systemOptionsPanel,row++,"Network Update Site",2,networkUpdateSiteField);
+				addField(systemOptionsPanel,row++,"Event Notice"       ,2,eventNoticeButton);
+				addField(systemOptionsPanel,row++,"DMC Control"        ,2,dmcControlButton);
 				
 				return systemOptionsPanel;
 			}
@@ -1370,6 +1372,7 @@ public class YamahaControl {
 			}
 
 			private void updateNetworkNameField() {
+				if (networkNameField.isFocusOwner()) return;
 				networkNameField.setText(device.system.networkName==null?"???":device.system.networkName);
 			}
 		}
@@ -1378,12 +1381,17 @@ public class YamahaControl {
 			
 			private ValueButton<Value.PowerState> powerButton;
 			private ValueComboBox<Value.SleepState> sleepSelect;
-			private ValueComboBox<SurroundProgram> surroundProgramSelect;
-			private ValueButton<OnOff> surroundStraightButton;
-			private ValueButton<OnOff> surroundEnhancerButton;
-			private ValueButton<AutoOff> adaptiveDRCButton;
-			private ValueButton<AutoOff> cinemaDSPButton;
-			private ValueButton<OnOff> directModeButton;
+			private ValueComboBox<Value.SurroundProgram> surroundProgramSelect;
+			private ValueButton<Value.OnOff> surroundStraightButton;
+			private ValueButton<Value.OnOff> surroundEnhancerButton;
+			private ValueButton<Value.AutoOff> adaptiveDRCButton;
+			private ValueButton<Value.AutoOff> cinemaDSPButton;
+			private ValueButton<Value.OnOff> directModeButton;
+			private JTextField hdmiStandbyThroughField;
+			private JSlider bassSlider;
+			private JSlider trebleSlider;
+			private ValueSetter bassSetter;
+			private ValueSetter trebleSetter;
 
 			private GridBagPanel createPanel() {
 				
@@ -1395,8 +1403,7 @@ public class YamahaControl {
 				powerButton = new ValueButton<>(ValueButton.IconSourcePowerState,v->{
 					Value.PowerState newValue = v==null?Value.PowerState.On:getNext(v, Value.PowerState.values());
 					device.mainZone.setPowerState(newValue);
-					device.update(EnumSet.of(UpdateWish.BasicStatus));
-					powerButton.setValue(device.mainZone.basicStatus.power);
+					updateBasicStatusAndPanel();
 				});
 				powerButton.setMargin(defaultButtonInsets);
 				powerButton.setHorizontalAlignment(SwingConstants.LEFT);
@@ -1410,17 +1417,17 @@ public class YamahaControl {
 				// GET[G1]:    Main_Zone,Basic_Status   ->   Power_Control,Sleep -> "120 min" | "90 min" | "60 min" | "30 min" | "Off"
 				sleepSelect = new ValueComboBox<>(Value.SleepState.values(), v->{
 					device.mainZone.setSleep(v);
-					device.update(EnumSet.of(UpdateWish.BasicStatus));
-					sleepSelect.setSelected(device.mainZone.basicStatus.sleep);
+					updateBasicStatusAndPanel();
 				});
+				sleepSelect.setSelected(null);
 				
 				// PUT[P9]:    Main_Zone,Surround,Program_Sel,Current,Sound_Program   =   "Hall in Munich" | "Hall in Vienna" | "Chamber" | "Cellar Club" | "The Roxy Theatre" | "The Bottom Line" | "Sports" | "Action Game" | "Roleplaying Game" | "Music Video" | "Standard" | "Spectacle" | "Sci-Fi" | "Adventure" | "Drama" | "Mono Movie" | "Surround Decoder" | "2ch Stereo" | "5ch Stereo"
 				// GET[G1]:    Main_Zone,Basic_Status   ->   Surround,Program_Sel,Current,Sound_Program -> "Hall in Munich" | "Hall in Vienna" | "Chamber" | "Cellar Club" | "The Roxy Theatre" | "The Bottom Line" | "Sports" | "Action Game" | "Roleplaying Game" | "Music Video" | "Standard" | "Spectacle" | "Sci-Fi" | "Adventure" | "Drama" | "Mono Movie" | "Surround Decoder" | "2ch Stereo" | "5ch Stereo"
 				surroundProgramSelect = new ValueComboBox<Value.SurroundProgram>(Value.SurroundProgram.values(), v->{
 					device.mainZone.setSurroundProgram(v);
-					device.update(EnumSet.of(UpdateWish.BasicStatus));
-					surroundProgramSelect.setSelected(device.mainZone.basicStatus.surroundProgram);
+					updateBasicStatusAndPanel();
 				});
+				surroundProgramSelect.setSelected(null);
 				
 				// [Straight_On]    PUT[P10]     Main_Zone,Surround,Program_Sel,Current,Straight = On
 				// [Straight_Off]   PUT[P10]     Main_Zone,Surround,Program_Sel,Current,Straight = Off
@@ -1428,8 +1435,7 @@ public class YamahaControl {
 				surroundStraightButton = new ValueButton<Value.OnOff>(ValueButton.IconSourceOnOff,v->{
 					Value.OnOff newValue = v==null?Value.OnOff.On:getNext(v, Value.OnOff.values());
 					device.mainZone.setSurroundStraight(newValue);
-					device.update(EnumSet.of(UpdateWish.BasicStatus));
-					surroundStraightButton.setValue(device.mainZone.basicStatus.surroundStraight);
+					updateBasicStatusAndPanel();
 				});
 				surroundStraightButton.setMargin(defaultButtonInsets);
 				surroundStraightButton.setHorizontalAlignment(SwingConstants.LEFT);
@@ -1440,19 +1446,44 @@ public class YamahaControl {
 				surroundEnhancerButton = new ValueButton<Value.OnOff>(ValueButton.IconSourceOnOff,v->{
 					Value.OnOff newValue = v==null?Value.OnOff.On:getNext(v, Value.OnOff.values());
 					device.mainZone.setSurroundEnhancer(newValue);
-					device.update(EnumSet.of(UpdateWish.BasicStatus));
-					surroundEnhancerButton.setValue(device.mainZone.basicStatus.surroundEnhancer);
+					updateBasicStatusAndPanel();
 				});
 				surroundEnhancerButton.setMargin(defaultButtonInsets);
 				surroundEnhancerButton.setHorizontalAlignment(SwingConstants.LEFT);
 				
 				// PUT[P7]:    Main_Zone,Sound_Video,Tone,Bass                  =   Number:-60..(5)..60 / Exp:"1" / Unit:"dB"
 				// GET[G1]:    Main_Zone,Basic_Status -> Sound_Video,Tone,Bass  ->  Number:-60..(5)..60 / Exp:"1" / Unit:"dB"
-				// TODO
+				bassSlider = new JSlider(JSlider.HORIZONTAL, -12, 12, 0);
+				bassSlider.setMajorTickSpacing(4);
+				bassSlider.setMinorTickSpacing(1);
+				bassSlider.setPaintTicks(true);
+				bassSlider.setPreferredSize(new Dimension(20,30));
+				bassSlider.addChangeListener(e -> bassSetter.set(bassSlider.getValue()/2.0, bassSlider.getValueIsAdjusting()));
+				bassSetter = new ValueSetter(10, (value, isAdjusting) -> {
+					if (device==null) return;
+					device.mainZone.setBass((float) value);
+					if (!isAdjusting) {
+						device.update(EnumSet.of(UpdateWish.BasicStatus));
+						SwingUtilities.invokeLater(this::updatePanel);
+					}
+				});
 				
 				// PUT[P8]:    Main_Zone,Sound_Video,Tone,Treble                  =   Number:-60..(5)..60 / Exp:"1" / Unit:"dB"
 				// GET[G1]:    Main_Zone,Basic_Status -> Sound_Video,Tone,Treble  ->  Number:-60..(5)..60 / Exp:"1" / Unit:"dB"
-				// TODO
+				trebleSlider = new JSlider(JSlider.HORIZONTAL, -12, 12, 0);
+				trebleSlider.setMajorTickSpacing(4);
+				trebleSlider.setMinorTickSpacing(1);
+				trebleSlider.setPaintTicks(true);
+				trebleSlider.setPreferredSize(new Dimension(20,30));
+				trebleSlider.addChangeListener(e -> trebleSetter.set(trebleSlider.getValue()/2.0, trebleSlider.getValueIsAdjusting()));
+				trebleSetter = new ValueSetter(10, (value, isAdjusting) -> {
+					if (device==null) return;
+					device.mainZone.setTreble((float) value);
+					if (!isAdjusting) {
+						device.update(EnumSet.of(UpdateWish.BasicStatus));
+						SwingUtilities.invokeLater(this::updatePanel);
+					}
+				});
 				
 				// [Adaptive_DRC_Auto]   PUT[P12]     Main_Zone,Sound_Video,Adaptive_DRC = Auto
 				// [Adaptive_DRC_Off]    PUT[P12]     Main_Zone,Sound_Video,Adaptive_DRC = Off
@@ -1460,8 +1491,7 @@ public class YamahaControl {
 				adaptiveDRCButton = new ValueButton<Value.AutoOff>(ValueButton.IconSourceAutoOff,v->{
 					Value.AutoOff newValue = v==null?Value.AutoOff.Auto:getNext(v, Value.AutoOff.values());
 					device.mainZone.setAdaptiveDRC(newValue);
-					device.update(EnumSet.of(UpdateWish.BasicStatus));
-					adaptiveDRCButton.setValue(device.mainZone.basicStatus.adaptiveDRC);
+					updateBasicStatusAndPanel();
 				});
 				adaptiveDRCButton.setMargin(defaultButtonInsets);
 				adaptiveDRCButton.setHorizontalAlignment(SwingConstants.LEFT);
@@ -1472,8 +1502,7 @@ public class YamahaControl {
 				cinemaDSPButton = new ValueButton<Value.AutoOff>(ValueButton.IconSourceAutoOff,v->{
 					Value.AutoOff newValue = v==null?Value.AutoOff.Auto:getNext(v, Value.AutoOff.values());
 					device.mainZone.set3DCinemaDSP(newValue);
-					device.update(EnumSet.of(UpdateWish.BasicStatus));
-					cinemaDSPButton.setValue(device.mainZone.basicStatus.cinemaDSP);
+					updateBasicStatusAndPanel();
 				});
 				cinemaDSPButton.setMargin(defaultButtonInsets);
 				cinemaDSPButton.setHorizontalAlignment(SwingConstants.LEFT);
@@ -1484,27 +1513,36 @@ public class YamahaControl {
 				directModeButton = new ValueButton<Value.OnOff>(ValueButton.IconSourceOnOff,v->{
 					Value.OnOff newValue = v==null?Value.OnOff.On:getNext(v, Value.OnOff.values());
 					device.mainZone.setDirectMode(newValue);
-					device.update(EnumSet.of(UpdateWish.BasicStatus));
-					directModeButton.setValue(device.mainZone.basicStatus.directMode);
+					updateBasicStatusAndPanel();
 				});
 				directModeButton.setMargin(defaultButtonInsets);
 				directModeButton.setHorizontalAlignment(SwingConstants.LEFT);
 				
 				// GET[G1]:    Main_Zone,Basic_Status   ->   Sound_Video,HDMI,Standby_Through_Info -> "On" | "Off"
-				// TODO
+				hdmiStandbyThroughField = new JTextField("");
+				hdmiStandbyThroughField.setEditable(false);
 				
 				GridBagPanel mainZoneSetupPanel = new GridBagPanel();
 				mainZoneSetupPanel.setBorder(BorderFactory.createTitledBorder("MainZone Setup"));
-				addField(mainZoneSetupPanel,0,"MainZone Power"   ,powerButton           );
-				addField(mainZoneSetupPanel,1,"Sleep"            ,sleepSelect           );
-				addField(mainZoneSetupPanel,2,"Surround Program" ,surroundProgramSelect );
-				addField(mainZoneSetupPanel,3,"Straight"         ,surroundStraightButton);
-				addField(mainZoneSetupPanel,4,"Surround Enhancer",surroundEnhancerButton);
-				addField(mainZoneSetupPanel,5,"Adaptive DRC"     ,adaptiveDRCButton     );
-				addField(mainZoneSetupPanel,6,"3D Cinema DSP"    ,cinemaDSPButton       );
-				addField(mainZoneSetupPanel,7,"Direct Mode"      ,directModeButton      );
+				int row = 0;
+				addField(mainZoneSetupPanel,row++,"MainZone Power"      ,powerButton            );
+				addField(mainZoneSetupPanel,row++,"Sleep"               ,sleepSelect            );
+				addField(mainZoneSetupPanel,row++,"Bass"                ,bassSlider             );
+				addField(mainZoneSetupPanel,row++,"Treble"              ,trebleSlider           );
+				addField(mainZoneSetupPanel,row++,"Surround Program"    ,surroundProgramSelect  );
+				addField(mainZoneSetupPanel,row++,"Straight"            ,surroundStraightButton );
+				addField(mainZoneSetupPanel,row++,"Surround Enhancer"   ,surroundEnhancerButton );
+				addField(mainZoneSetupPanel,row++,"Adaptive DRC"        ,adaptiveDRCButton      );
+				addField(mainZoneSetupPanel,row++,"3D Cinema DSP"       ,cinemaDSPButton        );
+				addField(mainZoneSetupPanel,row++,"Direct Mode"         ,directModeButton       );
+				addField(mainZoneSetupPanel,row++,"HDMI Standby Through",hdmiStandbyThroughField);
 				
 				return mainZoneSetupPanel;
+			}
+
+			private void updateBasicStatusAndPanel() {
+				device.update(EnumSet.of(UpdateWish.BasicStatus));
+				updatePanel();
 			}
 
 			public void updatePanel() {
@@ -1516,6 +1554,21 @@ public class YamahaControl {
 				adaptiveDRCButton     .setValue(device.mainZone.basicStatus.adaptiveDRC);
 				cinemaDSPButton       .setValue(device.mainZone.basicStatus.cinemaDSP);
 				directModeButton      .setValue(device.mainZone.basicStatus.directMode);
+				hdmiStandbyThroughField.setText(device.mainZone.basicStatus.hdmiStandbyThrough==null?"???":device.mainZone.basicStatus.hdmiStandbyThrough.getLabel());
+				if (device.mainZone.basicStatus.bass==null) {
+					bassSlider.setValue(0);
+					bassSlider.setEnabled(false);
+				} else {
+					bassSlider  .setValue(Math.round(device.mainZone.basicStatus.bass.getValue()*2));
+					bassSlider.setEnabled(true);
+				}
+				if (device.mainZone.basicStatus.treble==null) {
+					trebleSlider.setValue(0);
+					trebleSlider.setEnabled(false);
+				} else {
+					trebleSlider  .setValue(Math.round(device.mainZone.basicStatus.treble.getValue()*2));
+					trebleSlider.setEnabled(true);
+				}
 			}
 		}
 		
@@ -1537,6 +1590,14 @@ public class YamahaControl {
 			scrollPane.setBorder(null);
 			//scrollPane.setPreferredSize(new Dimension(150,200));
 			return scrollPane;
+		}
+
+		private void addField(GridBagPanel panel, int rowIndex, String label, int gridWith, JComponent comp) {
+			JLabel jLabel = new JLabel(label+" : ",JLabel.RIGHT);
+			this.comps.add(jLabel);
+			this.comps.add(comp);
+			panel.add(jLabel, 0,rowIndex, 0,0, 1,1, GridBagConstraints.HORIZONTAL);
+			panel.add(comp  , 1,rowIndex, 0,0, gridWith,1, GridBagConstraints.HORIZONTAL);
 		}
 
 		private void addField(GridBagPanel panel, int rowIndex, String label, JComponent... comps) {

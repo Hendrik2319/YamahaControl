@@ -63,44 +63,51 @@ public final class Device {
 	
 	public void update(EnumSet<UpdateWish> updateWishes) {
 		//System.out.println("Device.update("+updateWishes+")");
+		//long start = System.currentTimeMillis();
 		for (UpdateWish uw: updateWishes) {
-			switch (uw) {
-			case Inputs          : inputs.askInputs(); break;
-			case Scenes          : inputs.askScenes(); break;
-			
-			case BasicStatus     : mainZone.basicStatus.update(); break;
-			case System          : system.update(); break;
-			case SystemPower     : system.updatePowerState(); break;
-			
-			case NetRadioConfig  : netRadio.updateConfig(); break;
-			case NetRadioListInfo: netRadio.listInfo.update(); break;
-			case NetRadioPlayInfo: netRadio.playInfo.update(); break;
-			
-			case USBConfig       : usb     .updateConfig(); break;
-			case USBListInfo     : usb     .listInfo.update(); break;
-			case USBPlayInfo     : usb     .playInfo.update(); break;
-			
-			case DLNAConfig      : dlna    .updateConfig(); break;
-			case DLNAListInfo    : dlna    .listInfo.update(); break;
-			case DLNAPlayInfo    : dlna    .playInfo.update(); break;
-			
-			case IPodUSBConfig   : iPodUSB .updateConfig(); break;
-			case IPodUSBListInfo : iPodUSB .listInfo.update(); break;
-			case IPodUSBPlayInfo : iPodUSB .playInfo.update(); break;
-			case IPodUSBMode     : iPodUSB.updateMode(); break;
-			
-			case TunerConfig     : tuner   .config  .update(); break;
-			case TunerPlayInfo   : tuner   .playInfo.update(); break;
-			case TunerPresets    : tuner   .playInfo.updatePresets(); break;
-			
-			case AirPlayConfig   : airPlay .config  .update(); break;
-			case AirPlayPlayInfo : airPlay .playInfo.update(); break;
-			
-			case SpotifyConfig   : spotify .updateConfig(); break;
-			case SpotifyPlayInfo : spotify .playInfo.update(); break;
-			}
+			update(uw);
 			//Log.info(getClass(), "update -> %s", Ctrl.getRCcode(Ctrl.lastRC));
 			if (Ctrl.lastRC==Ctrl.RC_CONNECT_TIMEOUT) break;
+		}
+		//long duration = System.currentTimeMillis()-start;
+		//Log.info(getClass(), "%1.3fs elapsed for update( %s )", duration/1000.0f, updateWishes.toString());
+	}
+
+	private void update(UpdateWish uw) {
+		switch (uw) {
+		case Inputs          : inputs.askInputs(); break;
+		case Scenes          : inputs.askScenes(); break;
+		
+		case BasicStatus     : mainZone.basicStatus.update(); break;
+		case System          : system.update(); break;
+		case SystemPower     : system.updatePowerState(); break;
+		
+		case NetRadioConfig  : netRadio.updateConfig(); break;
+		case NetRadioListInfo: netRadio.listInfo.update(); break;
+		case NetRadioPlayInfo: netRadio.playInfo.update(); break;
+		
+		case USBConfig       : usb     .updateConfig(); break;
+		case USBListInfo     : usb     .listInfo.update(); break;
+		case USBPlayInfo     : usb     .playInfo.update(); break;
+		
+		case DLNAConfig      : dlna    .updateConfig(); break;
+		case DLNAListInfo    : dlna    .listInfo.update(); break;
+		case DLNAPlayInfo    : dlna    .playInfo.update(); break;
+		
+		case IPodUSBConfig   : iPodUSB .updateConfig(); break;
+		case IPodUSBListInfo : iPodUSB .listInfo.update(); break;
+		case IPodUSBPlayInfo : iPodUSB .playInfo.update(); break;
+		case IPodUSBMode     : iPodUSB.updateMode(); break;
+		
+		case TunerConfig     : tuner   .config  .update(); break;
+		case TunerPlayInfo   : tuner   .playInfo.update(); break;
+		case TunerPresets    : tuner   .playInfo.updatePresets(); break;
+		
+		case AirPlayConfig   : airPlay .config  .update(); break;
+		case AirPlayPlayInfo : airPlay .playInfo.update(); break;
+		
+		case SpotifyConfig   : spotify .updateConfig(); break;
+		case SpotifyPlayInfo : spotify .playInfo.update(); break;
 		}
 	}
 	
