@@ -114,8 +114,15 @@ public class YamahaControl {
 		readPreferredSongsFromFile();
 		createSmallImages();
 		
+		
+		System.out.println("YamahaControl");
+		System.out.println("created by Hendrik Scholtz");
+		System.out.println();
+		boolean createGUI = true;
 		YamahaControl yamahaControl = new YamahaControl();
-		yamahaControl.createGUI();
+		if (args.length>0) createGUI = yamahaControl.parseArgs(args); else yamahaControl.showCommands();
+		if (createGUI    ) yamahaControl.createGUI();
+		if (args.length>0 && createGUI) yamahaControl.initGUIafterConnect();
 	}
 
 	public enum SmallImages { IconOn, IconOff, IconUnknown, FolderIcon }
@@ -161,6 +168,47 @@ public class YamahaControl {
 	private void stopUpdater() {
 		frequentlyUpdater.stop();
 		updateChkBx.setSelected(false);
+	}
+
+	private boolean parseArgs(String[] args) {
+		boolean createGUI = false;
+		
+		Vector<String> commands = new Vector<>();
+		for (int i=0; i<args.length; ++i) {
+			switch (args[i].toLowerCase()) {
+			case "-addr": if (i+1<args.length) { device = new Device(args[i+1]); ++i; } break;
+			case "-gui": createGUI = true; break;
+			default: commands.add(args[i]); break;
+			}
+		}
+		
+		if (device!=null) {
+			for (String cmd:commands) {
+				switch (cmd.toLowerCase()) {
+				case "switchoff": device.mainZone.setPowerState(Value.PowerState.Standby); break;
+				case "switchon" : device.mainZone.setPowerState(Value.PowerState.On     ); break;
+				}
+			}
+		}
+		
+		return createGUI;
+	}
+
+	private void showCommands() {
+		System.out.println("Usage Example:");
+		System.out.println("   ... YamahaControl -addr 192.168.1.42 -gui SwitchON");
+		System.out.println();
+		System.out.println("Parameters:");
+		System.out.println("   -addr [IPAddress or Name]");
+		System.out.println("       sets device address");
+		System.out.println("   -gui");
+		System.out.println("       starts GUI after processing commands");
+		System.out.println();
+		System.out.println("Device Commands:");
+		System.out.println("   SwitchOFF");
+		System.out.println("       switches device off");
+		System.out.println("   SwitchON");
+		System.out.println("       switches device on");
 	}
 
 	private void createGUI() {
@@ -265,10 +313,14 @@ public class YamahaControl {
 		String addr = Config.selectAddress(mainWindow);
 		if (addr!=null) {
 			device = new Device(addr);
-			updateDevice(UpdateReason.Initial);
-			guiRegions.forEach(gr->gr.initGUIafterConnect(device));
-			startUpdater();
+			initGUIafterConnect();
 		}
+	}
+
+	private void initGUIafterConnect() {
+		updateDevice(UpdateReason.Initial);
+		guiRegions.forEach(gr->gr.initGUIafterConnect(device));
+		startUpdater();
 	}
 
 	public static class FrequentlyTask implements Runnable {
