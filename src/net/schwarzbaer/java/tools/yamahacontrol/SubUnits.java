@@ -6,9 +6,11 @@ import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.GridBagConstraints;
 import java.awt.Insets;
+import java.awt.Window;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.util.EnumSet;
+import java.util.List;
 import java.util.Vector;
 
 import javax.swing.AbstractButton;
@@ -19,6 +21,7 @@ import javax.swing.JButton;
 import javax.swing.JCheckBoxMenuItem;
 import javax.swing.JComboBox;
 import javax.swing.JComponent;
+import javax.swing.JDialog;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
@@ -29,6 +32,7 @@ import javax.swing.JTextField;
 import javax.swing.JToggleButton;
 import javax.swing.SwingUtilities;
 
+import net.schwarzbaer.gui.StandardMainWindow;
 import net.schwarzbaer.java.tools.yamahacontrol.Device.UpdateWish;
 import net.schwarzbaer.java.tools.yamahacontrol.Device.Value;
 
@@ -125,9 +129,12 @@ final class SubUnits {
 
 	static class SubUnitNetRadio extends AbstractSubUnit_ListPlay implements PlayButtonModule.Caller, ButtonModule.ExtraButtons {
 		private static final long serialVersionUID = -8583320100311806933L;
+		
+		private StandardMainWindow mainWindow;
 	
-		public SubUnitNetRadio() {
+		public SubUnitNetRadio(StandardMainWindow mainWindow) {
 			super("NET RADIO", "Net Radio", UpdateWish.NetRadioConfig, UpdateWish.NetRadioListInfo, UpdateWish.NetRadioPlayInfo);
+			this.mainWindow = mainWindow;
 			modules.add(new PlayButtonModule(this, this));
 			withExtraCharsetConversion = true;
 		}
@@ -144,7 +151,15 @@ final class SubUnits {
 		@Override public void updateExtraButtons() {}
 		@Override public void addExtraButtons(Vector<AbstractButton> buttons) {
 			buttons.add(YamahaControl.createButton("Add Song to PreferredSongs",e->addSongToPreferredSongs(),true));
+			buttons.add(YamahaControl.createButton("Show List",e->showPreferredSongs(),true));
 		}
+		
+		private void showPreferredSongs() {
+			List<String> list = YamahaControl.readPreferredSongsFromFileToCheck();
+			SubUnits.SimpleTextAreaDialog dlg = new SubUnits.SimpleTextAreaDialog( mainWindow );
+			dlg.showDlg( "Preferred Songs ("+YamahaControl.getPreferredSongsFile().getPath()+")", list );
+		}
+
 		private void addSongToPreferredSongs() {
 			if (device!=null) {
 				if (device.netRadio.playInfo.currentSong!=null)
@@ -1041,4 +1056,34 @@ final class SubUnits {
 		@Override public abstract Device.PlayInfo_AirPlaySpotify getPlayInfo();
 	}
 
+	private static class SimpleTextAreaDialog extends JDialog {
+		private static final long serialVersionUID = 7939477522501437501L;
+		
+		private JTextArea textArea;
+	
+		public SimpleTextAreaDialog(Window owner) {
+			super(owner,ModalityType.APPLICATION_MODAL);
+			
+			textArea = new JTextArea();
+			textArea.setEditable(false);
+			
+			JScrollPane scrollPane = new JScrollPane(textArea);
+			scrollPane.setPreferredSize(new Dimension(800,600));
+			
+			JPanel contentPane = new JPanel(new BorderLayout(3,3));
+			contentPane.add(scrollPane,BorderLayout.CENTER);
+			
+			setContentPane(contentPane);
+			pack();
+			setLocationRelativeTo(owner);
+		}
+	
+		public void showDlg(String title, List<String> list) {
+			if (list==null) return;
+			textArea.setText("");
+			list.forEach(str->{textArea.append(str+"\r\n");});
+			setTitle(title);
+			setVisible(true);
+		}
+	}
 }

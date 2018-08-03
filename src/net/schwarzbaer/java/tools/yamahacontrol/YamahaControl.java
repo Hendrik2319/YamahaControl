@@ -28,12 +28,15 @@ import java.io.PrintWriter;
 import java.io.Reader;
 import java.io.StringWriter;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Locale;
 import java.util.Stack;
 import java.util.Vector;
@@ -101,6 +104,20 @@ public class YamahaControl {
 		catch (IOException e) {
 			e.printStackTrace();
 		}
+	}
+
+	static List<String> readPreferredSongsFromFileToCheck() {
+		try {
+			Path path = getPreferredSongsFile().toPath();
+			return Files.readAllLines(path,StandardCharsets.UTF_8);
+		} catch (IOException e) {
+			e.printStackTrace();
+			return null;
+		} 
+	}
+
+	static File getPreferredSongsFile() {
+		return new File(PREFERREDSONGS_FILENAME);
 	}
 
 	public static void main(String[] args) {
@@ -266,7 +283,7 @@ public class YamahaControl {
 		
 		JTabbedPane subUnitPanel = new JTabbedPane();
 		subUnitPanel.setBorder(BorderFactory.createTitledBorder("Sub Units"));
-		new SubUnits.SubUnitNetRadio().addTo(guiRegions,subUnitPanel);
+		new SubUnits.SubUnitNetRadio(mainWindow).addTo(guiRegions,subUnitPanel);
 		new SubUnits.SubUnitDLNA    ().addTo(guiRegions,subUnitPanel);
 		new SubUnits.SubUnitUSB     ().addTo(guiRegions,subUnitPanel);
 		new SubUnits.SubUnitTuner   ().addTo(guiRegions,subUnitPanel);
