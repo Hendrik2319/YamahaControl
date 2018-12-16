@@ -68,6 +68,7 @@ public final class Device {
 			update(uw);
 			//Log.info(getClass(), "update -> %s", Ctrl.getRCcode(Ctrl.lastRC));
 			if (Ctrl.lastRC==Ctrl.RC_CONNECT_TIMEOUT) break;
+			if (Ctrl.lastRC==Ctrl.RC_CONNECT_REFUSED) break;
 		}
 		//long duration = System.currentTimeMillis()-start;
 		//Log.info(getClass(), "%1.3fs elapsed for update( %s )", duration/1000.0f, updateWishes.toString());

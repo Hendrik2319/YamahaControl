@@ -131,6 +131,7 @@ final class Ctrl {
 	static final int RC_CANT_FIND_RC_ATTR = -3;
 	static final int RC_CANT_PARSE_RC_VALUE = -4;
 	static final int RC_CONNECT_TIMEOUT = -5;
+	static final int RC_CONNECT_REFUSED = -6;
 	
 	public static String getRCcode(int rc) {
 		switch (rc) {
@@ -141,6 +142,7 @@ final class Ctrl {
 		case RC_CANT_FIND_RC_ATTR   : return "CANT FIND RC ATTR";
 		case RC_CANT_PARSE_RC_VALUE : return "CANT PARSE RC VALUE";
 		case RC_CONNECT_TIMEOUT     : return "CONNECT TIMEOUT";
+		case RC_CONNECT_REFUSED     : return "CONNECTION REFUSED";
 		}
 		return "Unknown "+rc;
 	}
@@ -330,17 +332,24 @@ final class Ctrl {
 			connection.setConnectTimeout(2000);
 			try { connection.connect(); }
 			catch (ConnectException e) {
-				if (e.getMessage().equals("Connection timed out: connect")) {
+				switch (e.getMessage()) {
+				case "Connection refused: connect":
+					lastRC = RC_CONNECT_REFUSED;
+					if (verboseOnError) System.err.println("Connection refused at connect");
+					break;
+				case "Connection timed out: connect":
 					lastRC = RC_CONNECT_TIMEOUT;
-					if (verboseOnError) System.err.println("ConnectTimeout");
-				} else
+					if (verboseOnError) System.err.println("Connection timed out at connect");
+					break;
+				default:
 					e.printStackTrace();
+				}
 				return null;
 			}
 			catch (SocketTimeoutException e) {
 				if (e.getMessage().equals("connect timed out")) {
 					lastRC = RC_CONNECT_TIMEOUT;
-					if (verboseOnError) System.err.println("SocketTimeout");
+					if (verboseOnError) System.err.println("Socket Timeout");
 				} else
 					e.printStackTrace();
 				return null;
