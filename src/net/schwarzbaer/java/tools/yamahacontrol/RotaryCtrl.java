@@ -4,6 +4,7 @@ import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
+import java.awt.Image;
 import java.awt.RenderingHints;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
@@ -11,10 +12,14 @@ import java.awt.geom.Rectangle2D;
 import java.util.Locale;
 
 import net.schwarzbaer.gui.Canvas;
+import net.schwarzbaer.image.BumpMapping;
+import net.schwarzbaer.image.ImageCache;
+import net.schwarzbaer.image.BumpMapping.NormalFunctionPolar;
+import net.schwarzbaer.image.BumpMapping.Vector3D;
 
 public class RotaryCtrl extends Canvas {
 		private static final Color COLOR_DISABLED_MARKER = new Color(0x8080B0);
-		private static final Color COLOR_DISABLED_BACKGROUND = new Color(0xE8E8E8);
+		//private static final Color COLOR_DISABLED_BACKGROUND = new Color(0xE8E8E8);
 		private static final long serialVersionUID = -5870265710270984615L;
 		private double angle;
 		private int radius;
@@ -29,6 +34,7 @@ public class RotaryCtrl extends Canvas {
 		private double minValue;
 		private double maxValue;
 		private MouseHandler mouseHandler;
+		private ImageCache<Image> backgroundImageCache;
 		
 		public interface ValueListener {
 			public void valueChanged(double value, boolean isAdjusting);
@@ -49,6 +55,33 @@ public class RotaryCtrl extends Canvas {
 			angle = 0.0;
 			value = 0.0;
 			unit = null;
+			
+			BumpMapping bumpMapping = new BumpMapping(
+				new Vector3D(1,-1,2).normalize(),
+				Color.WHITE,new Color(0xf0f0f0),new Color(0x707070),
+				new NormalFunctionPolar() {
+					Vector3D vFace  = new Vector3D( 0,0,1);
+					Vector3D vInner = new Vector3D(-1,0,1);
+					Vector3D vOuter = new Vector3D( 1,0,3);
+					@Override
+					public Vector3D getNormal(double w, double r) {
+						Vector3D n;
+						int r1 = radius/2;
+						int r2 = radius/2+5;
+						int r3 = radius-15;
+						int r4 = radius;
+						if      (r1  <r && r<=r2  ) n = vInner;
+						else if (r3  <r && r<=r4  ) n = vOuter;
+						//else if (r1-2<r && r<=r1  ) n = Vector3D.blend(r, r1-2, r1  , vFace, vInner);
+						else if (r2  <r && r<=r2+2) n = Vector3D.blend(r, r2  , r2+2, vInner, vFace);
+						else if (r3-2<r && r<=r3  ) n = Vector3D.blend(r, r3-2, r3  , vFace, vOuter);
+						//else if (r4  <r && r<=r4+2) n = Vector3D.blend(r, r4  , r4+2, vOuter, vFace);
+						else                        n = vFace;
+						return n.normalize().rotateZ(w);
+					}
+				}
+			);
+			backgroundImageCache = new ImageCache<Image>((w,h)->bumpMapping.renderImage(w,h));
 			
 			mouseHandler = new MouseHandler();
 			addMouseListener(mouseHandler);
@@ -159,28 +192,35 @@ public class RotaryCtrl extends Canvas {
 			
 			double angleTick = 2*Math.PI*tickInterval/deltaPerFullCircle;
 			
-			Color ctrlBackground = Color.WHITE;
-			Color ctrlLines  = Color.BLACK;
-			Color ctrlLines2 = Color.GRAY;
-			Color ctrlMarker = Color.BLUE;
+			//Color ctrlBackground = Color.WHITE;
+			Color ctrlTicks  = Color.BLACK;
+			Color ctrlLines  = new Color(0xd0d0d0); //Color.BLACK;
+			Color ctrlLines2 = new Color(0xd0d0d0); //Color.GRAY;
+			Color ctrlMarker = Color.BLACK; //Color.BLUE;
 			Color ctrlText   = Color.BLACK;
 			if (!isEnabled()) {
-				ctrlBackground = COLOR_DISABLED_BACKGROUND;
-				ctrlLines  = Color.GRAY;
-				ctrlLines2 = Color.GRAY;
+				//ctrlBackground = COLOR_DISABLED_BACKGROUND;
+				ctrlTicks  = Color.GRAY;
+				ctrlLines  = new Color(0xd0d0d0); //Color.GRAY;
+				ctrlLines2 = new Color(0xd0d0d0); //Color.GRAY;
 				ctrlMarker = COLOR_DISABLED_MARKER;
 				ctrlText   = Color.GRAY;
 			}
 			
-			g.setColor(ctrlLines);
-			drawRadiusLine(g, width, height, 0.95, 1.15, zeroAngle);
+			Image image = backgroundImageCache.getImage(width, height);
+			g.drawImage(image, 0, 0, null);
+			
+			g.setColor(ctrlTicks);
+			double ri = 1.0; //0.95;
+			double ra = 1.15;
+			drawRadiusLine(g, width, height, ri, ra, zeroAngle);
 			for (double a=angleTick; a<Math.PI*0.9; a+=angleTick) {
-				drawRadiusLine(g, width, height, 0.95, 1.15, zeroAngle+a);
-				drawRadiusLine(g, width, height, 0.95, 1.15, zeroAngle-a);
+				drawRadiusLine(g, width, height, ri, ra, zeroAngle+a);
+				drawRadiusLine(g, width, height, ri, ra, zeroAngle-a);
 			}
 			
-			g.setColor(ctrlBackground);
-			g.fillOval(width/2-radius, height/2-radius, radius*2, radius*2);
+			//g.setColor(ctrlBackground);
+			//g.fillOval(width/2-radius, height/2-radius, radius*2, radius*2);
 			
 			g.setColor(ctrlLines);
 			g.drawOval(width/2-radius, height/2-radius, radius*2, radius*2);
@@ -191,7 +231,7 @@ public class RotaryCtrl extends Canvas {
 			
 			g.setColor(ctrlMarker);
 			if (g2!=null) g2.setStroke( new BasicStroke(5,BasicStroke.CAP_ROUND,BasicStroke.JOIN_ROUND) );
-			drawRadiusLine(g, width, height, 0.96, 0.7, angle+zeroAngle);
+			drawRadiusLine(g, width, height, 0.9, 0.7, angle+zeroAngle);
 			if (g2!=null) g2.setStroke(new BasicStroke(1));
 			
 			String str = unit==null?"":String.format(Locale.ENGLISH, "%1."+decimals+"f %s", value, unit);
