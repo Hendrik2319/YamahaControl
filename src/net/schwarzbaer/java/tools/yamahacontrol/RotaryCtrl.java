@@ -186,7 +186,7 @@ public class RotaryCtrl extends Canvas {
 		}
 
 		@Override
-		protected void paintCanvas(Graphics g, int width, int height) {
+		protected void paintCanvas(Graphics g, int x, int y, int width, int height) {
 			Graphics2D g2 = (g instanceof Graphics2D)?(Graphics2D)g:null;
 			if (g2!=null) g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 			
@@ -208,30 +208,30 @@ public class RotaryCtrl extends Canvas {
 			}
 			
 			Image image = backgroundImageCache.getImage(width, height);
-			g.drawImage(image, 0, 0, null);
+			g.drawImage(image, x, y, null);
 			
 			g.setColor(ctrlTicks);
 			double ri = 1.0; //0.95;
 			double ra = 1.15;
-			drawRadiusLine(g, width, height, ri, ra, zeroAngle);
+			drawRadiusLine(g, x,y, width, height, ri, ra, zeroAngle);
 			for (double a=angleTick; a<Math.PI*0.9; a+=angleTick) {
-				drawRadiusLine(g, width, height, ri, ra, zeroAngle+a);
-				drawRadiusLine(g, width, height, ri, ra, zeroAngle-a);
+				drawRadiusLine(g, x,y, width, height, ri, ra, zeroAngle+a);
+				drawRadiusLine(g, x,y, width, height, ri, ra, zeroAngle-a);
 			}
 			
 			//g.setColor(ctrlBackground);
 			//g.fillOval(width/2-radius, height/2-radius, radius*2, radius*2);
 			
 			g.setColor(ctrlLines);
-			g.drawOval(width/2-radius, height/2-radius, radius*2, radius*2);
+			g.drawOval(x+width/2-radius, y+height/2-radius, radius*2, radius*2);
 			if (showInnerCircle) {
 				g.setColor(ctrlLines2);
-				g.drawOval(width/2-radius/2, height/2-radius/2, radius, radius);
+				g.drawOval(x+width/2-radius/2, y+height/2-radius/2, radius, radius);
 			}
 			
 			g.setColor(ctrlMarker);
 			if (g2!=null) g2.setStroke( new BasicStroke(5,BasicStroke.CAP_ROUND,BasicStroke.JOIN_ROUND) );
-			drawRadiusLine(g, width, height, 0.9, 0.7, angle+zeroAngle);
+			drawRadiusLine(g, x,y, width, height, 0.9, 0.7, angle+zeroAngle);
 			if (g2!=null) g2.setStroke(new BasicStroke(1));
 			
 			String str = unit==null?"":String.format(Locale.ENGLISH, "%1."+decimals+"f %s", value, unit);
@@ -240,11 +240,11 @@ public class RotaryCtrl extends Canvas {
 			int strY = height/2-(int)Math.round(stringBounds.getHeight()/2+stringBounds.getY());
 			
 			g.setColor(ctrlText);
-			g.drawString(str, strX, strY);
+			g.drawString(str, x+strX, y+strY);
 			//g.drawString(String.format(Locale.ENGLISH, "%6.1f", angle/Math.PI*180), width/2, height/2+15);
 		}
 
-		private void drawRadiusLine(Graphics g, int width, int height, double r1, double r2, double angle) {
+		private void drawRadiusLine(Graphics g, int x, int y, int width, int height, double r1, double r2, double angle) {
 			double cos = radius*Math.cos(angle);
 			double sin = radius*Math.sin(angle);
 			int x1 = width /2 + (int)Math.round(cos*r1);
