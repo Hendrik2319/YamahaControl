@@ -71,7 +71,7 @@ public class CommandList {
 	
 	public static void openWindow(String address) {
 		IconSource<TreeIcon> treeIconsIS = new IconSource<TreeIcon>(16,16);
-		treeIconsIS.readIconsFromResource("/ParsedTreeIcons.png");
+		treeIconsIS.readIconsFromResource("/TreeIcons.png");
 		treeIcons = treeIconsIS.cacheIcons(TreeIcon.values());
 		
 		CommandList commandList = new CommandList(address);
