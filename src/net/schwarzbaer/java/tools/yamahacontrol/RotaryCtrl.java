@@ -15,7 +15,7 @@ import net.schwarzbaer.gui.Canvas;
 import net.schwarzbaer.image.BumpMapping;
 import net.schwarzbaer.image.ImageCache;
 import net.schwarzbaer.image.BumpMapping.NormalFunctionPolar;
-import net.schwarzbaer.image.BumpMapping.Vector3D;
+import net.schwarzbaer.image.BumpMapping.Normal;
 
 public class RotaryCtrl extends Canvas {
 		private static final Color COLOR_DISABLED_MARKER = new Color(0x8080B0);
@@ -57,15 +57,15 @@ public class RotaryCtrl extends Canvas {
 			unit = null;
 			
 			BumpMapping bumpMapping = new BumpMapping(
-				new Vector3D(1,-1,2).normalize(),
+				new Normal(1,-1,2).normalize(),
 				Color.WHITE,new Color(0xf0f0f0),new Color(0x707070),
 				new NormalFunctionPolar() {
-					Vector3D vFace  = new Vector3D( 0,0,1);
-					Vector3D vInner = new Vector3D(-1,0,1);
-					Vector3D vOuter = new Vector3D( 1,0,3);
+					Normal vFace  = new Normal( 0,0,1);
+					Normal vInner = new Normal(-1,0,1);
+					Normal vOuter = new Normal( 1,0,3);
 					@Override
-					public Vector3D getNormal(double w, double r) {
-						Vector3D n;
+					public Normal getNormal(double w, double r) {
+						Normal n;
 						int r1 = radius/2;
 						int r2 = radius/2+5;
 						int r3 = radius-15;
@@ -73,8 +73,8 @@ public class RotaryCtrl extends Canvas {
 						if      (r1  <r && r<=r2  ) n = vInner;
 						else if (r3  <r && r<=r4  ) n = vOuter;
 						//else if (r1-2<r && r<=r1  ) n = Vector3D.blend(r, r1-2, r1  , vFace, vInner);
-						else if (r2  <r && r<=r2+2) n = Vector3D.blend(r, r2  , r2+2, vInner, vFace);
-						else if (r3-2<r && r<=r3  ) n = Vector3D.blend(r, r3-2, r3  , vFace, vOuter);
+						else if (r2  <r && r<=r2+2) n = Normal.blend(r, r2  , r2+2, vInner, vFace);
+						else if (r3-2<r && r<=r3  ) n = Normal.blend(r, r3-2, r3  , vFace, vOuter);
 						//else if (r4  <r && r<=r4+2) n = Vector3D.blend(r, r4  , r4+2, vOuter, vFace);
 						else                        n = vFace;
 						return n.normalize().rotateZ(w);
