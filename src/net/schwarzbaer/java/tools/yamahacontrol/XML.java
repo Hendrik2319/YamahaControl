@@ -99,7 +99,36 @@ final class XML {
 			showXMLformated(sb,indent+"|   ", childNodes.item(i));
 	}
 
-	public static String getPath(Node node) {
+	public static Vector<Node> getPath(Node node) {
+		Vector<Node> path = new Vector<>();
+		addToPath(node, path);
+		return path;
+	}
+	public static void addToPath(Node node, Vector<Node> path) {
+		if (node==null) return;
+		path.insertElementAt(node,0);
+		addToPath(node.getParentNode(), path);
+	}
+	
+	public static String getPathStr2(Node node) {
+		Vector<Node> path = getPath(node);
+		String str = "";
+		for (int i=0; i<path.size(); i++) {
+			Node n = path.get(i);
+			str += getShortName(n.getNodeType())+":"+n.getNodeName();
+			
+			if (i+1<path.size()) {
+				Node n1 = path.get(i+1);
+				NodeList childNodes = n.getChildNodes();
+				String index = "??";
+				for (int j=0; j<childNodes.getLength(); ++j)
+					if (childNodes.item(j)==n1) { index = ""+j; break; }
+				str += ".["+index+"]";
+			}
+		}
+		return str;
+	}
+	public static String getPathStr(Node node) {
 		if (node==null) return "<null>";
 		String str = getShortName(node.getNodeType())+":"+node.getNodeName();
 		
@@ -111,7 +140,7 @@ final class XML {
 		for (int i=0; i<childNodes.getLength(); ++i)
 			if (childNodes.item(i)==node) { index = ""+i; break; }
 		
-		return getPath(parent)+".["+index+"]"+str;
+		return getPathStr(parent)+".["+index+"]"+str;
 	}
 
 	public static Vector<Node> getChildNodesByNodeName(Node node, String nodeName) {
@@ -135,8 +164,8 @@ final class XML {
 
 	public static Node getSubNode(Node node, String... tagList) {
 		Vector<Node> nodes = XML.getSubNodes(node, tagList);
-		if (nodes.isEmpty()) { Log.error(XML.class, "Can't find subnode: Node=%s TagList=%s", XML.getPath(node), Arrays.toString(tagList)); return null; }
-		if (nodes.size()>1) Log.warning(XML.class, "Found more than one subnode: Node=%s TagList=%s", XML.getPath(node), Arrays.toString(tagList));
+		if (nodes.isEmpty()) { Log.error(XML.class, "Can't find subnode: Node=%s TagList=%s", XML.getPathStr(node), Arrays.toString(tagList)); return null; }
+		if (nodes.size()>1) Log.warning(XML.class, "Found more than one subnode: Node=%s TagList=%s", XML.getPathStr(node), Arrays.toString(tagList));
 		return nodes.get(0);
 	}
 

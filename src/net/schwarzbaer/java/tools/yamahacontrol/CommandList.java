@@ -86,7 +86,7 @@ public class CommandList {
 	private Document document;
 	private JFrame mainWindow;
 	private ContextMenuHandler contextMenu;
-	private DefaultTreeModel treeModel;
+	private MyTreeModel treeModel;
 	private JTree tree;
 	private JFileChooser fileChooser;
 
@@ -169,23 +169,24 @@ public class CommandList {
 		fileChooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
 		fileChooser.setMultiSelectionEnabled(false);
 		
-		treeModel = new DefaultTreeModel(null);
+		treeModel = new MyTreeModel();
 		tree = new JTree(treeModel);
 		tree.setCellRenderer(new TreeNodeRenderer());
+		tree.setExpandsSelectedPaths(true); 
 		
 		JScrollPane treeScrollPane = new JScrollPane(tree);
 		treeScrollPane.setPreferredSize(new Dimension(800,800));
 		
 		contextMenu = new ContextMenuHandler();
 		contextMenu.add(ContextMenuItemType.NodeFunction, "Copy Value to Clipboard", e->YamahaControl.copyToClipBoard(getClickedNodeText()));
-		contextMenu.add(ContextMenuItemType.NodeFunction, "Copy Path to Clipboard", e->YamahaControl.copyToClipBoard(getClickedNodePath()));
+		contextMenu.add(ContextMenuItemType.NodeFunction, "Copy Path to Clipboard" , e->YamahaControl.copyToClipBoard(getClickedNodePath()));
 		contextMenu.addSeparator();
 		contextMenu.add(ContextMenuItemType.TreeFunction, "Expand Full Tree", e->expandFullTree());
-		contextMenu.add(ContextMenuItemType.NodeFunction, "Expand Branch", e->expandBranch());
+		contextMenu.add(ContextMenuItemType.NodeFunction, "Expand Branch"   , e->expandBranch());
 		contextMenu.addSeparator();
-		contextMenu.add(ContextMenuItemType.GetCommand    , "Test Get Command", e->testCommand(contextMenu.getClickedTreeNode(),false));
+		contextMenu.add(ContextMenuItemType.GetCommand    , "Test Get Command"                , e->testCommand(contextMenu.getClickedTreeNode(),false));
 		contextMenu.add(ContextMenuItemType.GetCommandSave, "Test Get Command (Save Response)", e->testCommand(contextMenu.getClickedTreeNode(),true));
-		contextMenu.add(ContextMenuItemType.PutCommand    , "Test Put Command", e->testCommand(contextMenu.getClickedTreeNode(),false));
+		contextMenu.add(ContextMenuItemType.PutCommand    , "Test Put Command"                , e->testCommand(contextMenu.getClickedTreeNode(),false));
 		contextMenu.addSeparator();
 		contextMenu.add(ContextMenuItemType.MenuWithCommandList, "Show Command Usage", e->showCommandUsage(contextMenu.getClickedTreeNode()));
 
@@ -279,18 +280,21 @@ public class CommandList {
 		else
 			if (findUnsupportedNodeTypes(document))
 				JOptionPane.showMessageDialog(mainWindow, "Found unsupported node type in DOM. Please take a look into log for details.", "Unknown Node Type", JOptionPane.ERROR_MESSAGE);
-			else
+			else {
 				switch(selectedTreeViewType) {
-				case DOM           : treeModel.setRoot(new DOMTreeNode(document)); break;
-				case InterpretedDOM: treeModel.setRoot(InterpretedDOMTreeNode.createRootNode(document)); break;
-				case ParsedCommands: treeModel.setRoot(new ParsedTreeNode(ParsedCommandItem.parse(document))); break;
+				case DOM           : treeModel.setRoot(true, new DOMTreeNode(document)); break;
+				case InterpretedDOM: treeModel.setRoot(true, InterpretedDOMTreeNode.createRootNode(document)); break;
+				case ParsedCommands: treeModel.setRoot(true, new ParsedTreeNode(ParsedCommandItem.parse(document))); break;
 				}
+				//treeModel.getR
+				//tree.getSelec
+			}
 	}
 
 	private String getClickedNodePath() {
 		Object pathComp = contextMenu.getClickedTreeNode();
-		if (pathComp instanceof DOMTreeNode       ) return XML.getPath(((DOMTreeNode)pathComp).node);;
-		if (pathComp instanceof InterpretedDOMTreeNode) return XML.getPath(((InterpretedDOMTreeNode)pathComp).getNode());
+		if (pathComp instanceof DOMTreeNode           ) return XML.getPathStr(((DOMTreeNode)pathComp).node);;
+		if (pathComp instanceof InterpretedDOMTreeNode) return XML.getPathStr(((InterpretedDOMTreeNode)pathComp).node);
 		return null;
 	}
 
@@ -347,51 +351,131 @@ public class CommandList {
 	}
 
 	public static void reportError(String className, Node node, String format, Object... values) {
-		System.err.printf("[%s] %s [%s]%n", className, String.format(format, values), XML.getPath(node));
+		System.err.printf("[%s] %s [%s]%n", className, String.format(format, values), XML.getPathStr(node));
 	}
-
-	private static final class DOMTreeNode implements TreeNode {
 	
-		private DOMTreeNode parent;
-		private Node node;
-		private Vector<DOMTreeNode> children;
+	private final class MyTreeModel extends DefaultTreeModel {
+		private static final long serialVersionUID = -4484078375995511354L;
+		
+		public MyTreeModel() {
+			super(null);
+		}
 
+		public void setRoot(boolean keepSelection, BaseTreeNode<?> root) {
+			if (!keepSelection) {
+				super.setRoot(root);
+				return;
+			}
+			
+			Vector<Node> selectedXmlPath = getSelectedXmlPath();
+			super.setRoot(root);
+			setSelectedXmlPath(root, selectedXmlPath);
+		}
+
+		private Vector<Node> getSelectedXmlPath() {
+			TreePath selectedPath = tree.getSelectionPath();
+			if (selectedPath == null) return null;
+			
+			Object obj = selectedPath.getLastPathComponent();
+			if (!(obj instanceof BaseTreeNode)) return null;
+			
+			return XML.getPath(((BaseTreeNode<?>) obj).node);
+		}
+
+		private void setSelectedXmlPath(BaseTreeNode<?> root, Vector<Node> selectedXmlPath) {
+			if (selectedXmlPath == null) return;
+			
+			Object[] path = root.getSubNodePath(selectedXmlPath).toArray();
+			if (path.length <= 0) return;
+			
+			TreePath selectedPath = new TreePath(path);
+			tree.setSelectionPath(selectedPath);
+			tree.scrollPathToVisible(selectedPath);
+		}
+
+		@Override
+		public void setRoot(TreeNode root) {
+			throw new UnsupportedOperationException();
+		}
+	}
+	
+	private static abstract class BaseTreeNode<Type extends BaseTreeNode<Type>> implements TreeNode {
+		
+		protected BaseTreeNode<?> parent;
+		protected Node node;
+		protected Vector<Type> children;
+		
+		BaseTreeNode(BaseTreeNode<Type> parent, Node node) {
+			this.parent = parent;
+			this.node = node;
+			this.children = null;
+		}
+		
+		public Vector<BaseTreeNode<?>> getSubNodePath(Vector<Node> xmlPath) {
+			Vector<BaseTreeNode<?>> treePath = new Vector<>();
+			if (xmlPath.isEmpty()) return treePath;
+			if (node != xmlPath.get(0)) return treePath;
+			
+			treePath.add(this);
+			
+			BaseTreeNode<Type> child = this;
+			int index = 1;
+			while (index<xmlPath.size() && (child=child.getChild(xmlPath.get(index++)))!=null) {
+				treePath.add(child);
+			}
+			
+			return treePath;
+		}
+		
+		public Type getChild(Node node) {
+			if (children==null) createChildren();
+			for (Type child:children)
+				if (child.node==node)
+					return child;
+			return null;
+		}
+
+		protected abstract void createChildren();
+		@Override public abstract String toString();
+		
+		@Override public TreeNode getParent()         { return parent; }
+		@Override public boolean  getAllowsChildren() { return true; }
+		@Override public boolean  isLeaf()            { return getChildCount()==0; }
+		
+		@Override public int         getChildCount()            { if (children==null) createChildren(); return children.size(); }
+		@Override public int         getIndex(TreeNode node)    { if (children==null) createChildren(); return children.indexOf(node); }
+		@Override public TreeNode    getChildAt(int childIndex) { if (children==null) createChildren(); return children.get(childIndex); }
+		@SuppressWarnings("rawtypes")
+		@Override public Enumeration children()                 { if (children==null) createChildren(); return children.elements(); }
+		
+	}
+	
+	private static final class DOMTreeNode extends BaseTreeNode<DOMTreeNode> {
+	
 		public DOMTreeNode(Document document) {
 			this(null,document);
 		}
 		
 		public DOMTreeNode(DOMTreeNode parent, Node node) {
-			this.parent = parent;
-			this.node = node;
-			this.children = null;
+			super(parent, node);
 		}
 
-		private void createChildren() {
+		@Override protected void createChildren() {
 			children = new Vector<>();
 			NodeList childNodes = node.getChildNodes();
 			for (int i=0; i<childNodes.getLength(); ++i)
 				children.add(new DOMTreeNode(this, childNodes.item(i)));
 		}
 		
-		@Override
-		public String toString() {
+		@Override public String toString() {
 			return XML.toString(node);
 			//return "DOMTreeNode [parent=" + parent + ", node=" + node + ", children=" + children + "]";
 		}
 		
-		@Override public TreeNode getParent()        { return parent; }
-		@Override public boolean getAllowsChildren() { return true; }
-		@Override public boolean isLeaf()            { return getChildCount()==0; }
 		@Override public int getChildCount()         { return node.getChildNodes().getLength(); }
-		
-		@Override public int         getIndex(TreeNode node)    { if (children==null) createChildren(); return children.indexOf(node); }
-		@Override public TreeNode    getChildAt(int childIndex) { if (children==null) createChildren(); return children.get(childIndex); }
-		@SuppressWarnings("rawtypes")
-		@Override public Enumeration children()                 { if (children==null) createChildren(); return children.elements(); }
-	
 	}
 	
-	private static abstract class InterpretedDOMTreeNode implements TreeNode {
+	private static abstract class InterpretedDOMTreeNode extends BaseTreeNode<InterpretedDOMTreeNode> {
 		
 		public static final HashMap<String,Integer> unknownTagNames = new HashMap<>();
 		
@@ -410,9 +494,9 @@ public class CommandList {
 		private static InterpretedDOMTreeNode createTreeNode(InterpretedDOMTreeNode parent, Node node) {
 			switch (node.getNodeType()) {
 			case Node.ELEMENT_NODE      : return createTreeNode(parent, (Element)node);
-			case Node.TEXT_NODE         : return new TextNode(parent, "\"%s\""     , node.getNodeValue());
-			case Node.COMMENT_NODE      : return new TextNode(parent, "<!-- %s -->", node.getNodeValue());
-			case Node.CDATA_SECTION_NODE: return new TextNode(parent, "[CDATA %s ]", node.getNodeValue());
+			case Node.TEXT_NODE         : return new TextNode(parent,node, "\"%s\""     , node.getNodeValue());
+			case Node.COMMENT_NODE      : return new TextNode(parent,node, "<!-- %s -->", node.getNodeValue());
+			case Node.CDATA_SECTION_NODE: return new TextNode(parent,node, "[CDATA %s ]", node.getNodeValue());
 			}
 			throw new IllegalStateException("");
 		}
@@ -432,14 +516,11 @@ public class CommandList {
 			//return new TextNode(parent, "Unknown Element \"%s\"", node.getNodeName());
 		}
 		
-		protected InterpretedDOMTreeNode parent;
-		protected Vector<InterpretedDOMTreeNode> children;
 		private TreeIcon icon;
 	
-		public InterpretedDOMTreeNode(InterpretedDOMTreeNode parent, TreeIcon icon) {
-			this.parent = parent;
+		public InterpretedDOMTreeNode(InterpretedDOMTreeNode parent, Node node, TreeIcon icon) {
+			super(parent, node);
 			this.icon = icon;
-			this.children = null;
 		}
 	
 		public TreeIcon getIcon() {
@@ -447,16 +528,14 @@ public class CommandList {
 		}
 	
 		@Override public abstract String toString();
-		public abstract Node getNode();
 		
 		public void reportError(String format, Object... values) {
-			reportError(getNode(), format, values);
+			reportError(node, format, values);
 		}
 		public void reportError(Node node, String format, Object... values) {
 			CommandList.reportError(this.getClass().getSimpleName(), node, format, values);
 		}
 	
-		protected abstract void createChildren();
 		protected void createChildren(Node node) {
 			children = new Vector<>();
 			NodeList childNodes = node.getChildNodes();
@@ -466,15 +545,6 @@ public class CommandList {
 		
 		///////////////////////////////////////////////
 		// TreeNode methods
-		@Override public TreeNode getParent()         { return parent; }
-		@Override public boolean  getAllowsChildren() { return true; }
-		@Override public boolean  isLeaf()            { return getChildCount()==0; }
-	
-		@Override public int         getChildCount()            { if (children==null) createChildren(); return children.size(); }
-		@Override public int         getIndex(TreeNode node)    { if (children==null) createChildren(); return children.indexOf(node); }
-		@Override public TreeNode    getChildAt(int childIndex) { if (children==null) createChildren(); return children.get(childIndex); }
-		@SuppressWarnings("rawtypes")
-		@Override public Enumeration children()                 { if (children==null) createChildren(); return children.elements(); }
 		///////////////////////////////////////////////
 	
 		protected static void createGenericNodes(Node source, InterpretedDOMTreeNode target) {
@@ -487,16 +557,12 @@ public class CommandList {
 		
 		private static class GenericXMLNode extends InterpretedDOMTreeNode {
 	
-			private Node node;
 			public GenericXMLNode(InterpretedDOMTreeNode parent, Node node) {
-				super(parent, null);
-				this.node = node;
+				super(parent, node, null);
 			}
 	
 			@Override public String toString() { return XML.toString(node); }
-			@Override public Node getNode() { return node; }
-			@Override
-			protected void createChildren() {
+			@Override protected void createChildren() {
 				children = new Vector<>();
 				NodeList childNodes = node.getChildNodes();
 				for (int i=0; i<childNodes.getLength(); ++i)
@@ -506,38 +572,32 @@ public class CommandList {
 		
 		private static class TextNode extends InterpretedDOMTreeNode {
 			private String str;
-			public TextNode(InterpretedDOMTreeNode parent, String format, Object... values) {
-				this(parent,null,format,values);
+			public TextNode(InterpretedDOMTreeNode parent, Node node, String format, Object... values) {
+				this(parent,node,null,format,values);
 			}
-			public TextNode(InterpretedDOMTreeNode parent, TreeIcon icon, String format, Object... values) {
-				super(parent,icon); str = String.format(format, values);
+			public TextNode(InterpretedDOMTreeNode parent, Node node, TreeIcon icon, String format, Object... values) {
+				super(parent,node,icon); str = String.format(format, values);
 			}
 			@Override public String toString() { return str; }
 			@Override protected void createChildren() { children = new Vector<>(); }
-			@Override public Node getNode() { return null; }
 		}
 	
 		private static class DocumentNode extends InterpretedDOMTreeNode {
 			private Document document;
 			public DocumentNode(Document document) {
-				super(null,TreeIcon.Document);
+				super(null,document,TreeIcon.Document);
 				this.document = document;
 			}
 			@Override public String toString() { return "Function Description of Yamaha Device"; }
 			@Override protected void createChildren() { createChildren(document); }
-			@Override public Node getNode() { return document; }
 		}
 	
 		private static abstract class ElementNode extends InterpretedDOMTreeNode {
-			protected Element node;
-	
-			ElementNode(InterpretedDOMTreeNode parent, Element node, TreeIcon icon) {
-				super(parent,icon);
-				this.node = node;
-			}
 			
+			ElementNode(InterpretedDOMTreeNode parent, Element node, TreeIcon icon) {
+				super(parent,node,icon);
+			}
 			@Override protected void createChildren() { createChildren(node); }
-			@Override public Node getNode() { return node; }
 	
 			protected void parseAttributes(AttributeConsumer attrConsumer) {
 				parseAttributes(node, attrConsumer);
@@ -656,9 +716,9 @@ public class CommandList {
 				});
 			}
 			
-			public static BaseCommandList getCmdListFromParent(InterpretedDOMTreeNode parent) {
+			public static BaseCommandList getCmdListFromParent(BaseTreeNode<?> parent) {
 				if (parent instanceof MenuNode) {
-					MenuNode menu = ((MenuNode)parent);
+					MenuNode menu = (MenuNode)parent;
 					if (menu.cmdListNode!=null) return menu.cmdListNode.commands;
 					return getCmdListFromParent(menu.parent);
 				}
@@ -1317,7 +1377,7 @@ public class CommandList {
 	
 		private static class PutCommandNode extends ComplexCommandNode {
 		
-			private InterpretedDOMTreeNode nodeReplacement;
+			private PlainCommandNode nodeReplacement;
 	
 			public PutCommandNode(InterpretedDOMTreeNode parent, Element node) {
 				super(parent, node, TreeIcon.Command);
@@ -1347,14 +1407,13 @@ public class CommandList {
 				if (cmd.params.length==1) {
 					CmdParam cp = cmd.params[0];
 					String tagListStr = cp.valueTagList==null?"":(",  "+cp.valueTagList.toString());
-					nodeReplacement = new PlainCommandNode(this, "PUT["+cmd.cmdID+"]", cmd.baseTagList.toString()+tagListStr, "=", cp.param.mergeValues(""," | ",""));
+					nodeReplacement = new PlainCommandNode(this, node, "PUT["+cmd.cmdID+"]", cmd.baseTagList.toString()+tagListStr, "=", cp.param.mergeValues(""," | ",""));
 				} else {
-					PlainCommandNode commandNode = new PlainCommandNode(this,"PUT["+cmd.cmdID+"]",cmd.baseTagList.toString());
-					nodeReplacement = commandNode;
+					nodeReplacement = new PlainCommandNode(this, node, "PUT["+cmd.cmdID+"]", cmd.baseTagList.toString());
 					for (int i=0; i<cmd.params.length; ++i) {
 						CmdParam cp = cmd.params[i];
 						String tagListStr = cp.valueTagList==null?"":(cp.valueTagList.toString()+" = ");
-						commandNode.add(new TextNode(this, /*icon,*/ "Value %d:   %s%s", i, tagListStr, cp.param.mergeValues(""," | ","")));
+						nodeReplacement.add(new TextNode(this,null, /*icon,*/ "Value %d:   %s%s", i, tagListStr, cp.param.mergeValues(""," | ","")));
 					}
 				}
 			}
@@ -1362,7 +1421,7 @@ public class CommandList {
 	
 		private static class GetCommandNode extends ComplexCommandNode {
 		
-			private InterpretedDOMTreeNode nodeReplacement;
+			private PlainCommandNode nodeReplacement;
 	
 			public GetCommandNode(InterpretedDOMTreeNode parent, Element node) {
 				super(parent, node, TreeIcon.Command);
@@ -1391,14 +1450,13 @@ public class CommandList {
 				if (cmd.params.length==1) {
 					CmdParam cp = cmd.params[0];
 					String tagListStr = cp.valueTagList==null?"":(cp.valueTagList.toString()+" -> ");
-					nodeReplacement = new PlainGetCommandNode(this, "GET["+cmd.cmdID+"]", cmd.baseTagList, tagListStr+cp.param.mergeValues(""," | ",""));
+					nodeReplacement = new PlainGetCommandNode(this, node, "GET["+cmd.cmdID+"]", cmd.baseTagList, tagListStr+cp.param.mergeValues(""," | ",""));
 				} else {
-					PlainCommandNode commandNode = new PlainGetCommandNode(this,"GET["+cmd.cmdID+"]",cmd.baseTagList);
-					nodeReplacement = commandNode;
+					nodeReplacement = new PlainGetCommandNode(this, node, "GET["+cmd.cmdID+"]", cmd.baseTagList);
 					for (int i=0; i<cmd.params.length; ++i) {
 						CmdParam cp = cmd.params[i];
 						String tagListStr = cp.valueTagList==null?"":(cp.valueTagList.toString()+" -> ");
-						commandNode.add(new TextNode(this, /*icon,*/ "Value %d:   %s%s", i, tagListStr, cp.param.mergeValues(""," | ","")));
+						nodeReplacement.add(new TextNode(this,null, /*icon,*/ "Value %d:   %s%s", i, tagListStr, cp.param.mergeValues(""," | ","")));
 					}
 				}
 			}
@@ -1410,8 +1468,8 @@ public class CommandList {
 			protected String tagList;
 			protected String value;
 			private String conn;
-			private PlainCommandNode(InterpretedDOMTreeNode parent, TreeIcon icon, String label, String tagList, String conn, String value, boolean withValue) {
-				super(parent, icon);
+			private PlainCommandNode(InterpretedDOMTreeNode parent, Node node, TreeIcon icon, String label, String tagList, String conn, String value, boolean withValue) {
+				super(parent, node, icon);
 				this.label = label;
 				this.tagList = tagList;
 				this.conn = conn;
@@ -1419,25 +1477,24 @@ public class CommandList {
 				this.withValue = withValue;
 				children = new Vector<>();
 			}
-			protected PlainCommandNode(InterpretedDOMTreeNode parent, TreeIcon icon, String label, String tagList                           ) { this(parent, icon, label, tagList, null, null , false); }
-			protected PlainCommandNode(InterpretedDOMTreeNode parent, TreeIcon icon, String label, String tagList, String conn, String value) { this(parent, icon, label, tagList, conn, value, true ); }
-			public    PlainCommandNode(InterpretedDOMTreeNode parent,                      String label, String tagList                           ) { this(parent, TreeIcon.Command, label, tagList); }
-			public    PlainCommandNode(InterpretedDOMTreeNode parent,                      String label, String tagList, String conn, String value) { this(parent, TreeIcon.Command, label, tagList, conn, value); }
+			protected PlainCommandNode(InterpretedDOMTreeNode parent, Node node, TreeIcon icon, String label, String tagList                           ) { this(parent, node, icon, label, tagList, null, null , false); }
+			protected PlainCommandNode(InterpretedDOMTreeNode parent, Node node, TreeIcon icon, String label, String tagList, String conn, String value) { this(parent, node, icon, label, tagList, conn, value, true ); }
+			public    PlainCommandNode(InterpretedDOMTreeNode parent, Node node,                String label, String tagList                           ) { this(parent, node, TreeIcon.Command, label, tagList); }
+			public    PlainCommandNode(InterpretedDOMTreeNode parent, Node node,                String label, String tagList, String conn, String value) { this(parent, node, TreeIcon.Command, label, tagList, conn, value); }
 			
 			public void add(InterpretedDOMTreeNode child) { children.add(child); }
 			@Override public String toString() { return label+":    "+tagList+(withValue?("   "+conn+"   "+value):""); }
-			@Override public Node getNode() { return null; }
 			@Override protected void createChildren() { throw new UnsupportedOperationException("Calling "+getClass().getSimpleName()+".createChildren() is not allowed."); }
 		}
 		
 		private static class PlainGetCommandNode extends PlainCommandNode implements CallableGetCommandNode {
 			private TagList tagList;
-			PlainGetCommandNode(InterpretedDOMTreeNode parent, String label, TagList tagList) {
-				super(parent, TreeIcon.Command_GET, label, tagList.toString());
+			PlainGetCommandNode(InterpretedDOMTreeNode parent, Node node, String label, TagList tagList) {
+				super(parent, node, TreeIcon.Command_GET, label, tagList.toString());
 				this.tagList = tagList;
 			}
-			PlainGetCommandNode(InterpretedDOMTreeNode parent, String label, TagList tagList, String value) {
-				super(parent, TreeIcon.Command_GET, label, tagList.toString(), "->", value);
+			PlainGetCommandNode(InterpretedDOMTreeNode parent, Node node, String label, TagList tagList, String value) {
+				super(parent, node, TreeIcon.Command_GET, label, tagList.toString(), "->", value);
 				this.tagList = tagList;
 			}
 			@Override public String buildXmlCommand() { return Ctrl.buildGetCommand(tagList); }
@@ -1446,8 +1503,8 @@ public class CommandList {
 		@SuppressWarnings("unused")
 		private static class PlainPutCommandNode extends PlainCommandNode implements CallablePutCommandNode {
 			private TagList tagList;
-			PlainPutCommandNode(InterpretedDOMTreeNode parent, String label, TagList tagList, String value) {
-				super(parent, TreeIcon.Command_PUT, label, tagList.toString(), "=", value);
+			PlainPutCommandNode(InterpretedDOMTreeNode parent, Node node, String label, TagList tagList, String value) {
+				super(parent, node, TreeIcon.Command_PUT, label, tagList.toString(), "=", value);
 				this.tagList = tagList;
 			}
 			@Override public String buildXmlCommand() { return Ctrl.buildPutCommand(tagList, value); }
@@ -1455,20 +1512,21 @@ public class CommandList {
 		
 	}
 	
-	private static class ParsedTreeNode implements TreeNode {
+	private static class ParsedTreeNode extends BaseTreeNode<ParsedTreeNode> {
 
-		private ParsedTreeNode parent;
-		protected Vector<InterpretedDOMTreeNode> children;
 		private ParsedCommandItem item;
 		
 		public ParsedTreeNode(ParsedCommandItem item) {
+			super(null,null);
 			this.item = item;
 		}
 		
 		public TreeIcon getIcon() {
 			return item.icon;
 		}
-		private void createChildren() {
+		
+		@Override
+		protected void createChildren() {
 			children = new Vector<>();
 			// TODO Auto-generated method stub
 		}
@@ -1477,17 +1535,6 @@ public class CommandList {
 		public String toString() {
 			return item.toString();
 		}
-
-		@Override public TreeNode getParent()         { return parent; }
-		@Override public boolean  getAllowsChildren() { return true; }
-		@Override public boolean  isLeaf()            { return getChildCount()==0; }
-	
-		@Override public int         getChildCount()            { if (children==null) createChildren(); return children.size(); }
-		@Override public int         getIndex(TreeNode node)    { if (children==null) createChildren(); return children.indexOf(node); }
-		@Override public TreeNode    getChildAt(int childIndex) { if (children==null) createChildren(); return children.get(childIndex); }
-		@SuppressWarnings("rawtypes")
-		@Override public Enumeration children()                 { if (children==null) createChildren(); return children.elements(); }
-		
 	}
 	
 	private static class ParsedCommandItem {
