@@ -12,6 +12,7 @@ import java.nio.file.Files;
 import java.nio.file.StandardOpenOption;
 import java.util.Enumeration;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.Map.Entry;
 import java.util.Vector;
 import java.util.function.BiConsumer;
@@ -50,7 +51,7 @@ import net.schwarzbaer.java.tools.yamahacontrol.XML.TagList;
 public class CommandList {
 	
 	private static IconSource.CachedIcons<TreeIcon> treeIcons = null;
-	private enum TreeIcon { Menu, Command, Command_PUT, Command_GET, Language, UnitDescription, Document }
+	private enum TreeIcon { Menu, Command, Command_PUT, Command_GET, Language, UnitDescription, Document, XMLTag }
 	
 	public static void main(String[] args) {
 		try { UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName()); }
@@ -103,11 +104,11 @@ public class CommandList {
 	private enum TreeViewType { DOM, InterpretedDOM, ParsedCommands } 
 	
 	private enum ContextMenuItemType {
-		TreeFunction(node->true),
-		NodeFunction(node->(node!=null)),
-		PutCommand    (node->(node instanceof InterpretedDOMTreeNode.CallablePutCommandNode)),
-		GetCommand    (node->(node instanceof InterpretedDOMTreeNode.CallableGetCommandNode)),
-		GetCommandSave(node->(node instanceof InterpretedDOMTreeNode.CallableGetCommandNode)),
+		TreeFunction  (node->true),
+		NodeFunction  (node->(node!=null)),
+		PutCommand    (node->isCallablePutCommand(node)),
+		GetCommand    (node->isCallableGetCommand(node)),
+		GetCommandSave(node->isCallableGetCommand(node)),
 		MenuWithCommandList(node->isNodeWithCommandList(node)),
 		;
 		
@@ -118,6 +119,16 @@ public class CommandList {
 		private static boolean isNodeWithCommandList(Object node) {
 			if (!(node instanceof InterpretedDOMTreeNode.MenuNode)) return false;
 			return ((InterpretedDOMTreeNode.MenuNode)node).cmdListNode!=null;
+		}
+		private static boolean isCallablePutCommand(Object node) {
+			if (node instanceof ParsedTreeNode)
+				return ((ParsedTreeNode)node).item instanceof CallablePutCommand;
+			return node instanceof CallablePutCommand;
+		}
+		private static boolean isCallableGetCommand(Object node) {
+			if (node instanceof ParsedTreeNode)
+				return ((ParsedTreeNode)node).item instanceof CallableGetCommand;
+			return node instanceof CallableGetCommand;
 		}
 	}
 	
@@ -236,9 +247,20 @@ public class CommandList {
 	}
 
 	private void testCommand(Object clickedTreeNode, boolean saveResponse) {
-		if (!(clickedTreeNode instanceof InterpretedDOMTreeNode.CallableCommandNode)) return;
-		InterpretedDOMTreeNode.CallableCommandNode commandNode = (InterpretedDOMTreeNode.CallableCommandNode)clickedTreeNode;
-		String xmlCommand = commandNode.buildXmlCommand();
+		
+		CallableCommand command = null;
+		if (clickedTreeNode instanceof CallableCommand)
+			command = (CallableCommand)clickedTreeNode;
+		
+		else if (clickedTreeNode instanceof ParsedTreeNode) {
+			ParsedCommandItem item = ((ParsedTreeNode) clickedTreeNode).item;
+			if (item instanceof CallableCommand)
+				command = (CallableCommand) item;
+		}
+		
+		if (command==null) return;
+		
+		String xmlCommand = command.buildXmlCommand();
 		if (selectedAddress==null) return;
 		if (xmlCommand==null) return;
 		HttpResponse response = Ctrl.testCommand(selectedAddress, xmlCommand, false);
@@ -284,7 +306,7 @@ public class CommandList {
 				switch(selectedTreeViewType) {
 				case DOM           : treeModel.setRoot(true, new DOMTreeNode(document)); break;
 				case InterpretedDOM: treeModel.setRoot(true, InterpretedDOMTreeNode.createRootNode(document)); break;
-				case ParsedCommands: treeModel.setRoot(true, new ParsedTreeNode(ParsedCommandItem.parse(document))); break;
+				case ParsedCommands: treeModel.setRoot(true, new ParsedTreeNode(new ParsedCommandItem.DocumentItem(document))); break;
 				}
 				//treeModel.getR
 				//tree.getSelec
@@ -354,6 +376,12 @@ public class CommandList {
 		System.err.printf("[%s] %s [%s]%n", className, String.format(format, values), XML.getPathStr(node));
 	}
 	
+	private static interface CallableGetCommand extends CallableCommand {}
+	private static interface CallablePutCommand extends CallableCommand {}
+	private static interface CallableCommand {
+		public abstract String buildXmlCommand();
+	}
+	
 	private final class MyTreeModel extends DefaultTreeModel {
 		private static final long serialVersionUID = -4484078375995511354L;
 		
@@ -374,12 +402,18 @@ public class CommandList {
 
 		private Vector<Node> getSelectedXmlPath() {
 			TreePath selectedPath = tree.getSelectionPath();
-			if (selectedPath == null) return null;
 			
-			Object obj = selectedPath.getLastPathComponent();
-			if (!(obj instanceof BaseTreeNode)) return null;
+			Node node = null;
+			while(selectedPath != null) {
+				Object obj = selectedPath.getLastPathComponent();
+				if (obj instanceof BaseTreeNode) {
+					node = ((BaseTreeNode<?>) obj).node;
+					if (node!=null) break;
+				}
+				selectedPath = selectedPath.getParentPath();
+			}
 			
-			return XML.getPath(((BaseTreeNode<?>) obj).node);
+			return node==null ? null : XML.getPath(node);
 		}
 
 		private void setSelectedXmlPath(BaseTreeNode<?> root, Vector<Node> selectedXmlPath) {
@@ -493,10 +527,23 @@ public class CommandList {
 	
 		private static InterpretedDOMTreeNode createTreeNode(InterpretedDOMTreeNode parent, Node node) {
 			switch (node.getNodeType()) {
-			case Node.ELEMENT_NODE      : return createTreeNode(parent, (Element)node);
-			case Node.TEXT_NODE         : return new TextNode(parent,node, "\"%s\""     , node.getNodeValue());
-			case Node.COMMENT_NODE      : return new TextNode(parent,node, "<!-- %s -->", node.getNodeValue());
-			case Node.CDATA_SECTION_NODE: return new TextNode(parent,node, "[CDATA %s ]", node.getNodeValue());
+			
+			case Node.ELEMENT_NODE:
+				return createTreeNode(parent, (Element)node);
+			
+			case Node.TEXT_NODE:
+			case Node.COMMENT_NODE:
+			case Node.CDATA_SECTION_NODE: {
+				String formatStr = "\"%s\"";
+				switch (node.getNodeType()) {
+				case Node.TEXT_NODE         : formatStr = "\"%s\""; break;
+				case Node.COMMENT_NODE      : formatStr = "<!-- %s -->"; break;
+				case Node.CDATA_SECTION_NODE: formatStr = "[CDATA %s ]"; break;
+				}
+				parent.reportError("Found unparsed text node: %s", node.getNodeValue());
+				return new TextNode(parent,node, formatStr, node.getNodeValue());
+			}
+			
 			}
 			throw new IllegalStateException("");
 		}
@@ -526,8 +573,6 @@ public class CommandList {
 		public TreeIcon getIcon() {
 			return icon;
 		}
-	
-		@Override public abstract String toString();
 		
 		public void reportError(String format, Object... values) {
 			reportError(node, format, values);
@@ -665,14 +710,17 @@ public class CommandList {
 		private static class LanguageNode extends ElementNode {
 			
 			private String code;
+			private String value;
 	
 			public LanguageNode(InterpretedDOMTreeNode parent, Element node) {
 				super(parent,node,TreeIcon.Language);
 				this.code = "???";
 				// <Language Code="en">
 				parseAttributes((attrName, attrValue) -> { if ("Code".equals(attrName)) { code=attrValue; return true; } return false; });
+				value = XML.getSubValue(node);
+				children = new Vector<>();
 			}
-			@Override public String toString() { return String.format("Language: %s", code); }
+			@Override public String toString() { return String.format("Language: %s [%s]", code, value); }
 		}
 	
 		private static class MenuNode extends ElementNode {
@@ -825,13 +873,7 @@ public class CommandList {
 			}
 		}
 	
-		private static interface CallableGetCommandNode extends CallableCommandNode {}
-		private static interface CallablePutCommandNode extends CallableCommandNode {}
-		private static interface CallableCommandNode {
-			public abstract String buildXmlCommand();
-		}
-	
-		private static class BaseCommandDefineNode extends ElementNode implements CallableGetCommandNode {
+		private static class BaseCommandDefineNode extends ElementNode implements CallableGetCommand {
 		
 			public String id;
 			public TagList tagList;
@@ -876,7 +918,7 @@ public class CommandList {
 			}
 		}
 	
-		private static class SimplePutCommandNode extends ElementNode implements CallablePutCommandNode {
+		private static class SimplePutCommandNode extends ElementNode implements CallablePutCommand {
 		
 			private String cmdID;
 			private TagList tagList;
@@ -1487,7 +1529,7 @@ public class CommandList {
 			@Override protected void createChildren() { throw new UnsupportedOperationException("Calling "+getClass().getSimpleName()+".createChildren() is not allowed."); }
 		}
 		
-		private static class PlainGetCommandNode extends PlainCommandNode implements CallableGetCommandNode {
+		private static class PlainGetCommandNode extends PlainCommandNode implements CallableGetCommand {
 			private TagList tagList;
 			PlainGetCommandNode(InterpretedDOMTreeNode parent, Node node, String label, TagList tagList) {
 				super(parent, node, TreeIcon.Command_GET, label, tagList.toString());
@@ -1501,7 +1543,7 @@ public class CommandList {
 		}
 		
 		@SuppressWarnings("unused")
-		private static class PlainPutCommandNode extends PlainCommandNode implements CallablePutCommandNode {
+		private static class PlainPutCommandNode extends PlainCommandNode implements CallablePutCommand {
 			private TagList tagList;
 			PlainPutCommandNode(InterpretedDOMTreeNode parent, Node node, String label, TagList tagList, String value) {
 				super(parent, node, TreeIcon.Command_PUT, label, tagList.toString(), "=", value);
@@ -1516,19 +1558,31 @@ public class CommandList {
 
 		private ParsedCommandItem item;
 		
-		public ParsedTreeNode(ParsedCommandItem item) {
-			super(null,null);
+		public ParsedTreeNode(ParsedCommandItem.DocumentItem item) {
+			this(null,item);
+		}
+		public ParsedTreeNode(ParsedTreeNode parent, ParsedCommandItem item) {
+			super(parent,item.node);
 			this.item = item;
 		}
 		
 		public TreeIcon getIcon() {
-			return item.icon;
+			if (item instanceof ParsedCommandItem.DocumentItem       ) return TreeIcon.Document;
+			if (item instanceof ParsedCommandItem.UnitDescriptionItem) return TreeIcon.UnitDescription;
+			if (item instanceof ParsedCommandItem.LanguageItem       ) return TreeIcon.Language;
+			if (item instanceof ParsedCommandItem.MenuItem           ) return TreeIcon.Menu;
+			if (item instanceof ParsedCommandItem.BaseCommandListItem) return TreeIcon.Command;
+			if (item instanceof CallableGetCommand                   ) return TreeIcon.Command_GET;
+			if (item instanceof CallablePutCommand                   ) return TreeIcon.Command_PUT;
+			if (item instanceof ParsedCommandItem.CommandItem        ) return TreeIcon.Command;
+			return null;
 		}
 		
 		@Override
 		protected void createChildren() {
 			children = new Vector<>();
-			// TODO Auto-generated method stub
+			for (ParsedCommandItem childItem:item.getChildren())
+				children.add(new ParsedTreeNode(this, childItem));
 		}
 
 		@Override
@@ -1537,28 +1591,346 @@ public class CommandList {
 		}
 	}
 	
-	private static class ParsedCommandItem {
+	private static abstract class ParsedCommandItem {
 		
-		public static ParsedCommandItem parse(Document document) {
-			// TODO Auto-generated method stub
-			return new DocumentItem(document);
+		final ParsedCommandItem parent;
+		final Node node;
+		
+		public ParsedCommandItem(ParsedCommandItem parent, Node node) {
+			this.parent = parent;
+			this.node = node;
 		}
+		public Iterable<ParsedCommandItem> getChildren() { return this::getChildIterator; }
+		public abstract Iterator<ParsedCommandItem> getChildIterator();
+		@Override public abstract String toString();
 
-		public TreeIcon icon;
-		public ParsedCommandItem(TreeIcon icon) {
-			this.icon = icon;
+		/*
+		private static InterpretedDOMTreeNode createTreeNode(InterpretedDOMTreeNode parent, Element node) {
+			switch (node.getTagName()) {
+			case "Unit_Description": return new UnitDescriptionNode (parent, node);
+			case "Language"        : return new LanguageNode        (parent, node);
+			case "Menu"            : return new MenuNode            (parent, node);
+			case "Cmd_List"        : return new BaseCommandListNode (parent, node);
+			case "Put_1"           : return new SimplePutCommandNode(parent, node);
+			case "Put_2"           : return PutCommandNode.create(parent, node);
+			case "Get"             : return GetCommandNode.create(parent, node);
+			}
+			unknownTagNames.put(node.getNodeName(), 1+unknownTagNames.getOrDefault(node.getNodeName(),0));
+			return new GenericXMLNode(parent,node);
+			//return new TextNode(parent, "Unknown Element \"%s\"", node.getNodeName());
+		}*/
+		
+		private interface AttributeConsumer {
+			public void consume(String attrName, String attrValue);
 		}
-
-		private static class DocumentItem extends ParsedCommandItem {
-
-			@SuppressWarnings("unused")
-			private Document document;
-			
-			public DocumentItem(Document document) {
-				super(TreeIcon.Document);
-				this.document = document;
+		protected void parseAttributes(AttributeConsumer attrConsumer) {
+			NamedNodeMap attributes = node.getAttributes();
+			for (int i=0; i<attributes.getLength(); ++i) {
+				Node attr = attributes.item(i);
+				attrConsumer.consume(attr.getNodeName(), attr.getNodeValue());
 			}
 		}
+
+		static class DocumentItem extends ParsedCommandItem {
+
+			@SuppressWarnings("unused")
+			private final Document document;
+			private final UnitDescriptionItem unitDescription;
+			
+			public DocumentItem(Document document) {
+				super(null,document);
+				this.document = document;
+				// <Unit_Description Unit_Name="RX-V475" Version="1.2">
+				Node udNode = XML.getSubNode(document, "Unit_Description");
+				if (udNode==null) unitDescription = null;
+				else unitDescription = new UnitDescriptionItem(this,udNode);
+			}
+
+			@Override public String toString() { return "Function Description of Yamaha Device"; }
+			
+			@Override public Iterator<ParsedCommandItem> getChildIterator() {
+				return new Iterator<ParsedCommandItem>() {
+					int index=0;
+					@Override public boolean hasNext() { return index==0; }
+					@Override public ParsedCommandItem next() { index++; return unitDescription; }
+				};
+			}
+		}
+		
+		private static class UnitDescriptionItem extends ParsedCommandItem {
+			
+			private String unitName;
+			private String version;
+			private LanguageItem language;
+			private Vector<MenuItem> menues;
+	
+			public UnitDescriptionItem(ParsedCommandItem parent, Node node) {
+				super(parent,node);
+				this.unitName = "???";
+				this.version = "???";
+				// <Unit_Description Unit_Name="RX-V475" Version="1.2">
+				parseAttributes((attrName, attrValue) -> {
+					switch (attrName) {
+					case "Unit_Name": unitName = attrValue; break;
+					case "Version"  : version  = attrValue; break;
+					}
+				});
+				// <Language Code="en">
+				// <Menu Func="Unit" Title_1="System" YNC_Tag="System">
+				Node langNode = XML.getSubNode(node, "Language");
+				if (langNode==null) language = null;
+				else language = new LanguageItem(this,langNode);
+				
+				menues = new Vector<>();
+				Vector<Node> menuNodes = XML.getSubNodes(node, "Menu");
+				for (Node mn:menuNodes) menues.add(new MenuItem(this, mn));
+			}
+			
+			@Override public String toString() { return String.format("Yamaha Device \"%s\" [Ver%s]", unitName, version); }
+			
+			@Override public Iterator<ParsedCommandItem> getChildIterator() {
+				return new Iterator<ParsedCommandItem>() {
+					int index=0;
+					@Override public boolean hasNext() { return index<1+menues.size(); }
+					@Override public ParsedCommandItem next() {
+						if (index==0) { index++; return language; }
+						return menues.get((index++)-1);
+					}
+				};
+			}
+		}
+		
+		private static class LanguageItem extends ParsedCommandItem {
+			
+			private String code;
+			private String value;
+	
+			public LanguageItem(ParsedCommandItem parent, Node node) {
+				super(parent,node);
+				this.code = "???";
+				// <Language Code="en">
+				parseAttributes((attrName, attrValue) -> {
+					if ("Code".equals(attrName)) code=attrValue;
+				});
+				value = XML.getSubValue(node);
+			}
+			@Override public String toString() { return String.format("Language: %s [%s]", code, value); }
+			
+			@Override public Iterator<ParsedCommandItem> getChildIterator() {
+				return new NoChildIterator();
+			}
+		}
+		
+		private static class MenuItem extends ParsedCommandItem {
+			
+			private BaseCommandListItem cmdList;
+			private Vector<MenuItem> menues;
+			private Vector<CommandItem> commands;
+			private Vector<ParsedCommandItem> subItems;
+			
+			private String func;
+			private String funcEx;
+			private String yncTag;
+			private String title;
+			private String listType;
+			private String iconOn;
+			private String playable;
+
+			public MenuItem(ParsedCommandItem parent, Node node) {
+				super(parent, node);
+				this.func     = null;
+				this.funcEx   = null;
+				this.yncTag   = null;
+				this.title    = null;
+				this.listType = null;
+				this.iconOn   = null;
+				this.playable = null;
+				// <Menu Func="Source_Device" Func_Ex="SD_iPod_USB" YNC_Tag="iPod_USB">
+				// <Menu List_Type="Icon" Title_1="Input/Scene">
+				// <Menu Func="Input" Func_Ex="Input" Icon_on="/YamahaRemoteControl/Icons/icon000.png" List_Type="Icon" Title_1="Input">
+				// <Menu Func_Ex="Adaptive_DRC" Title_1="Adaptive DRC">
+				parseAttributes((attrName, attrValue) -> {
+					switch (attrName) {
+					case "Func"     : func     = attrValue; break;
+					case "Func_Ex"  : funcEx   = attrValue; break;
+					case "YNC_Tag"  : yncTag   = attrValue; break;
+					case "Title_1"  : title    = attrValue; break;
+					case "List_Type": listType = attrValue; break;
+					case "Icon_on"  : iconOn   = attrValue; break;
+					case "Playable" : playable = attrValue; break;
+					}
+				});
+				
+				if (XML.hasChild(node, "Cmd_List")) {
+					Node cmdListNode = XML.getSubNode(node, "Cmd_List");
+					if (cmdListNode==null) cmdList = null;
+					else cmdList = new BaseCommandListItem(this,cmdListNode);
+				}
+				
+				menues = new Vector<>();
+				if (XML.hasChild(node, "Menu"))
+					for (Node mn:XML.getSubNodes(node, "Menu")) menues.add(new MenuItem(this, mn));
+				
+				commands = new Vector<>();
+				if (XML.hasChild(node, "Put_1")) for (Node child:XML.getSubNodes(node, "Put_1")) commands.add(new SimplePutCommandItem(this,child));
+				if (XML.hasChild(node, "Put_2")) for (Node child:XML.getSubNodes(node, "Put_2")) commands.add(new PutCommandItem(this,child));
+				if (XML.hasChild(node, "Get"  )) for (Node child:XML.getSubNodes(node, "Get"  )) commands.add(new GetCommandItem(this,child));
+				
+				subItems = new Vector<ParsedCommandItem>();
+				subItems.addAll(menues);
+				subItems.addAll(commands);
+				if (cmdList!=null) subItems.add(cmdList);
+			}
+			
+			
+			@Override public Iterator<ParsedCommandItem> getChildIterator() { return subItems.iterator(); }
+			
+			@SuppressWarnings("unused")
+			public static BaseCommandListItem.BaseCommandList getCmdListFromParent(ParsedCommandItem parent) {
+				if (parent instanceof MenuItem) {
+					MenuItem menu = (MenuItem)parent;
+					if (menu.cmdList!=null) return menu.cmdList.commands;
+					return getCmdListFromParent(menu.parent);
+				}
+				return null;
+			}
+		
+			private String getTags() {
+				String str = "";
+				if (func  !=null) str += (str.isEmpty()?"":" | ")+func  ;
+				if (funcEx!=null) str += (str.isEmpty()?"":" | ")+funcEx;
+				if (yncTag!=null) str += (str.isEmpty()?"":" | ")+yncTag;
+				return str;
+			}
+			@Override public String toString() {
+				String str = "";
+				if (title!=null) str = title+"   ";
+				str += "["+getTags()+"]   ";
+				if (listType!=null) str += " ListType:"+listType;
+				if (iconOn  !=null) str += " IconOn:"  +iconOn  ;
+				if (playable!=null) str += " Playable:"+playable;
+				return str;
+			}
+		}
+		
+		private static class BaseCommandListItem extends ParsedCommandItem {
+
+			public BaseCommandList commands;
+
+			public BaseCommandListItem(ParsedCommandItem parent, Node node) {
+				super(parent, node);
+				commands = new BaseCommandList();
+				for (Node subNode:XML.getSubNodes(node, "Define"))
+					commands.add(new BaseCommandDefinitionItem(this, subNode));
+			}
+			
+			@Override public String toString() { return "Command List"; }
+			@Override public Iterator<ParsedCommandItem> getChildIterator() { return commands.iterator(); }
+			
+			static class BaseCommandList {
+				
+				private HashMap<String,BaseCommandDefinitionItem> commands;
+				private BaseCommandList() { commands = new HashMap<>(); }
+				
+				private void add(BaseCommandDefinitionItem item) {
+					if (item.id==null || item.tagList==null) return;
+					commands.put(item.id, item);
+				}
+				
+				@SuppressWarnings("unused")
+				public TagList get(String cmdID) {
+					BaseCommandDefinitionItem item = commands.get(cmdID);
+					if (item!=null) return item.tagList;
+					return null;
+				}
+
+				private Iterator<ParsedCommandItem> iterator() {
+					return commands
+							.values()
+							.stream()
+							.map((BaseCommandDefinitionItem c)->(ParsedCommandItem)c)
+							.iterator();
+				}
+			}
+		}
+		
+		private static class BaseCommandDefinitionItem extends ParsedCommandItem implements CallableGetCommand {
+			
+			public String id;
+			public TagList tagList;
+
+			public BaseCommandDefinitionItem(ParsedCommandItem parent, Node node) {
+				super(parent, node);
+				this.id = null;
+				this.tagList = null;
+				
+				// <Define ID="P7">command</Define>
+				parseAttributes((attrName, attrValue) -> {
+					if ("ID".equals(attrName)) { id=attrValue; }
+				});
+				
+				String tagListStr = XML.getSubValue(node);
+				if (tagListStr != null)
+					tagList = new TagList(tagListStr);
+			}
+	
+			@Override public String toString() { return String.format("%s: %s", id, tagList); }
+			@Override public Iterator<ParsedCommandItem> getChildIterator() { return new NoChildIterator(); }
+
+			@Override public String buildXmlCommand() {
+				if (tagList==null) return null;
+				return Ctrl.buildGetCommand(tagList);
+			}
+		}
+		
+		private static abstract class CommandItem extends ParsedCommandItem {
+
+			public CommandItem(ParsedCommandItem parent, Node node) {
+				super(parent, node);
+				// TODO Auto-generated constructor stub
+			}
+
+			@Override
+			public Iterator<ParsedCommandItem> getChildIterator() {
+				// TODO Auto-generated method stub
+				return new NoChildIterator();
+			}
+
+			@Override
+			public String toString() {
+				// TODO Auto-generated method stub
+				return getClass().toString();
+			}
+		}
+		
+		private static class SimplePutCommandItem extends CommandItem {
+
+			public SimplePutCommandItem(ParsedCommandItem parent, Node node) {
+				super(parent, node);
+				// TODO Auto-generated constructor stub
+			}
+		}
+		
+		private static class PutCommandItem extends CommandItem {
+
+			public PutCommandItem(ParsedCommandItem parent, Node node) {
+				super(parent, node);
+				// TODO Auto-generated constructor stub
+			}
+		}
+		
+		private static class GetCommandItem extends CommandItem {
+
+			public GetCommandItem(ParsedCommandItem parent, Node node) {
+				super(parent, node);
+				// TODO Auto-generated constructor stub
+			}
+		}
+	}
+	
+	private static class NoChildIterator implements Iterator<ParsedCommandItem> {
+		@Override public boolean hasNext() { return false; }
+		@Override public ParsedCommandItem next() { throw new UnsupportedOperationException(); }
 	}
 
 	private static class TreeNodeRenderer extends DefaultTreeCellRenderer {
@@ -1567,12 +1939,20 @@ public class CommandList {
 		@Override
 		public Component getTreeCellRendererComponent(JTree tree, Object value, boolean sel, boolean expanded, boolean leaf, int row, boolean hasFocus) {
 			Component component = super.getTreeCellRendererComponent(tree, value, sel, expanded, leaf, row, hasFocus);
+			
+			TreeIcon treeIcon = null;
 			if (value instanceof InterpretedDOMTreeNode)
-				setIcon(treeIcons.getCachedIcon(((InterpretedDOMTreeNode)value).getIcon()));
+				treeIcon = ((InterpretedDOMTreeNode)value).getIcon();
+			
 			else if (value instanceof ParsedTreeNode)
-				setIcon(treeIcons.getCachedIcon(((ParsedTreeNode)value).getIcon()));
-			else
-				setIcon(null);
+				treeIcon = ((ParsedTreeNode)value).getIcon();
+			
+			//else if (value instanceof DOMTreeNode)
+			//	treeIcon = ((DOMTreeNode)value).isLeaf()?null:TreeIcon.XMLTag;
+			
+			if (treeIcon!=null)
+				setIcon(treeIcons.getCachedIcon(treeIcon));
+			
 			return component;
 		}
 		
