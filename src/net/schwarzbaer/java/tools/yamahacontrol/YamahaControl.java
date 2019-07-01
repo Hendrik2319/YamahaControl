@@ -135,11 +135,27 @@ public class YamahaControl {
 		System.out.println("YamahaControl");
 		System.out.println("created by Hendrik Scholtz");
 		System.out.println();
-		boolean createGUI = true;
+		
 		YamahaControl yamahaControl = new YamahaControl();
-		if (args.length>0) createGUI = yamahaControl.parseArgs(args); else yamahaControl.showCommands();
-		if (createGUI    ) yamahaControl.createGUI();
-		if (args.length>0 && createGUI) yamahaControl.initGUIafterConnect();
+		if (args.length <= 0) {
+			yamahaControl.showCommands();
+			return;
+		}
+		
+		GUI createGUI = yamahaControl.parseArgs(args);
+		switch (createGUI) {
+		case CommandList:
+			String address = null;
+			if (yamahaControl.device!=null)
+				address = yamahaControl.device.address;
+			CommandList.openWindow(address);
+			break;
+		case YamahaControl:
+			yamahaControl.createGUI();
+			if (yamahaControl.device!=null)
+				yamahaControl.initGUIafterConnect();
+			break;
+		}
 	}
 
 	public enum SmallImages { IconOn, IconOff, IconUnknown, FolderIcon }
@@ -186,15 +202,17 @@ public class YamahaControl {
 		frequentlyUpdater.stop();
 		updateChkBx.setSelected(false);
 	}
-
-	private boolean parseArgs(String[] args) {
-		boolean createGUI = false;
+	
+	private enum GUI { YamahaControl, CommandList }
+	private GUI parseArgs(String[] args) {
+		GUI createGUI = null;
 		
 		Vector<String> commands = new Vector<>();
 		for (int i=0; i<args.length; ++i) {
 			switch (args[i].toLowerCase()) {
 			case "-addr": if (i+1<args.length) { device = new Device(args[i+1]); ++i; } break;
-			case "-gui": createGUI = true; break;
+			case "-gui": createGUI = GUI.YamahaControl; break;
+			case "-commandlist": createGUI = GUI.CommandList; break;
 			default: commands.add(args[i]); break;
 			}
 		}
@@ -212,7 +230,10 @@ public class YamahaControl {
 	}
 
 	private void showCommands() {
-		System.out.println("Usage Example:");
+		System.out.println("Usage:");
+		System.out.println("   ... YamahaControl [PARAMETERS] [DEVICE COMMANDS]");
+		System.out.println();
+		System.out.println("Example:");
 		System.out.println("   ... YamahaControl -addr 192.168.1.42 -gui SwitchON");
 		System.out.println();
 		System.out.println("Parameters:");
@@ -220,6 +241,8 @@ public class YamahaControl {
 		System.out.println("       sets device address");
 		System.out.println("   -gui");
 		System.out.println("       starts GUI after processing commands");
+		System.out.println("   -commandlist");
+		System.out.println("       starts CommandList after processing commands");
 		System.out.println();
 		System.out.println("Device Commands:");
 		System.out.println("   SwitchOFF");

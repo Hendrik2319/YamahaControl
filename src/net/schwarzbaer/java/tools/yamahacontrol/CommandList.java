@@ -10,6 +10,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.StandardOpenOption;
+import java.util.Comparator;
 import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -587,10 +588,6 @@ public class CommandList {
 			for (int i=0; i<childNodes.getLength(); ++i)
 				children.add(createTreeNode(this, childNodes.item(i)));
 		}
-		
-		///////////////////////////////////////////////
-		// TreeNode methods
-		///////////////////////////////////////////////
 	
 		protected static void createGenericNodes(Node source, InterpretedDOMTreeNode target) {
 			NodeList childNodes = source.getChildNodes();
@@ -600,6 +597,42 @@ public class CommandList {
 			}
 		}
 		
+		protected static interface AttributeConsumer {
+			public boolean consume(String attrName, String attrValue);
+		}
+
+		protected void parseAttributes(Node node, AttributeConsumer attrConsumer) {
+			NamedNodeMap attributes = node.getAttributes();
+			for (int i=0; i<attributes.getLength(); ++i) {
+				Node attr = attributes.item(i);
+				boolean wasExpected = attrConsumer.consume(attr.getNodeName(), attr.getNodeValue());
+				if (!wasExpected)
+					reportError(node, "Found unexpected attribute: %s=\"%s\"", attr.getNodeName(), attr.getNodeValue());
+			}
+		}
+
+		protected String getContentOfSingleChildTextNode(Node node) {
+			NodeList childNodes = node.getChildNodes();
+			if (childNodes.getLength()!=1) {
+				reportError(node,"Found unexpected number of values inside of node. (found:%d, expected:1)", childNodes.getLength());
+				return null;
+			}
+			
+			Node child = childNodes.item(0);
+			if (child.getNodeType()!=Node.TEXT_NODE || !(child instanceof Text)) {
+				reportError(node,"Found value [%d] inside of node with unexpected node type. (found:%s, expected:%s)", 0, XML.getLongName(child.getNodeType()), XML.getLongName(Node.TEXT_NODE));
+				return null;
+			}
+			
+			String str = child.getNodeValue();
+			if (str==null) {
+				reportError(node,"Content of text node [%d] inside of node is null.", 0);
+				return null;
+			}
+			
+			return str;
+		}
+
 		private static class GenericXMLNode extends InterpretedDOMTreeNode {
 	
 			public GenericXMLNode(InterpretedDOMTreeNode parent, Node node) {
@@ -650,41 +683,6 @@ public class CommandList {
 			
 		}
 		
-		protected static interface AttributeConsumer {
-			public boolean consume(String attrName, String attrValue);
-		}
-		protected void parseAttributes(Node node, AttributeConsumer attrConsumer) {
-			NamedNodeMap attributes = node.getAttributes();
-			for (int i=0; i<attributes.getLength(); ++i) {
-				Node attr = attributes.item(i);
-				boolean wasExpected = attrConsumer.consume(attr.getNodeName(), attr.getNodeValue());
-				if (!wasExpected)
-					reportError(node, "Found unexpected attribute: %s=\"%s\"", attr.getNodeName(), attr.getNodeValue());
-			}
-		}
-		
-		protected String getContentOfSingleChildTextNode(Node node) {
-			NodeList childNodes = node.getChildNodes();
-			if (childNodes.getLength()!=1) {
-				reportError(node,"Found unexpected number of values inside of node. (found:%d, expected:1)", childNodes.getLength());
-				return null;
-			}
-			
-			Node child = childNodes.item(0);
-			if (child.getNodeType()!=Node.TEXT_NODE || !(child instanceof Text)) {
-				reportError("Found value [%d] inside of node with unexpected node type. (found:%s, expected:%s)", 0, XML.getLongName(child.getNodeType()), XML.getLongName(Node.TEXT_NODE));
-				return null;
-			}
-			
-			String str = child.getNodeValue();
-			if (str==null) {
-				reportError("Content of text node [%d] inside of node is null.", 0);
-				return null;
-			}
-			
-			return str;
-		}
-	
 		private static class UnitDescriptionNode extends ElementNode {
 			
 			private String unitName;
@@ -1621,29 +1619,77 @@ public class CommandList {
 		}*/
 		
 		private interface AttributeConsumer {
-			public void consume(String attrName, String attrValue);
+			public boolean consume(String attrName, String attrValue);
 		}
 		protected void parseAttributes(AttributeConsumer attrConsumer) {
 			NamedNodeMap attributes = node.getAttributes();
 			for (int i=0; i<attributes.getLength(); ++i) {
 				Node attr = attributes.item(i);
-				attrConsumer.consume(attr.getNodeName(), attr.getNodeValue());
+				boolean wasExpected = attrConsumer.consume(attr.getNodeName(), attr.getNodeValue());
+				if (!wasExpected)
+					reportError("Found unexpected attribute: %s=\"%s\"", attr.getNodeName(), attr.getNodeValue());
 			}
+		}
+
+		private interface SubNodeConsumer {
+			public boolean consume(Node subNode, short nodeType, String nodeName, String nodeValue);
+		}
+		protected void parseSubNodes(SubNodeConsumer subNodeConsumer) {
+			NodeList childNodes = node.getChildNodes();
+			for (int i=0; i<childNodes.getLength(); ++i) {
+				Node child = childNodes.item(i);
+				boolean wasExpected = subNodeConsumer.consume(child, child.getNodeType(), child.getNodeName(), child.getNodeValue());
+				if (!wasExpected)
+					reportError("Found unexpected xml node: [%s] %s", XML.getLongName(child.getNodeType()),  child.getNodeName());
+			}
+		}
+
+		protected String getContentOfSingleChildTextNode(Node node) {
+			NodeList childNodes = node.getChildNodes();
+			if (childNodes.getLength()!=1) {
+				reportError(node,"Found unexpected number of values inside of node. (found:%d, expected:1)", childNodes.getLength());
+				return null;
+			}
+			
+			Node child = childNodes.item(0);
+			if (child.getNodeType()!=Node.TEXT_NODE || !(child instanceof Text)) {
+				reportError(node,"Found value [%d] inside of node with unexpected node type. (found:%s, expected:%s)", 0, XML.getLongName(child.getNodeType()), XML.getLongName(Node.TEXT_NODE));
+				return null;
+			}
+			
+			String str = child.getNodeValue();
+			if (str==null) {
+				reportError(node,"Content of text node [%d] inside of node is null.", 0);
+				return null;
+			}
+			
+			return str;
+		}
+		
+		public void reportError(String format, Object... values) {
+			reportError(node, format, values);
+		}
+		public void reportError(Node node, String format, Object... values) {
+			CommandList.reportError(this.getClass().getSimpleName(), node, format, values);
 		}
 
 		static class DocumentItem extends ParsedCommandItem {
 
 			@SuppressWarnings("unused")
 			private final Document document;
-			private final UnitDescriptionItem unitDescription;
+			private UnitDescriptionItem unitDescription;
 			
 			public DocumentItem(Document document) {
 				super(null,document);
 				this.document = document;
+				
 				// <Unit_Description Unit_Name="RX-V475" Version="1.2">
-				Node udNode = XML.getSubNode(document, "Unit_Description");
-				if (udNode==null) unitDescription = null;
-				else unitDescription = new UnitDescriptionItem(this,udNode);
+				parseSubNodes((subNode, nodeType, nodeName, nodeValue) -> {
+					if (nodeType!=Node.ELEMENT_NODE) return false;
+					if (!"Unit_Description".equals(nodeName)) return false;
+					unitDescription = new UnitDescriptionItem(this,subNode);
+					return true;
+				});
 			}
 
 			@Override public String toString() { return "Function Description of Yamaha Device"; }
@@ -1666,6 +1712,7 @@ public class CommandList {
 	
 			public UnitDescriptionItem(ParsedCommandItem parent, Node node) {
 				super(parent,node);
+				
 				this.unitName = "???";
 				this.version = "???";
 				// <Unit_Description Unit_Name="RX-V475" Version="1.2">
@@ -1673,17 +1720,24 @@ public class CommandList {
 					switch (attrName) {
 					case "Unit_Name": unitName = attrValue; break;
 					case "Version"  : version  = attrValue; break;
+					default: return false;
 					}
+					return true;
 				});
+				
+				this.language = null;
+				this.menues = new Vector<>();
 				// <Language Code="en">
 				// <Menu Func="Unit" Title_1="System" YNC_Tag="System">
-				Node langNode = XML.getSubNode(node, "Language");
-				if (langNode==null) language = null;
-				else language = new LanguageItem(this,langNode);
-				
-				menues = new Vector<>();
-				Vector<Node> menuNodes = XML.getSubNodes(node, "Menu");
-				for (Node mn:menuNodes) menues.add(new MenuItem(this, mn));
+				parseSubNodes((subNode, nodeType, nodeName, nodeValue) -> {
+					if (nodeType!=Node.ELEMENT_NODE) return false;
+					switch (nodeName) {
+					case "Language": language = new LanguageItem(this,subNode); break;
+					case "Menu"    : menues.add(new MenuItem(this,subNode)); break;
+					default: return false;
+					}
+					return true;
+				});
 			}
 			
 			@Override public String toString() { return String.format("Yamaha Device \"%s\" [Ver%s]", unitName, version); }
@@ -1710,9 +1764,10 @@ public class CommandList {
 				this.code = "???";
 				// <Language Code="en">
 				parseAttributes((attrName, attrValue) -> {
-					if ("Code".equals(attrName)) code=attrValue;
+					if ("Code".equals(attrName)) { code=attrValue; return true; }
+					return false;
 				});
-				value = XML.getSubValue(node);
+				value = getContentOfSingleChildTextNode(node);
 			}
 			@Override public String toString() { return String.format("Language: %s [%s]", code, value); }
 			
@@ -1758,23 +1813,26 @@ public class CommandList {
 					case "List_Type": listType = attrValue; break;
 					case "Icon_on"  : iconOn   = attrValue; break;
 					case "Playable" : playable = attrValue; break;
+					default: return false;
 					}
+					return true;
 				});
 				
-				if (XML.hasChild(node, "Cmd_List")) {
-					Node cmdListNode = XML.getSubNode(node, "Cmd_List");
-					if (cmdListNode==null) cmdList = null;
-					else cmdList = new BaseCommandListItem(this,cmdListNode);
-				}
-				
+				cmdList = null;
 				menues = new Vector<>();
-				if (XML.hasChild(node, "Menu"))
-					for (Node mn:XML.getSubNodes(node, "Menu")) menues.add(new MenuItem(this, mn));
-				
 				commands = new Vector<>();
-				if (XML.hasChild(node, "Put_1")) for (Node child:XML.getSubNodes(node, "Put_1")) commands.add(new SimplePutCommandItem(this,child));
-				if (XML.hasChild(node, "Put_2")) for (Node child:XML.getSubNodes(node, "Put_2")) commands.add(new PutCommandItem(this,child));
-				if (XML.hasChild(node, "Get"  )) for (Node child:XML.getSubNodes(node, "Get"  )) commands.add(new GetCommandItem(this,child));
+				parseSubNodes((subNode, nodeType, nodeName, nodeValue) -> {
+					if (nodeType!=Node.ELEMENT_NODE) return false;
+					switch (nodeName) {
+					case "Cmd_List": cmdList = new BaseCommandListItem(this,subNode); break;
+					case "Menu"    : menues.add(new MenuItem(this,subNode)); break;
+					case "Put_1"   : commands.add(new SimplePutCommandItem(this,subNode)); break;
+					case "Put_2"   : commands.add(new PutCommandItem(this,subNode)); break;
+					case "Get"     : commands.add(new GetCommandItem(this,subNode)); break;
+					default: return false;
+					}
+					return true;
+				});
 				
 				subItems = new Vector<ParsedCommandItem>();
 				subItems.addAll(menues);
@@ -1820,8 +1878,12 @@ public class CommandList {
 			public BaseCommandListItem(ParsedCommandItem parent, Node node) {
 				super(parent, node);
 				commands = new BaseCommandList();
-				for (Node subNode:XML.getSubNodes(node, "Define"))
+				parseSubNodes((subNode, nodeType, nodeName, nodeValue) -> {
+					if (nodeType!=Node.ELEMENT_NODE) return false;
+					if (!"Define".equals(nodeName)) return false;
 					commands.add(new BaseCommandDefinitionItem(this, subNode));
+					return true;
+				});
 			}
 			
 			@Override public String toString() { return "Command List"; }
@@ -1848,6 +1910,7 @@ public class CommandList {
 					return commands
 							.values()
 							.stream()
+							.sorted(Comparator.comparing(c->c.id))
 							.map((BaseCommandDefinitionItem c)->(ParsedCommandItem)c)
 							.iterator();
 				}
@@ -1866,7 +1929,8 @@ public class CommandList {
 				
 				// <Define ID="P7">command</Define>
 				parseAttributes((attrName, attrValue) -> {
-					if ("ID".equals(attrName)) { id=attrValue; }
+					if ("ID".equals(attrName)) { id=attrValue; return true; }
+					return false;
 				});
 				
 				String tagListStr = XML.getSubValue(node);
