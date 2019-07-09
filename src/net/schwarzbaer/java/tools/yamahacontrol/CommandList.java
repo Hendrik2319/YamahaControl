@@ -123,12 +123,12 @@ public class CommandList {
 		}
 		private static boolean isCallablePutCommand(Object node) {
 			if (node instanceof ParsedTreeNode)
-				return ((ParsedTreeNode)node).item instanceof CallablePutCommand;
+				return ((ParsedTreeNode)node).isCallablePutCommand();
 			return node instanceof CallablePutCommand;
 		}
 		private static boolean isCallableGetCommand(Object node) {
 			if (node instanceof ParsedTreeNode)
-				return ((ParsedTreeNode)node).item instanceof CallableGetCommand;
+				return ((ParsedTreeNode)node).isCallableGetCommand();
 			return node instanceof CallableGetCommand;
 		}
 	}
@@ -253,11 +253,8 @@ public class CommandList {
 		if (clickedTreeNode instanceof CallableCommand)
 			command = (CallableCommand)clickedTreeNode;
 		
-		else if (clickedTreeNode instanceof ParsedTreeNode) {
-			ParsedCommandItem item = ((ParsedTreeNode) clickedTreeNode).item;
-			if (item instanceof CallableCommand)
-				command = (CallableCommand) item;
-		}
+		else if (clickedTreeNode instanceof ParsedTreeNode)
+			command = ((ParsedTreeNode) clickedTreeNode).getCallableCommand();
 		
 		if (command==null) return;
 		
@@ -1009,18 +1006,12 @@ public class CommandList {
 	
 		private static abstract class ComplexCommandNode extends ElementNode {
 			protected Cmd cmd;
-			protected Param param1;
-			protected Param param2;
-			protected Param param3;
 			protected boolean error;
 			protected String label;
 	
 			ComplexCommandNode(InterpretedDOMTreeNode parent, Element node, TreeIcon icon) {
 				super(parent, node, icon);
 				cmd = null;
-				param1 = null;
-				param2 = null;
-				param3 = null;
 				error = false;
 				label = "Command";
 			}
@@ -1030,11 +1021,18 @@ public class CommandList {
 				throw new UnsupportedOperationException("Calling "+getClass().getSimpleName()+".createChildren() is not allowed.");
 			}
 			
+			private static class ComplexCommand {
+				
+			}
+			
 			protected void parseChildNodes() {
 				error = false;
 				children = new Vector<>();
 				boolean cmdFound=false, param1Found=false, param2Found=false, param3Found=false;
 				NodeList childNodes = node.getChildNodes();
+				Param param1 = null;
+				Param param2 = null;
+				Param param3 = null;
 				for (int i=0; i<childNodes.getLength(); ++i) {
 					Node child = childNodes.item(i);
 					
@@ -1091,19 +1089,16 @@ public class CommandList {
 					default: reportError("To many values (%d) in Cmd node.", cmd.params.length); error=true; break;
 					}
 					// "Sound_Video,Tone,Bass,Val=Param_1:Sound_Video,Tone,Bass,Exp=Param_2:Sound_Video,Tone,Bass,Unit=Param_3"
-					for (int i=0; i<cmd.params.length; ++i)
-						cmd.params[i].param = getParam(cmd.params[i].paramID);
+					for (int i=0; i<cmd.params.length; ++i) {
+						CmdParam cmdParam = cmd.params[i];
+						switch (cmdParam.paramID) {
+						case "Param_1": cmdParam.param = param1; break;
+						case "Param_2": cmdParam.param = param2; break;
+						case "Param_3": cmdParam.param = param3; break;
+						default: reportError("Found unexpected param name (\"%s\") in \"Cmd\" node.", cmdParam.paramID); error=true; break;
+						}
+					}
 				}
-			}
-	
-			private Param getParam(String paramID) {
-				switch (paramID) {
-				case "Param_1": return param1;
-				case "Param_2": return param2;
-				case "Param_3": return param3;
-				default: reportError("Found unexpected param name (\"%s\") in \"Cmd\" node.", paramID); error=true; break;
-				}
-				return null;
 			}
 			
 			private Cmd parseCmdNode(Element cmdNode) {
@@ -1465,6 +1460,7 @@ public class CommandList {
 	
 			public GetCommandNode(InterpretedDOMTreeNode parent, Element node) {
 				super(parent, node, TreeIcon.Command);
+				nodeReplacement = null;
 				label = "Get"; // <Get>
 				parseAttributes((attrName, attrValue) -> { error=true; return false; });
 				parseChildNodes();
@@ -1562,6 +1558,20 @@ public class CommandList {
 		public ParsedTreeNode(ParsedTreeNode parent, ParsedCommandItem item) {
 			super(parent,item.node);
 			this.item = item;
+		}
+		
+		public boolean isCallablePutCommand() {
+			return (item instanceof CallablePutCommand);
+		}
+		
+		public boolean isCallableGetCommand() {
+			return (item instanceof CallableGetCommand);
+		}
+		
+		public CallableCommand getCallableCommand() {
+			if (item instanceof CallableCommand)
+				return (CallableCommand) item;
+			return null;
 		}
 		
 		public TreeIcon getIcon() {
@@ -1819,12 +1829,15 @@ public class CommandList {
 				});
 				
 				cmdList = null;
+				if (XML.hasChild(this.node, "Cmd_List"))
+					cmdList = new BaseCommandListItem(this,XML.getSubNode(this.node, "Cmd_List"));
+				
 				menues = new Vector<>();
 				commands = new Vector<>();
 				parseSubNodes((subNode, nodeType, nodeName, nodeValue) -> {
 					if (nodeType!=Node.ELEMENT_NODE) return false;
 					switch (nodeName) {
-					case "Cmd_List": cmdList = new BaseCommandListItem(this,subNode); break;
+					case "Cmd_List": break;
 					case "Menu"    : menues.add(new MenuItem(this,subNode)); break;
 					case "Put_1"   : commands.add(new SimplePutCommandItem(this,subNode)); break;
 					case "Put_2"   : commands.add(new PutCommandItem(this,subNode)); break;
@@ -1843,12 +1856,11 @@ public class CommandList {
 			
 			@Override public Iterator<ParsedCommandItem> getChildIterator() { return subItems.iterator(); }
 			
-			@SuppressWarnings("unused")
 			public static BaseCommandListItem.BaseCommandList getCmdListFromParent(ParsedCommandItem parent) {
-				if (parent instanceof MenuItem) {
+				while (parent instanceof MenuItem) {
 					MenuItem menu = (MenuItem)parent;
 					if (menu.cmdList!=null) return menu.cmdList.commands;
-					return getCmdListFromParent(menu.parent);
+					parent = menu.parent;
 				}
 				return null;
 			}
@@ -1899,7 +1911,6 @@ public class CommandList {
 					commands.put(item.id, item);
 				}
 				
-				@SuppressWarnings("unused")
 				public TagList get(String cmdID) {
 					BaseCommandDefinitionItem item = commands.get(cmdID);
 					if (item!=null) return item.tagList;
@@ -1967,11 +1978,80 @@ public class CommandList {
 			}
 		}
 		
-		private static class SimplePutCommandItem extends CommandItem {
+		private static class SimplePutCommandItem extends CommandItem implements CallablePutCommand {
+			
+			private String cmdID;
+			private TagList tagList;
+			private String commandValue;
+			private String func;
+			private String funcEx;
+			private String title;
+			private String playable;
+			private String layout;
+			private String visible;
 
 			public SimplePutCommandItem(ParsedCommandItem parent, Node node) {
 				super(parent, node);
-				// TODO Auto-generated constructor stub
+				this.cmdID  = null;
+				this.tagList = null;
+				this.commandValue = null;
+				this.func   = null;
+				this.funcEx = null;
+				this.title    = null;
+				this.layout   = null;
+				this.visible  = null;
+				this.playable = null;
+				
+				// <Put_1 Func="Event_On" ID="P1">
+				parseAttributes((attrName, attrValue) -> {
+					switch (attrName) { // Func_Ex
+					case "ID"       : cmdID = attrValue; break;
+					case "Func"     : func  = attrValue; break;
+					case "Func_Ex"  : funcEx   = attrValue; break;
+					case "Title_1"  : title    = attrValue; break;
+					case "Layout"   : layout   = attrValue; break;
+					case "Visible"  : visible  = attrValue; break;
+					case "Playable" : playable = attrValue; break;
+					default: return false;
+					}
+					return true;
+				});
+				
+				BaseCommandListItem.BaseCommandList cmdList = MenuItem.getCmdListFromParent(parent);
+				if (cmdList==null) reportError("Can't find command list for \"Put_1\" node.");
+				if (cmdID == null) reportError("Found \"Put_1\" node with no ID.");
+				
+				if (cmdList!=null && cmdID!=null) {
+					tagList = cmdList.get(cmdID);
+					if (tagList==null) reportError("Found \"Put_1\" node with ID \"%s\", that isn't associated with a command.", cmdID);
+				}
+				
+				commandValue = getContentOfSingleChildTextNode(this.node);
+			}
+	
+			@Override
+			public String buildXmlCommand() {
+				if (tagList==null || commandValue==null) return null;
+				return Ctrl.buildPutCommand(tagList, commandValue);
+			}
+			
+			private String getTags() {
+				String str = "";
+				if (func  !=null) str += (str.isEmpty()?"":" | ")+func  ;
+				if (funcEx!=null) str += (str.isEmpty()?"":" | ")+funcEx;
+				return str;
+			}
+			@Override public String toString() {
+				String str = "";
+				if (title!=null) str = title+"   ";
+				str += "["+getTags()+"]   ";
+				if (layout  !=null) str += " Layout:"  +layout;
+				if (visible !=null) str += " Visible:" +visible;
+				if (playable!=null) str += " Playable:"+playable;
+	
+				return String.format("%s     PUT[%s]     %s = %s", str, cmdID==null?"??":cmdID, tagList==null?"????":tagList, commandValue==null?"???":commandValue);
+				//return str;
+				//return XML.toString(node);
 			}
 		}
 		
