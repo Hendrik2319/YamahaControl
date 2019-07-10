@@ -759,11 +759,11 @@ public class CommandList {
 				});
 			}
 			
-			public static BaseCommandList getCmdListFromParent(BaseTreeNode<?> parent) {
-				if (parent instanceof MenuNode) {
-					MenuNode menu = (MenuNode)parent;
+			public static BaseCommandList getCmdList(BaseTreeNode<?> node) {
+				while (node instanceof MenuNode) {
+					MenuNode menu = (MenuNode)node;
 					if (menu.cmdListNode!=null) return menu.cmdListNode.commands;
-					return getCmdListFromParent(menu.parent);
+					node = menu.parent;
 				}
 				return null;
 			}
@@ -955,7 +955,7 @@ public class CommandList {
 				
 				children = new Vector<>();
 				
-				BaseCommandList cmdList = MenuNode.getCmdListFromParent(parent);
+				BaseCommandList cmdList = MenuNode.getCmdList(parent);
 				if (cmdList==null) reportError("Can't find command list for \"Put_1\" node.");
 				if (cmdID == null) reportError("Found \"Put_1\" node with no ID.");
 				
@@ -1426,70 +1426,70 @@ public class CommandList {
 		
 		private static class ComplexCommandNode extends ElementNode implements ComplexCommand.ComplexCommandContext {
 			protected String label;
-			protected ComplexCommand complexCommand;
-			protected PlainCommandNode parsedCommandNode;
 
 			enum Type { Get,Put }
 			
 			ComplexCommandNode(InterpretedDOMTreeNode parent, Element node, Type type) {
 				super(parent, node, TreeIcon.Command);
 				this.label = type.toString();
-				complexCommand = null;
-				parsedCommandNode = null;
-				
 				children = new Vector<>();
-				complexCommand = new ComplexCommand(node,this);
-				
-				if      (complexCommand.cmd==null) { label += ": No Cmd found"; complexCommand.error=true; }
-				else if (complexCommand.cmd.baseTagList==null) { label += ": No base "+type.toString().toUpperCase()+" command found"; complexCommand.error=true; }
-				else if (complexCommand.cmd.params==null || complexCommand.cmd.params.length==0) { label += ": No parameters found"; complexCommand.error=true; }
-				else switch (type) {
-					case Get: parsedCommandNode = createGetCommand(complexCommand); break;
-					case Put: parsedCommandNode = createPutCommand(complexCommand); break;
-					}
-				
-				if (complexCommand.error)
-					createGenericNodes(node, parsedCommandNode != null ? parsedCommandNode : this);
 			}
 			
 			public static InterpretedDOMTreeNode createPutCommand(InterpretedDOMTreeNode parent, Element node) { return create(parent, node, Type.Put); }
 			public static InterpretedDOMTreeNode createGetCommand(InterpretedDOMTreeNode parent, Element node) { return create(parent, node, Type.Get); }
 
 			private static InterpretedDOMTreeNode create(InterpretedDOMTreeNode parent, Element node, Type type) {
-				ComplexCommandNode newNode = new ComplexCommandNode(parent, node, type);
-				if (newNode.parsedCommandNode!=null) return newNode.parsedCommandNode;
-				return newNode;
+				
+				ComplexCommandNode ccNode = new ComplexCommandNode(parent, node, type);
+				PlainCommandNode parsedCommandNode = null;
+				
+				ComplexCommand complexCommand = new ComplexCommand(node,ccNode);
+				
+				if      (complexCommand.cmd==null) { ccNode.label += ": No Cmd found"; complexCommand.error=true; }
+				else if (complexCommand.cmd.baseTagList==null) { ccNode.label += ": No base "+type.toString().toUpperCase()+" command found"; complexCommand.error=true; }
+				else if (complexCommand.cmd.params==null || complexCommand.cmd.params.length==0) { ccNode.label += ": No parameters found"; complexCommand.error=true; }
+				else switch (type) {
+					case Get: parsedCommandNode = createGetCommand(parent, node, complexCommand); break;
+					case Put: parsedCommandNode = createPutCommand(parent, node, complexCommand); break;
+					}
+				
+				InterpretedDOMTreeNode result = parsedCommandNode != null ? parsedCommandNode : ccNode;
+				
+				if (complexCommand.error)
+					createGenericNodes(node, result);
+				
+				return result;
 			}
 
-			private PlainCommandNode createPutCommand(ComplexCommand complexCommand) {
-				PlainCommandNode parsedCommandNode_;
+			private static PlainCommandNode createPutCommand(InterpretedDOMTreeNode parent, Node node, ComplexCommand complexCommand) {
+				PlainCommandNode parsedCommandNode;
 				if (complexCommand.cmd.params.length==1) {
 					ComplexCommand.CmdParam cp = complexCommand.cmd.params[0];
-					String tagListStr = cp.valueTagList==null?"":(",  "+cp.valueTagList.toString());
-					parsedCommandNode_ = new PlainCommandNode(this, node, "PUT["+complexCommand.cmd.cmdID+"]", complexCommand.cmd.baseTagList.toString()+tagListStr, "=", cp.param.mergeValues(""," | ",""));
+					String tagListAddStr = cp.valueTagList==null?"":(",  "+cp.valueTagList.toString());
+					parsedCommandNode = new PlainCommandNode(parent, node, "PUT["+complexCommand.cmd.cmdID+"]", complexCommand.cmd.baseTagList, tagListAddStr, "=", cp.param.mergeValues(""," | ",""));
 				} else {
-					parsedCommandNode_ = new PlainCommandNode(this, node, "PUT["+complexCommand.cmd.cmdID+"]", complexCommand.cmd.baseTagList.toString());
+					parsedCommandNode = new PlainCommandNode(parent, node, "PUT["+complexCommand.cmd.cmdID+"]", complexCommand.cmd.baseTagList);
 					for (int i=0; i<complexCommand.cmd.params.length; ++i) {
 						ComplexCommand.CmdParam cp = complexCommand.cmd.params[i];
 						String tagListStr = cp.valueTagList==null?"":(cp.valueTagList.toString()+" = ");
-						parsedCommandNode_.add(new TextNode(this,null, /*icon,*/ "Value %d:   %s%s", i, tagListStr, cp.param.mergeValues(""," | ","")));
+						parsedCommandNode.add(new TextNode(parsedCommandNode,null, /*icon,*/ "Value %d:   %s%s", i, tagListStr, cp.param.mergeValues(""," | ","")));
 					}
 				}
-				return parsedCommandNode_;
+				return parsedCommandNode;
 			}
 
-			private PlainCommandNode createGetCommand(ComplexCommand complexCommand) {
+			private static PlainCommandNode createGetCommand(InterpretedDOMTreeNode parent, Node node, ComplexCommand complexCommand) {
 				PlainCommandNode parsedCommandNode;
 				if (complexCommand.cmd.params.length==1) {
 					ComplexCommand.CmdParam cp = complexCommand.cmd.params[0];
 					String tagListStr = cp.valueTagList==null?"":(cp.valueTagList.toString()+" -> ");
-					parsedCommandNode = new PlainGetCommandNode(this, node, "GET["+complexCommand.cmd.cmdID+"]", complexCommand.cmd.baseTagList, tagListStr+cp.param.mergeValues(""," | ",""));
+					parsedCommandNode = new PlainGetCommandNode(parent, node, "GET["+complexCommand.cmd.cmdID+"]", complexCommand.cmd.baseTagList, tagListStr+cp.param.mergeValues(""," | ",""));
 				} else {
-					parsedCommandNode = new PlainGetCommandNode(this, node, "GET["+complexCommand.cmd.cmdID+"]", complexCommand.cmd.baseTagList);
+					parsedCommandNode = new PlainGetCommandNode(parent, node, "GET["+complexCommand.cmd.cmdID+"]", complexCommand.cmd.baseTagList);
 					for (int i=0; i<complexCommand.cmd.params.length; ++i) {
 						ComplexCommand.CmdParam cp = complexCommand.cmd.params[i];
 						String tagListStr = cp.valueTagList==null?"":(cp.valueTagList.toString()+" -> ");
-						parsedCommandNode.add(new TextNode(this,null, /*icon,*/ "Value %d:   %s%s", i, tagListStr, cp.param.mergeValues(""," | ","")));
+						parsedCommandNode.add(new TextNode(parsedCommandNode,null, /*icon,*/ "Value %d:   %s%s", i, tagListStr, cp.param.mergeValues(""," | ","")));
 					}
 				}
 				return parsedCommandNode;
@@ -1513,54 +1513,53 @@ public class CommandList {
 
 			@Override
 			public ComplexCommand.BaseCommandList getCmdListFromParent() {
-				return MenuNode.getCmdListFromParent(parent);
+				return MenuNode.getCmdList(parent);
 			}
 		}
 		
 		private static class PlainCommandNode extends InterpretedDOMTreeNode {
-			private boolean withValue;
+			
 			protected String label;
-			protected String tagList;
-			protected String value;
+			protected TagList tagList;
+			protected String tagListStr;
+			private boolean withValue;
 			private String conn;
-			private PlainCommandNode(InterpretedDOMTreeNode parent, Node node, TreeIcon icon, String label, String tagList, String conn, String value, boolean withValue) {
+			protected String value;
+			
+			private PlainCommandNode(InterpretedDOMTreeNode parent, Node node, TreeIcon icon, String label, TagList tagList, boolean withValue, String conn, String value) {
 				super(parent, node, icon);
 				this.label = label;
 				this.tagList = tagList;
+				this.tagListStr = tagList.toString();
 				this.conn = conn;
 				this.value = value;
 				this.withValue = withValue;
 				children = new Vector<>();
 			}
-			protected PlainCommandNode(InterpretedDOMTreeNode parent, Node node, TreeIcon icon, String label, String tagList                           ) { this(parent, node, icon, label, tagList, null, null , false); }
-			protected PlainCommandNode(InterpretedDOMTreeNode parent, Node node, TreeIcon icon, String label, String tagList, String conn, String value) { this(parent, node, icon, label, tagList, conn, value, true ); }
-			public    PlainCommandNode(InterpretedDOMTreeNode parent, Node node,                String label, String tagList                           ) { this(parent, node, TreeIcon.Command, label, tagList); }
-			public    PlainCommandNode(InterpretedDOMTreeNode parent, Node node,                String label, String tagList, String conn, String value) { this(parent, node, TreeIcon.Command, label, tagList, conn, value); }
+			protected PlainCommandNode(InterpretedDOMTreeNode parent, Node node, TreeIcon icon, String label, TagList tagList                                                 ) { this(parent, node, icon, label, tagList, false, null , null); }
+			protected PlainCommandNode(InterpretedDOMTreeNode parent, Node node, TreeIcon icon, String label, TagList tagList,                       String conn, String value) { this(parent, node, icon, label, tagList, true, conn, value ); }
+			public    PlainCommandNode(InterpretedDOMTreeNode parent, Node node,                String label, TagList tagList                                                 ) { this(parent, node, TreeIcon.Command, label, tagList); }
+			public    PlainCommandNode(InterpretedDOMTreeNode parent, Node node,                String label, TagList tagList, String tagListAddStr, String conn, String value) { this(parent, node, TreeIcon.Command, label, tagList, conn, value); tagListStr+=tagListAddStr; }
 			
 			public void add(InterpretedDOMTreeNode child) { children.add(child); }
-			@Override public String toString() { return label+":    "+tagList+(withValue?("   "+conn+"   "+value):""); }
+			@Override public String toString() { return label+":    "+tagListStr+(withValue?("   "+conn+"   "+value):""); }
 			@Override protected void createChildren() { throw new UnsupportedOperationException("Calling "+getClass().getSimpleName()+".createChildren() is not allowed."); }
 		}
 		
 		private static class PlainGetCommandNode extends PlainCommandNode implements CallableGetCommand {
-			private TagList tagList;
 			PlainGetCommandNode(InterpretedDOMTreeNode parent, Node node, String label, TagList tagList) {
-				super(parent, node, TreeIcon.Command_GET, label, tagList.toString());
-				this.tagList = tagList;
+				super(parent, node, TreeIcon.Command_GET, label, tagList);
 			}
 			PlainGetCommandNode(InterpretedDOMTreeNode parent, Node node, String label, TagList tagList, String value) {
-				super(parent, node, TreeIcon.Command_GET, label, tagList.toString(), "->", value);
-				this.tagList = tagList;
+				super(parent, node, TreeIcon.Command_GET, label, tagList, "->", value);
 			}
 			@Override public String buildXmlCommand() { return Ctrl.buildGetCommand(tagList); }
 		}
 		
 		@SuppressWarnings("unused")
 		private static class PlainPutCommandNode extends PlainCommandNode implements CallablePutCommand {
-			private TagList tagList;
 			PlainPutCommandNode(InterpretedDOMTreeNode parent, Node node, String label, TagList tagList, String value) {
-				super(parent, node, TreeIcon.Command_PUT, label, tagList.toString(), "=", value);
-				this.tagList = tagList;
+				super(parent, node, TreeIcon.Command_PUT, label, tagList, "=", value);
 			}
 			@Override public String buildXmlCommand() { return Ctrl.buildPutCommand(tagList, value); }
 		}
