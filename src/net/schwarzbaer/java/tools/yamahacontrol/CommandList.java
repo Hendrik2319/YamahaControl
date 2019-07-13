@@ -438,6 +438,45 @@ public class CommandList {
 		}
 	}
 	
+	private static class LanguageConfig {
+		
+		private HashMap<String,String> fieldNames;
+		private HashMap<String,String> langCodes;
+		
+		public LanguageConfig() {
+			fieldNames = new HashMap<>();
+			langCodes = new HashMap<>();
+		}
+		public void setValues(Vector<ParsedCommandItem.LanguageItem> languages) {
+			for (ParsedCommandItem.LanguageItem item:languages)
+				setValue(item.code, item.fieldName);
+		}
+		public void setDefaultValues() {
+			setValue("en", "Title_1");
+		}
+		
+		private void setValue(String langCode, String fieldName) {
+			fieldNames.put(langCode, fieldName);
+			langCodes.put(fieldName, langCode);
+		}
+		@SuppressWarnings("unused")
+		String getFieldName(String langCode) { return fieldNames.get(langCode); }
+		String getLangCode(String fieldName) { return langCodes.get(fieldName); }
+	}
+	
+	private static class LanguageString {
+		String value;
+		String langCode;
+		private LanguageString(String value, String langCode) {
+			this.value = value;
+			this.langCode = langCode;
+		}
+		@Override
+		public String toString() {
+			return langCode + ":\"" + value + "\"";
+		}
+		
+	}
 	protected static interface AttributeConsumer {
 		public boolean consume(String attrName, String attrValue);
 	}
@@ -453,6 +492,7 @@ public class CommandList {
 			void parseAttributes(Node node, AttributeConsumer attrConsumer);
 			String getContentOfSingleChildTextNode(Node node);
 			BaseCommandList getCmdListFromParent();
+			LanguageConfig getLanguageConfig();
 		}
 		interface BaseCommandList {
 			TagList get(String cmdID);
@@ -464,7 +504,7 @@ public class CommandList {
 			this.context = context;
 			cmd = null;
 			error = false;
-			context.parseAttributes(node,(attrName, attrValue) -> { error=true; return false; });
+			this.context.parseAttributes(node,(attrName, attrValue) -> { error=true; return false; });
 			parseChildNodes();
 		}
 		
@@ -704,15 +744,22 @@ public class CommandList {
 		private DirectValue parseDirectValue(Element childElement) {
 			DirectValue value = new DirectValue();
 			context.parseAttributes(childElement, (attrName, attrValue) -> {
+				boolean expected = true;
 				switch (attrName) { // Func_Ex
 				case "Func"    : value.func     = attrValue; break;
 				case "Func_Ex" : value.funcEx   = attrValue; break;
-				case "Title_1" : value.title    = attrValue; break;
 				case "Playable": value.playable = attrValue; break;
 				case "Icon_on" : value.iconOn   = attrValue; break;
-				default: error=true; return false;
+				default: expected = false; break;
 				}
-				return true;
+				String langCode = context.getLanguageConfig().getLangCode(attrName);
+				if (langCode!=null) {
+					value.titles.add(new LanguageString(attrValue, langCode));
+					expected = true;
+				}
+				
+				error = !expected; 
+				return expected;
 			});
 			
 			if (!childElement.hasChildNodes())
@@ -841,16 +888,16 @@ public class CommandList {
 			
 			@SuppressWarnings("unused") public String func;
 			@SuppressWarnings("unused") public String funcEx;
-			@SuppressWarnings("unused") public String title;
 			@SuppressWarnings("unused") public String playable;
 			@SuppressWarnings("unused") public String iconOn;
+			public Vector<LanguageString> titles;
 			
 			DirectValue() {
 				this.func     = null;
 				this.funcEx   = null;
-				this.title    = null;
 				this.playable = null;
 				this.iconOn   = null;
+				this.titles   = new Vector<>();
 				
 				this.value   = null;
 				this.isDummy = false;
@@ -1435,11 +1482,14 @@ public class CommandList {
 	
 		private static class ComplexCommandNode extends ElementNode implements ComplexCommand.ComplexCommandContext {
 			protected String label;
+			private LanguageConfig dummyLanguageConfig;
 			
 			ComplexCommandNode(InterpretedDOMTreeNode parent, Element node) {
 				super(parent, node, TreeIcon.Command);
 				this.label = "";
 				children = new Vector<>();
+				dummyLanguageConfig = new LanguageConfig();
+				dummyLanguageConfig.setDefaultValues();
 			}
 			
 			public static InterpretedDOMTreeNode createPutCommand(InterpretedDOMTreeNode parent, Element node) { return create(parent, node, ComplexCommand.Type.Put); }
@@ -1520,6 +1570,11 @@ public class CommandList {
 			@Override
 			public ComplexCommand.BaseCommandList getCmdListFromParent() {
 				return MenuNode.getCmdList(parent);
+			}
+
+			@Override
+			public LanguageConfig getLanguageConfig() {
+				return dummyLanguageConfig;
 			}
 		}
 		
@@ -1756,7 +1811,7 @@ public class CommandList {
 		}
 	}
 	
-	private static abstract class ParsedCommandItem {
+	static abstract class ParsedCommandItem {
 		
 		final ParsedCommandItem parent;
 		final Node node;
@@ -1842,9 +1897,8 @@ public class CommandList {
 
 		static class DocumentItem extends ParsedCommandItem {
 
-			@SuppressWarnings("unused")
-			private final Document document;
-			private UnitDescriptionItem unitDescription;
+			final Document document;
+			UnitDescriptionItem unitDescription;
 			
 			public DocumentItem(Document document) {
 				super(null,document);
@@ -1870,12 +1924,13 @@ public class CommandList {
 			}
 		}
 		
-		private static class UnitDescriptionItem extends ParsedCommandItem {
+		static class UnitDescriptionItem extends ParsedCommandItem {
 			
-			private String unitName;
-			private String version;
-			private LanguageItem language;
-			private Vector<MenuItem> menues;
+			String unitName;
+			String version;
+			Vector<LanguageItem> languages;
+			Vector<MenuItem> menues;
+			LanguageConfig languageConfig;
 	
 			public UnitDescriptionItem(ParsedCommandItem parent, Node node) {
 				super(parent,node);
@@ -1892,39 +1947,45 @@ public class CommandList {
 					return true;
 				});
 				
-				this.language = null;
+				this.languages = new Vector<>();
+				Vector<Node> languageNodes = XML.getSubNodes(node, "Language");
+				for (Node subNode:languageNodes)
+					languages.add(new LanguageItem(this,subNode));
+				languageConfig = new LanguageConfig();
+				languageConfig.setValues(languages);
+				
 				this.menues = new Vector<>();
 				// <Language Code="en">
 				// <Menu Func="Unit" Title_1="System" YNC_Tag="System">
 				parseSubNodes((subNode, nodeType, nodeName, nodeValue) -> {
 					if (nodeType!=Node.ELEMENT_NODE) return false;
 					switch (nodeName) {
-					case "Language": language = new LanguageItem(this,subNode); break;
-					case "Menu"    : menues.add(new MenuItem(this,subNode)); break;
+					case "Language": break;
+					case "Menu"    : menues.add(new MenuItem(this,subNode,languageConfig)); break;
 					default: return false;
 					}
 					return true;
 				});
 			}
-			
+
 			@Override public String toString() { return String.format("Yamaha Device \"%s\" [Ver%s]", unitName, version); }
 			
 			@Override public Iterator<ParsedCommandItem> getChildIterator() {
 				return new Iterator<ParsedCommandItem>() {
 					int index=0;
-					@Override public boolean hasNext() { return index<1+menues.size(); }
+					@Override public boolean hasNext() { return index<languages.size()+menues.size(); }
 					@Override public ParsedCommandItem next() {
-						if (index==0) { index++; return language; }
-						return menues.get((index++)-1);
+						if (index<languages.size()) return languages.get(index++);
+						return menues.get((index++)-languages.size());
 					}
 				};
 			}
 		}
 		
-		private static class LanguageItem extends ParsedCommandItem {
+		static class LanguageItem extends ParsedCommandItem {
 			
-			private String code;
-			private String value;
+			String code;
+			String fieldName;
 	
 			public LanguageItem(ParsedCommandItem parent, Node node) {
 				super(parent,node);
@@ -1934,55 +1995,61 @@ public class CommandList {
 					if ("Code".equals(attrName)) { code=attrValue; return true; }
 					return false;
 				});
-				value = getContentOfSingleChildTextNode(node);
+				fieldName = getContentOfSingleChildTextNode(node);
 			}
-			@Override public String toString() { return String.format("Language: %s [%s]", code, value); }
+			@Override public String toString() { return String.format("Language: %s -> Field \"%s\"", code, fieldName); }
 			
 			@Override public Iterator<ParsedCommandItem> getChildIterator() {
 				return new NoChildIterator();
 			}
 		}
 		
-		private static class MenuItem extends ParsedCommandItem {
+		static class MenuItem extends ParsedCommandItem {
 			
 			private BaseCommandListItem cmdList;
-			private Vector<MenuItem> menues;
-			private Vector<CommandItem> commands;
+			Vector<MenuItem> menues;
+			Vector<CommandItem> commands;
 			private Vector<ParsedCommandItem> subItems;
 			
-			private String func;
-			private String funcEx;
-			private String yncTag;
-			private String title;
-			private String listType;
-			private String iconOn;
-			private String playable;
+			String func;
+			String funcEx;
+			String yncTag;
+			String listType;
+			String iconOn;
+			String playable;
+			Vector<LanguageString> titles;
 
-			public MenuItem(ParsedCommandItem parent, Node node) {
+			public MenuItem(ParsedCommandItem parent, Node node, LanguageConfig languageConfig) {
 				super(parent, node);
 				this.func     = null;
 				this.funcEx   = null;
 				this.yncTag   = null;
-				this.title    = null;
 				this.listType = null;
 				this.iconOn   = null;
 				this.playable = null;
+				this.titles   = new Vector<>();
+				
 				// <Menu Func="Source_Device" Func_Ex="SD_iPod_USB" YNC_Tag="iPod_USB">
 				// <Menu List_Type="Icon" Title_1="Input/Scene">
 				// <Menu Func="Input" Func_Ex="Input" Icon_on="/YamahaRemoteControl/Icons/icon000.png" List_Type="Icon" Title_1="Input">
 				// <Menu Func_Ex="Adaptive_DRC" Title_1="Adaptive DRC">
 				parseAttributes((attrName, attrValue) -> {
+					boolean expected = true;
 					switch (attrName) {
 					case "Func"     : func     = attrValue; break;
 					case "Func_Ex"  : funcEx   = attrValue; break;
 					case "YNC_Tag"  : yncTag   = attrValue; break;
-					case "Title_1"  : title    = attrValue; break;
 					case "List_Type": listType = attrValue; break;
 					case "Icon_on"  : iconOn   = attrValue; break;
 					case "Playable" : playable = attrValue; break;
-					default: return false;
+					default: expected = false; break;
 					}
-					return true;
+					String langCode = languageConfig.getLangCode(attrName);
+					if (langCode!=null) {
+						titles.add(new LanguageString(attrValue, langCode));
+						expected = true;
+					}
+					return expected;
 				});
 				
 				cmdList = null;
@@ -1995,10 +2062,10 @@ public class CommandList {
 					if (nodeType!=Node.ELEMENT_NODE) return false;
 					switch (nodeName) {
 					case "Cmd_List": break;
-					case "Menu"    : menues.add(new MenuItem(this,subNode)); break;
-					case "Put_1"   : commands.add(new SimplePutCommandItem(this,subNode)); break;
-					case "Put_2"   : commands.add(new ComplexCommandItem(this,subNode, ComplexCommand.Type.Put)); break;
-					case "Get"     : commands.add(new ComplexCommandItem(this,subNode, ComplexCommand.Type.Get)); break;
+					case "Menu"    : menues.add(new MenuItem(this,subNode,languageConfig)); break;
+					case "Put_1"   : commands.add(new SimplePutCommandItem(this,subNode,languageConfig)); break;
+					case "Put_2"   : commands.add(new ComplexCommandItem(this,subNode, ComplexCommand.Type.Put,languageConfig)); break;
+					case "Get"     : commands.add(new ComplexCommandItem(this,subNode, ComplexCommand.Type.Get,languageConfig)); break;
 					default: return false;
 					}
 					return true;
@@ -2022,7 +2089,7 @@ public class CommandList {
 				return null;
 			}
 		
-			private String getTags() {
+			String getTags() {
 				String str = "";
 				if (func  !=null) str += (str.isEmpty()?"":" | ")+func  ;
 				if (funcEx!=null) str += (str.isEmpty()?"":" | ")+funcEx;
@@ -2031,7 +2098,7 @@ public class CommandList {
 			}
 			@Override public String toString() {
 				String str = "";
-				if (title!=null) str = title+"   ";
+				if (!titles.isEmpty()) str = titles.toString()+"   ";
 				str += "["+getTags()+"]   ";
 				if (listType!=null) str += " ListType:"+listType;
 				if (iconOn  !=null) str += " IconOn:"  +iconOn  ;
@@ -2116,49 +2183,54 @@ public class CommandList {
 			}
 		}
 		
-		private static abstract class CommandItem extends ParsedCommandItem {
+		static abstract class CommandItem extends ParsedCommandItem {
 			public CommandItem(ParsedCommandItem parent, Node node) {
 				super(parent, node);
 			}
 		}
 
-		private static class SimplePutCommandItem extends CommandItem implements CallablePutCommand {
+		static class SimplePutCommandItem extends CommandItem implements CallablePutCommand {
 			
 			private String cmdID;
 			private TagList tagList;
 			private String commandValue;
 			private String func;
 			private String funcEx;
-			private String title;
 			private String playable;
 			private String layout;
 			private String visible;
+			private Vector<LanguageString> titles;
 		
-			public SimplePutCommandItem(ParsedCommandItem parent, Node node) {
+			public SimplePutCommandItem(ParsedCommandItem parent, Node node, LanguageConfig languageConfig) {
 				super(parent, node);
 				this.cmdID  = null;
 				this.tagList = null;
 				this.commandValue = null;
 				this.func   = null;
 				this.funcEx = null;
-				this.title    = null;
 				this.layout   = null;
 				this.visible  = null;
 				this.playable = null;
+				this.titles   = new Vector<>();
 				
 				// <Put_1 Func="Event_On" ID="P1">
 				parseAttributes((attrName, attrValue) -> {
+					boolean expected = true;
 					switch (attrName) { // Func_Ex
 					case "ID"       : cmdID = attrValue; break;
 					case "Func"     : func  = attrValue; break;
 					case "Func_Ex"  : funcEx   = attrValue; break;
-					case "Title_1"  : title    = attrValue; break;
 					case "Layout"   : layout   = attrValue; break;
 					case "Visible"  : visible  = attrValue; break;
 					case "Playable" : playable = attrValue; break;
-					default: return false;
+					default: expected = false; break;
 					}
-					return true;
+					String langCode = languageConfig.getLangCode(attrName);
+					if (langCode!=null) {
+						titles.add(new LanguageString(attrValue, langCode));
+						expected = true;
+					}
+					return expected;
 				});
 				
 				BaseCommandListItem.BaseCommandList cmdList = MenuItem.getCmdListFromParent(parent);
@@ -2190,7 +2262,7 @@ public class CommandList {
 			}
 			@Override public String toString() {
 				String str = "";
-				if (title!=null) str = title+"   ";
+				if (!titles.isEmpty()) str = titles.toString()+"   ";
 				str += "["+getTags()+"]   ";
 				if (layout  !=null) str += " Layout:"  +layout;
 				if (visible !=null) str += " Visible:" +visible;
@@ -2202,12 +2274,14 @@ public class CommandList {
 			}
 		}
 		
-		private static class ComplexCommandItem extends CommandItem implements ComplexCommand.ComplexCommandContext {
+		static class ComplexCommandItem extends CommandItem implements ComplexCommand.ComplexCommandContext {
 
 			private ComplexCommand complexCommand;
+			private LanguageConfig languageConfig;
 
-			public ComplexCommandItem(ParsedCommandItem parent, Node node, ComplexCommand.Type type) {
+			public ComplexCommandItem(ParsedCommandItem parent, Node node, ComplexCommand.Type type, LanguageConfig languageConfig) {
 				super(parent, node);
+				this.languageConfig = languageConfig;
 				complexCommand = new ComplexCommand(node,type,this);
 			}
 
@@ -2215,11 +2289,11 @@ public class CommandList {
 			@Override public String getContentOfSingleChildTextNode(Node node) { return super.getContentOfSingleChildTextNode(node); }
 			@Override public ComplexCommand.BaseCommandList getCmdListFromParent() { return MenuItem.getCmdListFromParent(parent); }
 			@Override public Iterator<ParsedCommandItem> getChildIterator() { return new NoChildIterator(); }
+			@Override public LanguageConfig getLanguageConfig() { return languageConfig; }
 
 			@Override
 			public String toString() {
-				// TODO Auto-generated method stub
-				return null;
+				return this.getClass().getName();
 			}
 			
 		}

@@ -142,13 +142,18 @@ public class YamahaControl {
 			return;
 		}
 		
+		String address = null;
 		GUI createGUI = yamahaControl.parseArgs(args);
 		switch (createGUI) {
 		case CommandList:
-			String address = null;
 			if (yamahaControl.device!=null)
 				address = yamahaControl.device.address;
 			CommandList.openWindow(address);
+			break;
+		case Generic:
+			if (yamahaControl.device!=null)
+				address = yamahaControl.device.address;
+			GenericYamahaControl.openWindow(address);
 			break;
 		case YamahaControl:
 			yamahaControl.createGUI();
@@ -203,7 +208,7 @@ public class YamahaControl {
 		updateChkBx.setSelected(false);
 	}
 	
-	private enum GUI { YamahaControl, CommandList }
+	private enum GUI { YamahaControl, CommandList, Generic }
 	private GUI parseArgs(String[] args) {
 		GUI createGUI = null;
 		
@@ -211,8 +216,9 @@ public class YamahaControl {
 		for (int i=0; i<args.length; ++i) {
 			switch (args[i].toLowerCase()) {
 			case "-addr": if (i+1<args.length) { device = new Device(args[i+1]); ++i; } break;
-			case "-gui": createGUI = GUI.YamahaControl; break;
+			case "-gui"        : createGUI = GUI.YamahaControl; break;
 			case "-commandlist": createGUI = GUI.CommandList; break;
+			case "-generic"    : createGUI = GUI.Generic; break;
 			default: commands.add(args[i]); break;
 			}
 		}
@@ -243,6 +249,8 @@ public class YamahaControl {
 		System.out.println("       starts GUI after processing commands");
 		System.out.println("   -commandlist");
 		System.out.println("       starts CommandList after processing commands");
+		System.out.println("   -generic");
+		System.out.println("       starts generic GUI after processing commands");
 		System.out.println();
 		System.out.println("Device Commands:");
 		System.out.println("   SwitchOFF");
