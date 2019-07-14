@@ -438,7 +438,7 @@ public class CommandList {
 		}
 	}
 	
-	private static class LanguageConfig {
+	static class LanguageConfig {
 		
 		private HashMap<String,String> fieldNames;
 		private HashMap<String,String> langCodes;
@@ -459,24 +459,34 @@ public class CommandList {
 			fieldNames.put(langCode, fieldName);
 			langCodes.put(fieldName, langCode);
 		}
-		@SuppressWarnings("unused")
 		String getFieldName(String langCode) { return fieldNames.get(langCode); }
 		String getLangCode(String fieldName) { return langCodes.get(fieldName); }
+		
+		public Vector<String> getLangCodes() {
+			return new Vector<>( fieldNames.keySet() );
+		}
 	}
 	
-	private static class LanguageString {
-		String value;
-		String langCode;
-		private LanguageString(String value, String langCode) {
-			this.value = value;
-			this.langCode = langCode;
-		}
-		@Override
-		public String toString() {
-			return langCode + ":\"" + value + "\"";
-		}
+	static class LanguageStrings {
 		
+		private HashMap<String,String> values;
+		LanguageStrings() { values = new HashMap<>(); }
+		
+		boolean isEmpty() { return values.isEmpty(); }
+		void add(String langCode, String value) { values.put(langCode, value); }
+		String get(String langCode) { return values.get(langCode); }
+		
+		@Override public String toString() {
+			String str = "";
+			for (String langCode:values.keySet()) {
+				if (!str.isEmpty())  str+=", ";
+				str+="["+langCode+"]"+values.get(langCode);
+			}
+			return str;
+		}
+
 	}
+	
 	protected static interface AttributeConsumer {
 		public boolean consume(String attrName, String attrValue);
 	}
@@ -754,7 +764,7 @@ public class CommandList {
 				}
 				String langCode = context.getLanguageConfig().getLangCode(attrName);
 				if (langCode!=null) {
-					value.titles.add(new LanguageString(attrValue, langCode));
+					value.titles.add(langCode, attrValue);
 					expected = true;
 				}
 				
@@ -890,14 +900,14 @@ public class CommandList {
 			@SuppressWarnings("unused") public String funcEx;
 			@SuppressWarnings("unused") public String playable;
 			@SuppressWarnings("unused") public String iconOn;
-			public Vector<LanguageString> titles;
+			public LanguageStrings titles;
 			
 			DirectValue() {
 				this.func     = null;
 				this.funcEx   = null;
 				this.playable = null;
 				this.iconOn   = null;
-				this.titles   = new Vector<>();
+				this.titles   = new LanguageStrings();
 				
 				this.value   = null;
 				this.isDummy = false;
@@ -2017,7 +2027,7 @@ public class CommandList {
 			String listType;
 			String iconOn;
 			String playable;
-			Vector<LanguageString> titles;
+			LanguageStrings titles;
 
 			public MenuItem(ParsedCommandItem parent, Node node, LanguageConfig languageConfig) {
 				super(parent, node);
@@ -2027,7 +2037,7 @@ public class CommandList {
 				this.listType = null;
 				this.iconOn   = null;
 				this.playable = null;
-				this.titles   = new Vector<>();
+				this.titles   = new LanguageStrings();
 				
 				// <Menu Func="Source_Device" Func_Ex="SD_iPod_USB" YNC_Tag="iPod_USB">
 				// <Menu List_Type="Icon" Title_1="Input/Scene">
@@ -2046,7 +2056,7 @@ public class CommandList {
 					}
 					String langCode = languageConfig.getLangCode(attrName);
 					if (langCode!=null) {
-						titles.add(new LanguageString(attrValue, langCode));
+						titles.add(langCode,attrValue);
 						expected = true;
 					}
 					return expected;
@@ -2199,7 +2209,7 @@ public class CommandList {
 			private String playable;
 			private String layout;
 			private String visible;
-			private Vector<LanguageString> titles;
+			private LanguageStrings titles;
 		
 			public SimplePutCommandItem(ParsedCommandItem parent, Node node, LanguageConfig languageConfig) {
 				super(parent, node);
@@ -2211,7 +2221,7 @@ public class CommandList {
 				this.layout   = null;
 				this.visible  = null;
 				this.playable = null;
-				this.titles   = new Vector<>();
+				this.titles   = new LanguageStrings();
 				
 				// <Put_1 Func="Event_On" ID="P1">
 				parseAttributes((attrName, attrValue) -> {
@@ -2227,7 +2237,7 @@ public class CommandList {
 					}
 					String langCode = languageConfig.getLangCode(attrName);
 					if (langCode!=null) {
-						titles.add(new LanguageString(attrValue, langCode));
+						titles.add(langCode, attrValue);
 						expected = true;
 					}
 					return expected;
