@@ -137,11 +137,13 @@ public class GenericYamahaControl {
 
 		private static String getMenuTitle(MenuItem item, String langCode) {
 			String title = item.titles.get(langCode);
-			if (title!=null) return title;
-			
 			String tags = item.getTags();
-			if (!tags.isEmpty()) return tags;
 			
+			String str = "";
+			if (title!=null) str += title;
+			if (!tags.isEmpty()) str += (!str.isEmpty()?"  ":"")+"["+tags+"]";
+			
+			if (!str.isEmpty()) return str;
 			return item.toString();
 		}
 

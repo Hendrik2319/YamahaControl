@@ -448,10 +448,12 @@ public class CommandList {
 			langCodes = new HashMap<>();
 		}
 		public void setValues(Vector<ParsedCommandItem.LanguageItem> languages) {
+			//setValue("test", "Title_1");
 			for (ParsedCommandItem.LanguageItem item:languages)
 				setValue(item.code, item.fieldName);
 		}
 		public void setDefaultValues() {
+			//setValue("test", "Title_1");
 			setValue("en", "Title_1");
 		}
 		
