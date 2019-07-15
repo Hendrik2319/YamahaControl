@@ -22,6 +22,7 @@ import java.util.function.Predicate;
 
 import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
+import javax.swing.Icon;
 import javax.swing.JComboBox;
 import javax.swing.JFileChooser;
 import javax.swing.JFrame;
@@ -53,7 +54,15 @@ import net.schwarzbaer.java.tools.yamahacontrol.XML.TagList;
 public class CommandList {
 	
 	private static IconSource.CachedIcons<TreeIcon> treeIcons = null;
-	private enum TreeIcon { Menu, Command, Command_PUT, Command_GET, Language, UnitDescription, Document, XMLTag }
+	enum TreeIcon { Menu, Command, Command_PUT, Command_GET, Language, UnitDescription, Document, XMLTag }
+	static {
+		IconSource<TreeIcon> treeIconsIS = new IconSource<TreeIcon>(16,16);
+		treeIconsIS.readIconsFromResource("/TreeIcons.png");
+		treeIcons = treeIconsIS.cacheIcons(TreeIcon.values());
+	}
+	static Icon getTreeIcon(TreeIcon treeIcon) {
+		return treeIcons.getCachedIcon(treeIcon);
+	}
 	
 	public static void main(String[] args) {
 		try { UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName()); }
@@ -73,10 +82,6 @@ public class CommandList {
 	}
 	
 	public static void openWindow(String address) {
-		IconSource<TreeIcon> treeIconsIS = new IconSource<TreeIcon>(16,16);
-		treeIconsIS.readIconsFromResource("/TreeIcons.png");
-		treeIcons = treeIconsIS.cacheIcons(TreeIcon.values());
-		
 		CommandList commandList = new CommandList(address);
 		commandList.createGUI();
 		commandList.readCommandList();
@@ -489,16 +494,64 @@ public class CommandList {
 
 	}
 	
+	private interface Helper<V> {
+		V createGet(String baseLabel, TagList baseTagList, String value);
+		V createGet(String baseLabel, TagList baseTagList);
+		V createPut(String baseLabel, TagList baseTagList, String tagListAddStr, String conn, String value);
+		V createPut(String baseLabel, TagList baseTagList);
+		void addTextTo(V parsedCommandNode, String format, Object...objects);
+	}
+	
+	private static <V> V createCommandTreeNode(ComplexCommand complexCommand, Helper<V> helper) {
+		V parsedCommandNode = null;
+		String baseLabel;
+		switch (complexCommand.type) {
+		case Get:
+			baseLabel = "GET["+complexCommand.cmd.cmdID+"]";
+			if (complexCommand.cmd.type!=null) baseLabel += " <"+complexCommand.cmd.type+">";
+			if (complexCommand.cmd.params.length==1) {
+				ComplexCommand.CmdParam cp = complexCommand.cmd.params[0];
+				String tagListStr = cp.valueTagList==null?"":(cp.valueTagList.toString()+" -> ");
+				parsedCommandNode = helper.createGet(baseLabel, complexCommand.cmd.baseTagList, tagListStr+cp.param.toString());
+			} else {
+				parsedCommandNode = helper.createGet(baseLabel, complexCommand.cmd.baseTagList);
+				for (int i=0; i<complexCommand.cmd.params.length; ++i) {
+					ComplexCommand.CmdParam cp = complexCommand.cmd.params[i];
+					String tagListStr = cp.valueTagList==null?"":(cp.valueTagList.toString()+" -> ");
+					helper.addTextTo(parsedCommandNode, "Value %d:   %s%s", i, tagListStr, cp.param.toString());
+				}
+			}
+			break;
+		case Put:
+			baseLabel = "PUT["+complexCommand.cmd.cmdID+"]";
+			if (complexCommand.cmd.type!=null) baseLabel += " <"+complexCommand.cmd.type+">";
+			if (complexCommand.cmd.params.length==1) {
+				ComplexCommand.CmdParam cp = complexCommand.cmd.params[0];
+				String tagListAddStr = cp.valueTagList==null?"":(",  "+cp.valueTagList.toString());
+				parsedCommandNode = helper.createPut(baseLabel, complexCommand.cmd.baseTagList, tagListAddStr, "=", cp.param.toString());
+			} else {
+				parsedCommandNode = helper.createPut(baseLabel, complexCommand.cmd.baseTagList);
+				for (int i=0; i<complexCommand.cmd.params.length; ++i) {
+					ComplexCommand.CmdParam cp = complexCommand.cmd.params[i];
+					String tagListStr = cp.valueTagList==null?"":(cp.valueTagList.toString()+" = ");
+					helper.addTextTo(parsedCommandNode, "Value %d:   %s%s", i, tagListStr, cp.param.toString());
+				}
+			}
+			break;
+		}
+		return parsedCommandNode;
+	}
+	
 	protected static interface AttributeConsumer {
 		public boolean consume(String attrName, String attrValue);
 	}
 	
-	private static class ComplexCommand {
-		protected Cmd cmd;
+	static class ComplexCommand {
+		Cmd cmd;
 		protected boolean error;
 		private Node node;
 		private ComplexCommandContext context;
-		private Type type;
+		Type type;
 		
 		interface ComplexCommandContext {
 			void parseAttributes(Node node, AttributeConsumer attrConsumer);
@@ -521,6 +574,14 @@ public class CommandList {
 		}
 		
 		enum Type { Get,Put }
+		
+		TreeIcon getIcon() {
+			switch (type) {
+			case Get: return TreeIcon.Command_GET;
+			case Put: return TreeIcon.Command_PUT;
+			default: return TreeIcon.Command;
+			}
+		}
 		
 		public void reportError(String format, Object... values) {
 			reportError(node, format, values);
@@ -549,31 +610,31 @@ public class CommandList {
 				Element childElement = (Element)child;
 				switch (childElement.getTagName()) {
 				case "Cmd":
-					if (cmd!=null) { reportError("Found additional \"Cmd\" node in command."); /*children.add(new GenericXMLNode(this, child));*/ }
+					if (cmd!=null) reportError("Found additional \"%s\" node in command.",childElement.getTagName());
 					else cmd = parseCmdNode(childElement);
 					cmdFound = true;
 					break;
 					
 				case "Param_1":
-					if (param1!=null) { reportError("Found additional \"Param_1\" node in command."); /*children.add(new GenericXMLNode(this, child));*/ }
+					if (param1!=null) reportError("Found additional \"%s\" node in command.",childElement.getTagName());
 					else param1 = parseParamNode(childElement);
 					param1Found = true;
 					break;
 					
 				case "Param_2":
-					if (param2!=null) { reportError("Found additional \"Param_2\" node in command."); /*children.add(new GenericXMLNode(this, child));*/ }
+					if (param2!=null) reportError("Found additional \"%s\" node in command.",childElement.getTagName());
 					else param2 = parseParamNode(childElement);
 					param2Found = true;
 					break;
 					
 				case "Param_3":
-					if (param3!=null) { reportError("Found additional \"Param_3\" node in command."); /*children.add(new GenericXMLNode(this, child));*/ }
+					if (param3!=null) reportError("Found additional \"%s\" node in command.",childElement.getTagName());
 					else param3 = parseParamNode(childElement);
 					param3Found = true;
 					break;
 					
 				default:
-					reportError("Found unexpected \"%s\" node in command.", childElement.getTagName()); /*children.add(new GenericXMLNode(this, child));*/
+					reportError("Found unexpected \"%s\" node in command.", childElement.getTagName());
 					error = true;
 					break;
 				}
@@ -757,7 +818,7 @@ public class CommandList {
 			DirectValue value = new DirectValue();
 			context.parseAttributes(childElement, (attrName, attrValue) -> {
 				boolean expected = true;
-				switch (attrName) { // Func_Ex
+				switch (attrName) {
 				case "Func"    : value.func     = attrValue; break;
 				case "Func_Ex" : value.funcEx   = attrValue; break;
 				case "Playable": value.playable = attrValue; break;
@@ -809,7 +870,7 @@ public class CommandList {
 		}
 	
 		protected static class Cmd {
-			@SuppressWarnings("unused") public String type;
+			public String type;
 			public String cmdID;
 			public TagList baseTagList;
 			public CmdParam[] params;
@@ -833,7 +894,7 @@ public class CommandList {
 		}
 	
 		protected static class Param {
-			@SuppressWarnings("unused") public String func;
+			public String func;
 			public Vector<ParamValue> values;
 			public Param() {
 				this.func = null;
@@ -841,6 +902,9 @@ public class CommandList {
 			}
 			public String mergeValues(String openBracket, String spearator, String closeBracket) {
 				return openBracket+values.stream().map(v->v==null?"<null>":v.toString()).reduce(null,(a,b)->a!=null?(a+spearator+b):b)+closeBracket;
+			}
+			@Override public String toString() {
+				return (func==null?"":"["+func+"]:") + mergeValues(""," | ","");
 			}
 		}
 	
@@ -898,10 +962,10 @@ public class CommandList {
 			public String value;
 			public boolean isDummy;
 			
-			@SuppressWarnings("unused") public String func;
-			@SuppressWarnings("unused") public String funcEx;
-			@SuppressWarnings("unused") public String playable;
-			@SuppressWarnings("unused") public String iconOn;
+			public String func;
+			public String funcEx;
+			public String playable;
+			public String iconOn;
 			public LanguageStrings titles;
 			
 			DirectValue() {
@@ -1529,37 +1593,61 @@ public class CommandList {
 			}
 
 			private static PlainCommandNode createParsedCommand(InterpretedDOMTreeNode parent, Node node, ComplexCommand complexCommand) {
-				PlainCommandNode parsedCommandNode = null;
-				switch (complexCommand.type) {
-				case Get:
-					if (complexCommand.cmd.params.length==1) {
-						ComplexCommand.CmdParam cp = complexCommand.cmd.params[0];
-						String tagListStr = cp.valueTagList==null?"":(cp.valueTagList.toString()+" -> ");
-						parsedCommandNode = new PlainGetCommandNode(parent, node, "GET["+complexCommand.cmd.cmdID+"]", complexCommand.cmd.baseTagList, tagListStr+cp.param.mergeValues(""," | ",""));
-					} else {
-						parsedCommandNode = new PlainGetCommandNode(parent, node, "GET["+complexCommand.cmd.cmdID+"]", complexCommand.cmd.baseTagList);
-						for (int i=0; i<complexCommand.cmd.params.length; ++i) {
-							ComplexCommand.CmdParam cp = complexCommand.cmd.params[i];
-							String tagListStr = cp.valueTagList==null?"":(cp.valueTagList.toString()+" -> ");
-							parsedCommandNode.add(new TextNode(parsedCommandNode,null, /*icon,*/ "Value %d:   %s%s", i, tagListStr, cp.param.mergeValues(""," | ","")));
-						}
+				PlainCommandNode parsedCommandNode = createCommandTreeNode(complexCommand, new Helper<PlainCommandNode>() {
+
+					@Override public PlainCommandNode createGet(String baseLabel, TagList baseTagList, String value) {
+						return new PlainGetCommandNode(parent, node, baseLabel, baseTagList, value);
 					}
-					break;
-				case Put:
-					if (complexCommand.cmd.params.length==1) {
-						ComplexCommand.CmdParam cp = complexCommand.cmd.params[0];
-						String tagListAddStr = cp.valueTagList==null?"":(",  "+cp.valueTagList.toString());
-						parsedCommandNode = new PlainCommandNode(parent, node, "PUT["+complexCommand.cmd.cmdID+"]", complexCommand.cmd.baseTagList, tagListAddStr, "=", cp.param.mergeValues(""," | ",""));
-					} else {
-						parsedCommandNode = new PlainCommandNode(parent, node, "PUT["+complexCommand.cmd.cmdID+"]", complexCommand.cmd.baseTagList);
-						for (int i=0; i<complexCommand.cmd.params.length; ++i) {
-							ComplexCommand.CmdParam cp = complexCommand.cmd.params[i];
-							String tagListStr = cp.valueTagList==null?"":(cp.valueTagList.toString()+" = ");
-							parsedCommandNode.add(new TextNode(parsedCommandNode,null, /*icon,*/ "Value %d:   %s%s", i, tagListStr, cp.param.mergeValues(""," | ","")));
-						}
+					@Override public PlainCommandNode createGet(String baseLabel, TagList baseTagList) {
+						return new PlainGetCommandNode(parent, node, baseLabel, baseTagList);
 					}
-					break;
-				}
+
+					@Override public PlainCommandNode createPut(String baseLabel, TagList baseTagList, String tagListAddStr, String conn, String value) {
+						return new PlainCommandNode(parent, node, baseLabel, baseTagList, tagListAddStr, conn, value);
+					}
+					@Override public PlainCommandNode createPut(String baseLabel, TagList baseTagList) {
+						return new PlainCommandNode(parent, node, baseLabel, baseTagList);
+					}
+
+					@Override public void addTextTo(PlainCommandNode parsedCommandNode, String format, Object... objects) {
+						parsedCommandNode.add(new TextNode(parsedCommandNode,null, /*icon,*/ format, objects));
+					}
+				});
+//				String baseLabel;
+//				switch (complexCommand.type) {
+//				case Get:
+//					baseLabel = "GET["+complexCommand.cmd.cmdID+"]";
+//					if (complexCommand.cmd.type!=null) baseLabel += " <"+complexCommand.cmd.type+">";
+//					if (complexCommand.cmd.params.length==1) {
+//						ComplexCommand.CmdParam cp = complexCommand.cmd.params[0];
+//						String tagListStr = cp.valueTagList==null?"":(cp.valueTagList.toString()+" -> ");
+//						parsedCommandNode = new PlainGetCommandNode(parent, node, baseLabel, complexCommand.cmd.baseTagList, tagListStr+cp.param.mergeValues(""," | ",""));
+//					} else {
+//						parsedCommandNode = new PlainGetCommandNode(parent, node, baseLabel, complexCommand.cmd.baseTagList);
+//						for (int i=0; i<complexCommand.cmd.params.length; ++i) {
+//							ComplexCommand.CmdParam cp = complexCommand.cmd.params[i];
+//							String tagListStr = cp.valueTagList==null?"":(cp.valueTagList.toString()+" -> ");
+//							parsedCommandNode.add(new TextNode(parsedCommandNode,null, /*icon,*/ "Value %d:   %s%s", i, tagListStr, cp.param.mergeValues(""," | ","")));
+//						}
+//					}
+//					break;
+//				case Put:
+//					baseLabel = "PUT["+complexCommand.cmd.cmdID+"]";
+//					if (complexCommand.cmd.type!=null) baseLabel += " <"+complexCommand.cmd.type+">";
+//					if (complexCommand.cmd.params.length==1) {
+//						ComplexCommand.CmdParam cp = complexCommand.cmd.params[0];
+//						String tagListAddStr = cp.valueTagList==null?"":(",  "+cp.valueTagList.toString());
+//						parsedCommandNode = new PlainCommandNode(parent, node, baseLabel, complexCommand.cmd.baseTagList, tagListAddStr, "=", cp.param.mergeValues(""," | ",""));
+//					} else {
+//						parsedCommandNode = new PlainCommandNode(parent, node, baseLabel, complexCommand.cmd.baseTagList);
+//						for (int i=0; i<complexCommand.cmd.params.length; ++i) {
+//							ComplexCommand.CmdParam cp = complexCommand.cmd.params[i];
+//							String tagListStr = cp.valueTagList==null?"":(cp.valueTagList.toString()+" = ");
+//							parsedCommandNode.add(new TextNode(parsedCommandNode,null, /*icon,*/ "Value %d:   %s%s", i, tagListStr, cp.param.mergeValues(""," | ","")));
+//						}
+//					}
+//					break;
+//				}
 				return parsedCommandNode;
 			}
 			
@@ -1734,37 +1822,63 @@ public class CommandList {
 			}
 		
 			private static ComplexCommandNode createParsedCommand(ParsedTreeNode parent, ParsedCommandItem.ComplexCommandItem item, ComplexCommand complexCommand) {
-				PlainCommandNode parsedCommandNode = null;
-				switch (complexCommand.type) {
-				case Get:
-					if (complexCommand.cmd.params.length==1) {
-						ComplexCommand.CmdParam cp = complexCommand.cmd.params[0];
-						String tagListStr = cp.valueTagList==null?"":(cp.valueTagList.toString()+" -> ");
-						parsedCommandNode = new PlainGetCommandNode(parent, item, "GET["+complexCommand.cmd.cmdID+"]", complexCommand.cmd.baseTagList, tagListStr+cp.param.mergeValues(""," | ",""));
-					} else {
-						parsedCommandNode = new PlainGetCommandNode(parent, item, "GET["+complexCommand.cmd.cmdID+"]", complexCommand.cmd.baseTagList);
-						for (int i=0; i<complexCommand.cmd.params.length; ++i) {
-							ComplexCommand.CmdParam cp = complexCommand.cmd.params[i];
-							String tagListStr = cp.valueTagList==null?"":(cp.valueTagList.toString()+" -> ");
-							parsedCommandNode.add(new TextNode(parsedCommandNode, item, "Value %d:   %s%s", i, tagListStr, cp.param.mergeValues(""," | ","")));
-						}
+				PlainCommandNode parsedCommandNode = createCommandTreeNode(complexCommand, new Helper<PlainCommandNode>() {
+					
+					@Override public PlainCommandNode createGet(String baseLabel, TagList baseTagList, String value) {
+						return new PlainGetCommandNode(parent, item, baseLabel, baseTagList, value);
 					}
-					break;
-				case Put:
-					if (complexCommand.cmd.params.length==1) {
-						ComplexCommand.CmdParam cp = complexCommand.cmd.params[0];
-						String tagListAddStr = cp.valueTagList==null?"":(",  "+cp.valueTagList.toString());
-						parsedCommandNode = new PlainCommandNode(parent, item, "PUT["+complexCommand.cmd.cmdID+"]", complexCommand.cmd.baseTagList, tagListAddStr, "=", cp.param.mergeValues(""," | ",""));
-					} else {
-						parsedCommandNode = new PlainCommandNode(parent, item, "PUT["+complexCommand.cmd.cmdID+"]", complexCommand.cmd.baseTagList);
-						for (int i=0; i<complexCommand.cmd.params.length; ++i) {
-							ComplexCommand.CmdParam cp = complexCommand.cmd.params[i];
-							String tagListStr = cp.valueTagList==null?"":(cp.valueTagList.toString()+" = ");
-							parsedCommandNode.add(new TextNode(parsedCommandNode, item, "Value %d:   %s%s", i, tagListStr, cp.param.mergeValues(""," | ","")));
-						}
+					@Override public PlainCommandNode createGet(String baseLabel, TagList baseTagList) {
+						return new PlainGetCommandNode(parent, item, baseLabel, baseTagList);
 					}
-					break;
-				}
+
+					@Override public PlainCommandNode createPut(String baseLabel, TagList baseTagList, String tagListAddStr, String conn, String value) {
+						return new PlainCommandNode(parent, item, baseLabel, baseTagList, tagListAddStr, conn, value);
+					}
+					@Override public PlainCommandNode createPut(String baseLabel, TagList baseTagList) {
+						return new PlainCommandNode(parent, item, baseLabel, baseTagList);
+					}
+
+					@Override
+					public void addTextTo(PlainCommandNode parsedCommandNode, String format, Object... objects) {
+						parsedCommandNode.add(new TextNode(parsedCommandNode, item, format, objects));
+					}
+				});
+				//PlainCommandNode parsedCommandNode = null;
+//				String baseLabel;
+//				switch (complexCommand.type) {
+//				case Get:
+//					baseLabel = "GET["+complexCommand.cmd.cmdID+"]";
+//					if (complexCommand.cmd.type!=null) baseLabel += " <"+complexCommand.cmd.type+">";
+//					if (complexCommand.cmd.params.length==1) {
+//						ComplexCommand.CmdParam cp = complexCommand.cmd.params[0];
+//						String tagListStr = cp.valueTagList==null?"":(cp.valueTagList.toString()+" -> ");
+//						parsedCommandNode = new PlainGetCommandNode(parent, item, baseLabel, complexCommand.cmd.baseTagList, tagListStr+cp.param.mergeValues(""," | ",""));
+//					} else {
+//						parsedCommandNode = new PlainGetCommandNode(parent, item, baseLabel, complexCommand.cmd.baseTagList);
+//						for (int i=0; i<complexCommand.cmd.params.length; ++i) {
+//							ComplexCommand.CmdParam cp = complexCommand.cmd.params[i];
+//							String tagListStr = cp.valueTagList==null?"":(cp.valueTagList.toString()+" -> ");
+//							parsedCommandNode.add(new TextNode(parsedCommandNode, item, "Value %d:   %s%s", i, tagListStr, cp.param.mergeValues(""," | ","")));
+//						}
+//					}
+//					break;
+//				case Put:
+//					baseLabel = "PUT["+complexCommand.cmd.cmdID+"]";
+//					if (complexCommand.cmd.type!=null) baseLabel += " <"+complexCommand.cmd.type+">";
+//					if (complexCommand.cmd.params.length==1) {
+//						ComplexCommand.CmdParam cp = complexCommand.cmd.params[0];
+//						String tagListAddStr = cp.valueTagList==null?"":(",  "+cp.valueTagList.toString());
+//						parsedCommandNode = new PlainCommandNode(parent, item, baseLabel, complexCommand.cmd.baseTagList, tagListAddStr, "=", cp.param.mergeValues(""," | ",""));
+//					} else {
+//						parsedCommandNode = new PlainCommandNode(parent, item, baseLabel, complexCommand.cmd.baseTagList);
+//						for (int i=0; i<complexCommand.cmd.params.length; ++i) {
+//							ComplexCommand.CmdParam cp = complexCommand.cmd.params[i];
+//							String tagListStr = cp.valueTagList==null?"":(cp.valueTagList.toString()+" = ");
+//							parsedCommandNode.add(new TextNode(parsedCommandNode, item, "Value %d:   %s%s", i, tagListStr, cp.param.mergeValues(""," | ","")));
+//						}
+//					}
+//					break;
+//				}
 				return parsedCommandNode;
 			}
 			
@@ -2203,15 +2317,17 @@ public class CommandList {
 
 		static class SimplePutCommandItem extends CommandItem implements CallablePutCommand {
 			
-			private String cmdID;
+			String cmdID;
+			
 			private TagList tagList;
-			private String commandValue;
+			String commandValue;
+			
+			LanguageStrings titles;
 			private String func;
 			private String funcEx;
-			private String playable;
-			private String layout;
-			private String visible;
-			private LanguageStrings titles;
+			String playable;
+			String layout;
+			String visible;
 		
 			public SimplePutCommandItem(ParsedCommandItem parent, Node node, LanguageConfig languageConfig) {
 				super(parent, node);
@@ -2266,7 +2382,7 @@ public class CommandList {
 				return Ctrl.buildPutCommand(tagList, commandValue);
 			}
 			
-			private String getTags() {
+			String getTags() {
 				String str = "";
 				if (func  !=null) str += (str.isEmpty()?"":" | ")+func  ;
 				if (funcEx!=null) str += (str.isEmpty()?"":" | ")+funcEx;
@@ -2288,7 +2404,7 @@ public class CommandList {
 		
 		static class ComplexCommandItem extends CommandItem implements ComplexCommand.ComplexCommandContext {
 
-			private ComplexCommand complexCommand;
+			ComplexCommand complexCommand;
 			private LanguageConfig languageConfig;
 
 			public ComplexCommandItem(ParsedCommandItem parent, Node node, ComplexCommand.Type type, LanguageConfig languageConfig) {
@@ -2334,7 +2450,7 @@ public class CommandList {
 			//	treeIcon = ((DOMTreeNode)value).isLeaf()?null:TreeIcon.XMLTag;
 			
 			if (treeIcon!=null)
-				setIcon(treeIcons.getCachedIcon(treeIcon));
+				setIcon(getTreeIcon(treeIcon));
 			
 			return component;
 		}
