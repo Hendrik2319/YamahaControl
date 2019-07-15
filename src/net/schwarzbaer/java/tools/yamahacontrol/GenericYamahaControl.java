@@ -378,9 +378,9 @@ public class GenericYamahaControl {
 				valueFields = new JTextField[cmdParams.length];
 				for (int i=0; i<cmdParams.length; i++) {
 					CmdParam cmdParam = cmdParams[i];
-					if (cmdParam.param.func!=null) valuePanel.add(new JLabel("["+cmdParam.param.func+"]: "), c);
+					if (cmdParam.param.func!=null) valuePanel.add(new JLabel("["+cmdParam.param.func+"]: "), setWeights(c,0,0));
 					valueFields[i] = new JTextField(10);
-					valuePanel.add(valueFields[i], c);
+					valuePanel.add(valueFields[i], setWeights(c,1,0));
 				}
 				commandList.add(valuePanel, setWeights(c,1,0));
 				
@@ -401,9 +401,12 @@ public class GenericYamahaControl {
 				ParamVariant[] variants = new ParamVariant[n];
 				for (int i=0; i<variants.length; i++) {
 					variants[i] = new ParamVariant(i);
-					for (CmdParam cmdParam:commandItem.complexCommand.cmd.params)
+					CmdParam[] cmdParams = commandItem.complexCommand.cmd.params;
+					for (int j=0; j<cmdParams.length; j++) {
+						CmdParam cmdParam = cmdParams[j];
 						if (i<cmdParam.param.values.size())
-							variants[i].set(i,cmdParam.param.values.get(i));
+							variants[i].set(j,cmdParam.param.values.get(i));
+					}
 				}
 				
 				return variants;
@@ -443,6 +446,7 @@ public class GenericYamahaControl {
 
 			public ComplexPutCommandPanel(GUIComp parent, ComplexCommandItem item) {
 				super(parent, item);
+				selectedVariant = null;
 			}
 
 			@Override
@@ -459,8 +463,10 @@ public class GenericYamahaControl {
 					comboBox.addActionListener(e->setSelectedVariant(getSelectedVariant(variants, comboBox)));
 					selectedVariant = getSelectedVariant(variants, comboBox);
 					return comboBox;
-				} else
+				} else {
+					if (variants.length==1) selectedVariant = variants[0];
 					return new JLabel("-");
+				}
 			}
 
 			private ParamVariant getSelectedVariant(ParamVariant[] variants, JComboBox<ParamVariant> comboBox) {
@@ -471,14 +477,18 @@ public class GenericYamahaControl {
 
 			private void setSelectedVariant(ParamVariant paramVariant) {
 				selectedVariant = paramVariant;
-				for (int i=0; i<valueFields.length; i++) {
-					ParamValue value = paramVariant.get(i);
-					if (value instanceof ComplexCommand.TextValue    ) setValueField(valueFields[i],(ComplexCommand.TextValue    ) value);
-					if (value instanceof ComplexCommand.RangeValue   ) setValueField(valueFields[i],(ComplexCommand.RangeValue   ) value);
-					if (value instanceof ComplexCommand.DirectValue  ) setValueField(valueFields[i],(ComplexCommand.DirectValue  ) value);
-					if (value instanceof ComplexCommand.IndirectValue) setValueField(valueFields[i],(ComplexCommand.IndirectValue) value);
-				}
-				
+				for (int i=0; i<valueFields.length; i++)
+					if (paramVariant==null) {
+						valueFields[i].setText("");
+						valueFields[i].setEditable(false);
+						valueFields[i].setEnabled(false);
+					} else {
+						ParamValue value = paramVariant.get(i);
+						if (value instanceof ComplexCommand.TextValue    ) setValueField(valueFields[i],(ComplexCommand.TextValue    ) value);
+						if (value instanceof ComplexCommand.RangeValue   ) setValueField(valueFields[i],(ComplexCommand.RangeValue   ) value);
+						if (value instanceof ComplexCommand.DirectValue  ) setValueField(valueFields[i],(ComplexCommand.DirectValue  ) value);
+						if (value instanceof ComplexCommand.IndirectValue) setValueField(valueFields[i],(ComplexCommand.IndirectValue) value);
+					}
 			}
 
 			private void setValueField(JTextField field, IndirectValue paramValue) {
