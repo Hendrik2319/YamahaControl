@@ -1,10 +1,13 @@
 package net.schwarzbaer.java.tools.yamahacontrol;
 
 import java.awt.BorderLayout;
+import java.awt.Color;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
 import java.awt.event.ActionListener;
+import java.awt.event.FocusEvent;
+import java.awt.event.FocusListener;
 import java.util.Vector;
 
 import javax.swing.BorderFactory;
@@ -110,6 +113,8 @@ public class GenericYamahaControl {
 		Document document = content==null?null:XML.parse(content);
 		if (document!=null) commandList = new DocumentItem(document);
 		if (verbose) System.out.println("done");
+		
+		if (commandList!=null) ComplexCommand.ParamValueOcc.print();
 	}
 
 	private static abstract class GUIComp {
@@ -353,7 +358,7 @@ public class GenericYamahaControl {
 		private static abstract class ComplexCommandPanel extends CommandPanel {
 	
 			protected ComplexCommandItem item;
-			protected JTextField[] valueFields;
+			protected FormatedTextField[] valueFields;
 	
 			public ComplexCommandPanel(GUIComp parent, ComplexCommandItem item) {
 				super(parent);
@@ -375,14 +380,15 @@ public class GenericYamahaControl {
 				
 				JPanel valuePanel = new JPanel(new GridBagLayout());
 				CmdParam[] cmdParams = item.complexCommand.cmd.params;
-				valueFields = new JTextField[cmdParams.length];
+				valueFields = new FormatedTextField[cmdParams.length];
 				for (int i=0; i<cmdParams.length; i++) {
 					CmdParam cmdParam = cmdParams[i];
 					if (cmdParam.param.func!=null) valuePanel.add(new JLabel("["+cmdParam.param.func+"]: "), setWeights(c,0,0));
-					valueFields[i] = new JTextField(10);
+					valueFields[i] = new FormatedTextField(10);
 					valuePanel.add(valueFields[i], setWeights(c,1,0));
 				}
 				commandList.add(valuePanel, setWeights(c,1,0));
+				initValueFields();
 				
 				//commandList.add(new JLabel(item.toString()), setGridWidth(c, 2));
 				
@@ -391,6 +397,7 @@ public class GenericYamahaControl {
 				}), setLineEnd(setWeights(c,0,0)));
 			}
 	
+			protected abstract void initValueFields();
 			protected abstract JComponent createVariantSelector();
 
 			ParamVariant[] getVariants(ComplexCommandItem commandItem) {
@@ -425,7 +432,7 @@ public class GenericYamahaControl {
 				public void set(int i, ParamValue paramValue) { values[i] = paramValue; }
 				public ParamValue get(int i) { return values[i]; }
 				
-				@Override public String toString() { return "["+index+"]"; }
+				@Override public String toString() { return "["+index+"]"; } // TODO
 			}
 		}
 		
@@ -435,11 +442,13 @@ public class GenericYamahaControl {
 				super(parent, item);
 			}
 
-			@Override
-			protected JComponent createVariantSelector() {
-				return new JLabel("-");
+			@Override protected JComponent createVariantSelector() { return new JLabel("-"); }
+			@Override protected void initValueFields() {
+				for (FormatedTextField field:valueFields)
+					field.setDisabled(true);
 			}
 		}
+		
 		private static class ComplexPutCommandPanel extends ComplexCommandPanel {
 
 			private ParamVariant selectedVariant;
@@ -450,8 +459,7 @@ public class GenericYamahaControl {
 			}
 
 			@Override
-			public void addTo(JPanel commandList) {
-				super.addTo(commandList);
+			protected void initValueFields() {
 				setSelectedVariant(selectedVariant);
 			}
 
@@ -479,11 +487,10 @@ public class GenericYamahaControl {
 				selectedVariant = paramVariant;
 				for (int i=0; i<valueFields.length; i++)
 					if (paramVariant==null) {
-						valueFields[i].setText("");
-						valueFields[i].setEditable(false);
-						valueFields[i].setEnabled(false);
+						valueFields[i].setDisabled(true);
 					} else {
 						ParamValue value = paramVariant.get(i);
+						valueFields[i].setDisabled(value==null);
 						if (value instanceof ComplexCommand.TextValue    ) setValueField(valueFields[i],(ComplexCommand.TextValue    ) value);
 						if (value instanceof ComplexCommand.RangeValue   ) setValueField(valueFields[i],(ComplexCommand.RangeValue   ) value);
 						if (value instanceof ComplexCommand.DirectValue  ) setValueField(valueFields[i],(ComplexCommand.DirectValue  ) value);
@@ -491,20 +498,30 @@ public class GenericYamahaControl {
 					}
 			}
 
-			private void setValueField(JTextField field, IndirectValue paramValue) {
-				// TODO Auto-generated method stub
+			private void setValueField(FormatedTextField field, IndirectValue paramValue) {
+				field.setEditable(false);
+				field.setText("<Indirect>"); // TODO
+				field.setEmptyFieldText(null);
 			}
 
-			private void setValueField(JTextField field, DirectValue paramValue) {
-				// TODO Auto-generated method stub
+			private void setValueField(FormatedTextField field, DirectValue paramValue) {
+				if (paramValue.isDummy) {
+					field.setDisabled(true);
+					return;
+				}
+				field.setEditable(false);
+				field.setText(paramValue.value);
+				field.setEmptyFieldText(null);
 			}
 
-			private void setValueField(JTextField field, RangeValue paramValue) {
-				// TODO Auto-generated method stub
+			private void setValueField(FormatedTextField field, RangeValue paramValue) {
+				field.setEmptyFieldText(paramValue.toString());
+				field.setText("");
 			}
 
-			private void setValueField(JTextField field, TextValue paramValue) {
-				// TODO Auto-generated method stub
+			private void setValueField(FormatedTextField field, TextValue paramValue) {
+				field.setEmptyFieldText(paramValue.toString());
+				field.setText("");
 			}
 			
 			
@@ -560,5 +577,61 @@ public class GenericYamahaControl {
 			c.gridwidth = gridwidth;
 			return c;
 		}
+	}
+	
+	private static class FormatedTextField extends JTextField {
+		private static final long serialVersionUID = 2381801924798546779L;
+		private boolean isEmpty;
+		private String emptyFieldText;
+
+		public FormatedTextField(int columns) {
+			super(columns);
+			isEmpty = true;
+			emptyFieldText = null;
+			addFocusListener(new FocusListener() {
+				@Override public void focusLost  (FocusEvent e) { System.out.printf("FormatedTextField[%016X].focusLost  %n",FormatedTextField.this.hashCode()); if (hasNoText()) setText(true, emptyFieldText); }
+				@Override public void focusGained(FocusEvent e) { System.out.printf("FormatedTextField[%016X].focusGained%n",FormatedTextField.this.hashCode()); if (isEmpty    ) setText(false, ""); }
+			});
+			super.addActionListener(e->{ System.out.printf("FormatedTextField[%016X].action%n",FormatedTextField.this.hashCode()); if (hasNoText()) setText(true, emptyFieldText); });
+		}
+		
+		@Override
+		public synchronized void addActionListener(ActionListener l) {
+			throw new UnsupportedOperationException();
+		}
+
+		@Override
+		public void setText(String value) {
+			setText(value.isEmpty(), value.isEmpty()?emptyFieldText:value);
+		}
+		
+		private void setText(boolean isEmpty, String value) {
+			this.isEmpty = isEmpty;
+			setForeground(isEmpty?Color.GRAY:Color.BLACK);
+			super.setText(value);
+		}
+
+		@Override
+		public String getText() {
+			if (isEmpty) return "";
+			return super.getText();
+		}
+		
+		public void setEmptyFieldText(String emptyFieldText) {
+			this.emptyFieldText = emptyFieldText;
+			setToolTipText(emptyFieldText);
+			if (isEmpty || hasNoText()) setText(true, emptyFieldText);
+		}
+
+		private boolean hasNoText() {
+			return super.getText().isEmpty();
+		}
+
+		public void setDisabled(boolean disabled) {
+			if (disabled) setText("");
+			setEditable(!disabled);
+			setEnabled(!disabled);
+		}
+		
 	}
 }

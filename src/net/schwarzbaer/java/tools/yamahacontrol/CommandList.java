@@ -571,6 +571,60 @@ public class CommandList {
 			error = false;
 			this.context.parseAttributes(node,(attrName, attrValue) -> { error=true; return false; });
 			parseChildNodes();
+			if (!error) ParamValueOcc.checkParamValueOcc(this);
+		}
+		
+		static class ParamValueOcc {
+			static HashMap<ParamValueOcc,Integer> ParamValueOccurencies = new HashMap<>();
+			
+			private static void checkParamValueOcc(ComplexCommand complexCommand) {
+				ParamValueOcc occ = new ParamValueOcc();
+				occ.type = complexCommand.type;
+				CmdParam[] params = complexCommand.cmd.params;
+				for (int i=0; i<params.length; i++)
+					occ.set(i,params[i].param.values.size());
+				Integer n = ParamValueOccurencies.get(occ);
+				if (n==null) n = 0;
+				ParamValueOccurencies.put(occ,n+1);
+			}
+			public static void print() {
+				System.out.println("ParamValue Occurencies:");
+				ParamValueOccurencies.keySet()
+					.stream()
+					.sorted(Comparator.<ParamValueOcc,Type>comparing(occ->occ.type).thenComparing(occ->occ.n1).thenComparing(occ->occ.n2).thenComparing(occ->occ.n3))
+					.forEach(occ->System.out.printf(" %4dx %s%n",ParamValueOccurencies.get(occ),occ));
+			}
+
+			public Type type;
+			public int n1,n2,n3;
+			ParamValueOcc() {
+				type = null;
+				n1 = n2 = n3 = -1;
+			}
+			public void set(int i, int n) {
+				switch (i) {
+				case 0: n1 = n; break;
+				case 1: n2 = n; break;
+				case 2: n3 = n; break;
+				default: throw new IllegalArgumentException();
+				}
+			}
+			@Override
+			public int hashCode() {
+				int hashCode = type==null?0:type.hashCode();
+				hashCode = hashCode ^ (((n1&0xff)<<16) | ((n2&0xff)<<8) | (n3&0xff));
+				return hashCode;
+			}
+			@Override
+			public boolean equals(Object obj) {
+				if (!(obj instanceof ParamValueOcc)) return false;
+				ParamValueOcc other = (ParamValueOcc)obj;
+				return this.type==other.type && this.n1==other.n1 && this.n2==other.n2 && this.n3==other.n3;
+			}
+			@Override
+			public String toString() {
+				return type + ":" + (n1<0?" ":n1) + "," + (n2<0?" ":n2) + "," + (n3<0?" ":n3);
+			}
 		}
 		
 		enum Type { Get,Put }
@@ -2029,6 +2083,7 @@ public class CommandList {
 			public DocumentItem(Document document) {
 				super(null,document);
 				this.document = document;
+				ComplexCommandItem.GetGroups.clear();
 				
 				// <Unit_Description Unit_Name="RX-V475" Version="1.2">
 				parseSubNodes((subNode, nodeType, nodeName, nodeValue) -> {
@@ -2403,14 +2458,23 @@ public class CommandList {
 		}
 		
 		static class ComplexCommandItem extends CommandItem implements ComplexCommand.ComplexCommandContext {
-
+			static HashMap<String,Vector<ComplexCommandItem>> GetGroups = new HashMap<>();
+			
 			ComplexCommand complexCommand;
 			private LanguageConfig languageConfig;
+			private Vector<ComplexCommandItem> getGroup;
 
 			public ComplexCommandItem(ParsedCommandItem parent, Node node, ComplexCommand.Type type, LanguageConfig languageConfig) {
 				super(parent, node);
 				this.languageConfig = languageConfig;
 				complexCommand = new ComplexCommand(node,type,this);
+				
+				if (type==ComplexCommand.Type.Get) {
+					String tagList = complexCommand.cmd.baseTagList.toString();
+					getGroup = GetGroups.get(tagList);
+					if (getGroup==null) GetGroups.put(tagList, getGroup = new Vector<>());
+					getGroup.add(this);
+				}
 			}
 
 			@Override public void parseAttributes(Node node, AttributeConsumer attrConsumer) { super.parseAttributes(node,attrConsumer); }
@@ -2423,7 +2487,6 @@ public class CommandList {
 			public String toString() {
 				return this.getClass().getName();
 			}
-			
 		}
 	}
 	
