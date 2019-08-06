@@ -30,6 +30,7 @@ import net.schwarzbaer.java.tools.yamahacontrol.CommandList.ComplexCommand;
 import net.schwarzbaer.java.tools.yamahacontrol.CommandList.ComplexCommand.CmdParam;
 import net.schwarzbaer.java.tools.yamahacontrol.CommandList.ComplexCommand.DirectValue;
 import net.schwarzbaer.java.tools.yamahacontrol.CommandList.ComplexCommand.IndirectValue;
+import net.schwarzbaer.java.tools.yamahacontrol.CommandList.ComplexCommand.IndirectValues;
 import net.schwarzbaer.java.tools.yamahacontrol.CommandList.ComplexCommand.ParamValue;
 import net.schwarzbaer.java.tools.yamahacontrol.CommandList.ComplexCommand.RangeValue;
 import net.schwarzbaer.java.tools.yamahacontrol.CommandList.ComplexCommand.TextValue;
@@ -42,6 +43,7 @@ import net.schwarzbaer.java.tools.yamahacontrol.CommandList.ParsedCommandItem.Me
 import net.schwarzbaer.java.tools.yamahacontrol.CommandList.ParsedCommandItem.SimplePutCommandItem;
 import net.schwarzbaer.java.tools.yamahacontrol.CommandList.ParsedCommandItem.UnitDescriptionItem;
 import net.schwarzbaer.java.tools.yamahacontrol.CommandList.TreeIcon;
+import net.schwarzbaer.java.tools.yamahacontrol.XML.TagList;
 
 public class GenericYamahaControl {
 
@@ -77,19 +79,18 @@ public class GenericYamahaControl {
 	private void createGUI() {
 		if (commandList==null) return;
 		
-		
 		LanguageConfig languageConfig = commandList.unitDescription.languageConfig;
 		Vector<String> langCodes = languageConfig.getLangCodes();
 		String langCode = langCodes.isEmpty()?null:langCodes.firstElement();
 		
-		GUIComp base = GUIComp.createBase(commandList,langCode,languageConfig);
+		GUIComp base = GUIComp.createBase(commandList,langCode,this.address);
 		
 		JPanel languagePanel = new JPanel(new BorderLayout(3,3));
 		languagePanel.add(new JLabel("Language: "),BorderLayout.WEST);
 		
 		if (langCodes.size()>1) {
 			JComboBox<String> langSelect = new JComboBox<String>(langCodes);
-			langSelect.addActionListener(e->GUIComp.setLanguage(base,(String)langSelect.getSelectedItem()));
+			langSelect.addActionListener(e->base.setLanguage((String)langSelect.getSelectedItem()));
 			languagePanel.add(langSelect,BorderLayout.CENTER);
 		} else if (langCodes.size()==1)
 			languagePanel.add(new JLabel(langCode),BorderLayout.CENTER);
@@ -111,7 +112,10 @@ public class GenericYamahaControl {
 		boolean verbose = true;
 		String content = Ctrl.http.getContentFromURL("http://"+address+"/YamahaRemoteControl/desc.xml", verbose );
 		Document document = content==null?null:XML.parse(content);
-		if (document!=null) commandList = new DocumentItem(document);
+		if (document!=null) {
+			commandList = new DocumentItem(document);
+			commandList.indirectValues.getValues(address);
+		}
 		if (verbose) System.out.println("done");
 		
 		if (commandList!=null) ComplexCommand.ParamValueOcc.print();
@@ -125,49 +129,82 @@ public class GenericYamahaControl {
 		
 		protected JComponent comp;
 		protected String langCode;
-		protected LanguageConfig languageConfig;
+		protected String address;
 		
-		protected GUIComp(String langCode, LanguageConfig languageConfig) {
+		protected GUIComp(String langCode, String address) {
 			this.parent = null;
 			this.langCode = langCode;
-			this.languageConfig = languageConfig;
+			this.address = address;
 			comp = null;
 			children = new Vector<>();
 		}
 		protected GUIComp(GUIComp parent) {
-			this(parent.langCode, parent.languageConfig);
+			this(parent.langCode,parent.address);
 			this.parent = parent;
 		}
 		
 		protected abstract void updateAfterLanguageChange();
 		
-		public static void setLanguage(GUIComp comp, String langCode) {
-			comp.langCode = langCode;
-			comp.updateAfterLanguageChange();
-			for (GUIComp child:comp.children)
-				setLanguage(child,langCode);
+		public void setLanguage(String langCode) {
+			this.langCode = langCode;
+			updateAfterLanguageChange();
+			for (GUIComp child:children)
+				child.setLanguage(langCode);
 		}
 	
 		protected void addChild(GUIComp child) { children.add(child); }
 		
-		private static GUIComp createBase(DocumentItem item, String langCode, LanguageConfig languageConfig) {
-			return new UnitDescriptionPanel(item.unitDescription, langCode, languageConfig);
+		private static GUIComp createBase(DocumentItem item, String langCode, String address) {
+			return new UnitDescriptionPanel(item.unitDescription, langCode, address);
 		}
 	}
 
 	private static class UnitDescriptionPanel extends GUIComp {
 	
-		protected UnitDescriptionPanel(UnitDescriptionItem item, String langCode, LanguageConfig languageConfig) {
-			super(langCode, languageConfig);
+		protected UnitDescriptionPanel(UnitDescriptionItem item, String langCode, String address) {
+			super(langCode,address);
 			
 			JTabbedPane tabbedPane = new JTabbedPane();
+			tabbedPane.addTab("Indirect Values", new IndirectValuesPanel(item.indirectValues,address));
 			for (MenuItem menu:item.menues)
 				MenuTabPanel.addMenuTab(tabbedPane, this, menu);
+			
 			comp = tabbedPane;
 			comp.setBorder(BorderFactory.createTitledBorder(item.toString()));
 		}
 	
 		@Override protected void updateAfterLanguageChange() {}
+	}
+
+	private static class IndirectValuesPanel extends JPanel {
+		private static final long serialVersionUID = -5298848654454487092L;
+
+		public IndirectValuesPanel(IndirectValues indirectValues, String address) {
+			super(new GridBagLayout());
+			GridBagConstraints c = new GridBagConstraints();
+			c.fill = GridBagConstraints.BOTH;
+			c.weighty = 0;
+			indirectValues.forEach((tagList, ivArr) -> {
+				JButton button = new JButton("Get",CommandList.getTreeIcon(TreeIcon.Command_GET));
+				button.addActionListener(e->testCommand(tagList, address));
+				c.weightx = 1;
+				c.gridwidth = 1;
+				add(new JLabel(tagList.toString()),c);
+				c.weightx = 0;
+				c.gridwidth = GridBagConstraints.REMAINDER;
+				add(button,c);
+			});
+			c.weightx = 1;
+			c.weighty = 1;
+			c.gridwidth = GridBagConstraints.REMAINDER;
+			add(new JLabel(""),c);
+		}
+		
+		private void testCommand(TagList taglist, String address) {
+			if (address==null) return;
+			String xmlCommand = Ctrl.buildGetCommand(taglist);
+			Ctrl.testCommand(address, xmlCommand, false);
+		}
 	}
 
 	private static class MenuPanel extends GUIComp {
@@ -181,7 +218,7 @@ public class GenericYamahaControl {
 			
 			JPanel commandList = null;
 			if (!item.commands.isEmpty())
-				commandList = createCommandList(new JPanel());
+				commandList = createCommandList();
 			
 			MenuItem[] tabMenus   = item.menues.stream().filter(m->!m.menues.isEmpty()).toArray(n->new MenuItem[n]);
 			MenuItem[] plainMenus = item.menues.stream().filter(m-> m.menues.isEmpty()).toArray(n->new MenuItem[n]);
@@ -192,7 +229,7 @@ public class GenericYamahaControl {
 			
 			JPanel menuList = null;
 			if (plainMenus.length>0)
-				menuList = createPlainMenus(new JPanel(),plainMenus);
+				menuList = createPlainMenus(plainMenus);
 			
 			if      (commandList==null && menuTabs==null && menuList==null) { comp = new JLabel("L: "+item.toString()); }
 			else if (commandList!=null && menuTabs==null && menuList==null) { comp = commandList; }
@@ -227,8 +264,8 @@ public class GenericYamahaControl {
 			return item.toString();
 		}
 	
-		private JPanel createCommandList(JPanel commandList) {
-			commandList.setLayout(new GridBagLayout());
+		private JPanel createCommandList() {
+			JPanel commandList = new JPanel(new GridBagLayout());
 			//GridBagConstraints c = new GridBagConstraints();
 			//c.fill = GridBagConstraints.BOTH;
 			//c.gridwidth = GridBagConstraints.REMAINDER;
@@ -241,8 +278,8 @@ public class GenericYamahaControl {
 			return commandList;
 		}
 		
-		private JPanel createPlainMenus(JPanel menuList, MenuItem[] menus) {
-			menuList.setLayout(new GridBagLayout());
+		private JPanel createPlainMenus(MenuItem[] menus) {
+			JPanel menuList = new JPanel(new GridBagLayout());
 			GridBagConstraints c = new GridBagConstraints();
 			c.fill = GridBagConstraints.BOTH;
 			c.gridwidth = GridBagConstraints.REMAINDER;
@@ -429,10 +466,37 @@ public class GenericYamahaControl {
 					values = new ParamValue[] {null,null,null};
 				}
 	
+				@SuppressWarnings("unused")
+				private int getLength() {
+					int n = 0;
+					for (ParamValue val:values) {
+						if (val==null) continue;
+						if (val instanceof DirectValue && ((DirectValue) val).isDummy) continue;
+						n++;
+					}
+					return n;
+				}
+				
+				private ParamValue getSingle() {
+					ParamValue single = null;
+					for (ParamValue val:values) {
+						if (val==null) continue;
+						if (val instanceof DirectValue && ((DirectValue) val).isDummy) continue;
+						if (single != null) return null;
+						single = val;
+					}
+					return single;
+				}
+
 				public void set(int i, ParamValue paramValue) { values[i] = paramValue; }
 				public ParamValue get(int i) { return values[i]; }
 				
-				@Override public String toString() { return "["+index+"]"; } // TODO
+				@Override public String toString() {
+					String str = "["+index+"]";
+					ParamValue single = getSingle();
+					if (single!=null) str += " "+single.getLabel();
+					return str;
+				}
 			}
 		}
 		
@@ -500,7 +564,8 @@ public class GenericYamahaControl {
 
 			private void setValueField(FormatedTextField field, IndirectValue paramValue) {
 				field.setEditable(false);
-				field.setText("<Indirect>"); // TODO
+				field.setText("<Indirect>"); // TODO: TextField -> ComboBox
+				field.setToolTipText(paramValue.toString());
 				field.setEmptyFieldText(null);
 			}
 
@@ -512,15 +577,18 @@ public class GenericYamahaControl {
 				field.setEditable(false);
 				field.setText(paramValue.value);
 				field.setEmptyFieldText(null);
+				field.setToolTipText(paramValue.getFullLabel());
 			}
 
 			private void setValueField(FormatedTextField field, RangeValue paramValue) {
 				field.setEmptyFieldText(paramValue.toString());
+				field.setToolTipText(paramValue.toString());
 				field.setText("");
 			}
 
 			private void setValueField(FormatedTextField field, TextValue paramValue) {
 				field.setEmptyFieldText(paramValue.toString());
+				field.setToolTipText(paramValue.toString());
 				field.setText("");
 			}
 			
@@ -619,7 +687,6 @@ public class GenericYamahaControl {
 		
 		public void setEmptyFieldText(String emptyFieldText) {
 			this.emptyFieldText = emptyFieldText;
-			setToolTipText(emptyFieldText);
 			if (isEmpty || hasNoText()) setText(true, emptyFieldText);
 		}
 

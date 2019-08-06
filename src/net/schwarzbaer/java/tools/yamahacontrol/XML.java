@@ -41,6 +41,17 @@ final class XML {
 		}
 
 		@Override
+		public int hashCode() {
+			return tagListStr.hashCode();
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			if (!(obj instanceof TagList)) return false;
+			return tagListStr.equals(((TagList) obj).tagListStr);
+		}
+
+		@Override
 		public String toString() {
 			return tagListStr;
 		}

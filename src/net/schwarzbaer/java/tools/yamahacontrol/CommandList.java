@@ -48,6 +48,7 @@ import org.w3c.dom.Text;
 
 import net.schwarzbaer.gui.Disabler;
 import net.schwarzbaer.gui.IconSource;
+import net.schwarzbaer.java.tools.yamahacontrol.CommandList.ParsedCommandItem.ComplexCommandItem;
 import net.schwarzbaer.java.tools.yamahacontrol.Ctrl.HttpResponse;
 import net.schwarzbaer.java.tools.yamahacontrol.XML.TagList;
 
@@ -636,7 +637,7 @@ public class CommandList {
 			default: return TreeIcon.Command;
 			}
 		}
-		
+
 		public void reportError(String format, Object... values) {
 			reportError(node, format, values);
 		}
@@ -928,11 +929,21 @@ public class CommandList {
 			public String cmdID;
 			public TagList baseTagList;
 			public CmdParam[] params;
+			
 			public Cmd() {
 				this.type = null;
 				this.cmdID = null;
 				this.baseTagList = null;
 				this.params = null;
+			}
+			
+			public Vector<IndirectValue> getIndirectValues() {
+				Vector<IndirectValue> indirectValues = new Vector<>();
+				for (CmdParam cmdParam:params)
+					for (ParamValue paramValue:cmdParam.param.values)
+						if (paramValue instanceof IndirectValue)
+							indirectValues.add((IndirectValue) paramValue);
+				return indirectValues;
 			}
 		}
 	
@@ -963,6 +974,7 @@ public class CommandList {
 		}
 	
 		protected static abstract class ParamValue {
+			public abstract String getLabel();
 			@Override public abstract String toString();
 		}
 	
@@ -978,6 +990,9 @@ public class CommandList {
 			}
 			@Override public String toString() {
 				return "Text: "+minLength+".."+maxLength+" ("+charset+")";
+			}
+			@Override public String getLabel() {
+				return "Text";
 			}
 		}
 	
@@ -998,17 +1013,9 @@ public class CommandList {
 				if (format == null) return "Number: "+range;
 				else                return "Label: "+format+" ("+range+")";
 			}
-		}
-	
-		protected static class IndirectValue extends ParamValue {
-			public TagList tagList;
-			public String cmdID;
-			IndirectValue() {
-				this.cmdID   = null;
-				this.tagList = null;
-			}
-			@Override public String toString() {
-				return "Values [GET["+cmdID+"]:"+tagList.toString()+"]";
+			@Override public String getLabel() {
+				if (format == null) return "Number";
+				else                return "Label";
 			}
 		}
 	
@@ -1037,8 +1044,117 @@ public class CommandList {
 				return "\""+value+"\"";
 				//return "Text: "+minLength+".."+maxLength+" letters (charset: "+charset+")";
 			}
+			
+			String getTags() {
+				String str = "";
+				if (func  !=null) str += (str.isEmpty()?"":" | ")+func  ;
+				if (funcEx!=null) str += (str.isEmpty()?"":" | ")+funcEx;
+				return str;
+			}
+			public String getFullLabel() {
+				String str = getLabel();
+				if (iconOn  !=null) str += " IconOn:"  +iconOn  ;
+				if (playable!=null) str += " Playable:"+playable;
+				return str;
+			}
+			@Override public String getLabel() {
+				String str = "";
+				if (!titles.isEmpty()) str = titles.toString()+"   ";
+				str += "["+getTags()+"]   ";
+				return str;
+			}
 		}
-	
+		
+		protected static class IndirectValue extends ParamValue {
+			public TagList tagList;
+			public String cmdID;
+			public DeviceDefinedValue[] values;
+					
+			IndirectValue() {
+				cmdID   = null;
+				tagList = null;
+				values  = null;
+			}
+			@Override public String toString() {
+				return "Values [GET["+cmdID+"]:"+tagList.toString()+"]";
+			}
+			@Override public String getLabel() {
+				return "Indirect";
+			}
+		}
+		
+		static class IndirectValues {
+			private HashMap<TagList, Vector<IndirectValue>> values;
+			IndirectValues() {
+				values = new HashMap<>();
+			}
+			public void add(Vector<IndirectValue> indirectValues) {
+				for (IndirectValue iv:indirectValues) {
+					TagList tagList = iv.tagList;
+					Vector<IndirectValue> ivArr = values.get(tagList);
+					if (ivArr==null) values.put(tagList, ivArr = new Vector<>());
+					ivArr.add(iv);
+				}
+			}
+			public void forEach(BiConsumer<TagList, Vector<IndirectValue>> action) {
+				values.forEach(action);
+			}
+			public void getValues(String address, TagList tagList) {
+				Vector<IndirectValue> ivArr = values.get(tagList);
+				if (ivArr==null) return;
+				DeviceDefinedValue[] ddvArr = DeviceDefinedValue.getValues(address, tagList);
+				for (IndirectValue iv:ivArr) iv.values = ddvArr;
+			}
+			public void getValues(String address) {
+				values.forEach((tagList, ivArr) -> {
+					DeviceDefinedValue[] ddvArr = DeviceDefinedValue.getValues(address, tagList);
+					for (IndirectValue iv:ivArr) iv.values = ddvArr;
+				});
+			}
+		}
+		
+		static class DeviceDefinedValue {
+			public String ID;
+			public String rw;
+			public String title;
+			public String srcName;
+			public String srcNumber;
+			
+			public DeviceDefinedValue() {
+				this.ID = null;
+				this.rw = null;
+				this.title = null;
+				this.srcName = null;
+				this.srcNumber = null;
+			}
+			
+			static DeviceDefinedValue[] getValues(String address, TagList tagList) {
+				return getValues(address, tagList, "");
+			}
+			static DeviceDefinedValue[] getValues(String address, TagList tagList, String infoString) {
+				Node node = Ctrl.sendGetCommand_Node(address, infoString, tagList);
+				if (node == null) return null;
+				
+				NodeList itemNodes = node.getChildNodes();
+				DeviceDefinedValue[] ddvArr = new DeviceDefinedValue[itemNodes.getLength()];
+				for (int i=0; i<itemNodes.getLength(); ++i)
+					ddvArr[i] = parse(itemNodes.item(i));
+				return ddvArr;
+			}
+			static DeviceDefinedValue parse(Node node) {
+				DeviceDefinedValue ddv = new DeviceDefinedValue();
+				XML.forEachChild(node, value->{
+					switch (value.getNodeName()) {
+					case "Param"     : ddv.ID        = XML.getSubValue(value); break;
+					case "RW"        : ddv.rw        = XML.getSubValue(value); break;
+					case "Title"     : ddv.title     = XML.getSubValue(value); break;
+					case "Src_Name"  : ddv.srcName   = XML.getSubValue(value); break;
+					case "Src_Number": ddv.srcNumber = XML.getSubValue(value); break;
+					}
+				});
+				return ddv;
+			}
+		}
 	}
 	private static abstract class BaseTreeNode<Type extends BaseTreeNode<Type>> implements TreeNode {
 		
@@ -1991,15 +2107,36 @@ public class CommandList {
 		}
 	}
 	
+	static class GetGroups {
+		final HashMap<String,Vector<ParsedCommandItem.ComplexCommandItem>> groups;
+
+		private GetGroups() {
+			groups = new HashMap<>();
+		}
+
+		public Vector<ComplexCommandItem> add(String tagList, ComplexCommandItem item) {
+			Vector<ComplexCommandItem> group = groups.get(tagList);
+			if (group==null) groups.put(tagList, group = new Vector<>());
+			group.add(item);
+			return group;
+		}
+		
+	}
+	
 	static abstract class ParsedCommandItem {
 		
 		final ParsedCommandItem parent;
 		final Node node;
+		final GetGroups getGroups;
+		final ComplexCommand.IndirectValues indirectValues;
 		
 		public ParsedCommandItem(ParsedCommandItem parent, Node node) {
 			this.parent = parent;
 			this.node = node;
+			this.getGroups      = this.parent!=null ? this.parent.getGroups      : new GetGroups();
+			this.indirectValues = this.parent!=null ? this.parent.indirectValues : new ComplexCommand.IndirectValues();
 		}
+		
 		public Iterable<ParsedCommandItem> getChildren() { return this::getChildIterator; }
 		public abstract Iterator<ParsedCommandItem> getChildIterator();
 		@Override public abstract String toString();
@@ -2083,7 +2220,6 @@ public class CommandList {
 			public DocumentItem(Document document) {
 				super(null,document);
 				this.document = document;
-				ComplexCommandItem.GetGroups.clear();
 				
 				// <Unit_Description Unit_Name="RX-V475" Version="1.2">
 				parseSubNodes((subNode, nodeType, nodeName, nodeValue) -> {
@@ -2458,22 +2594,21 @@ public class CommandList {
 		}
 		
 		static class ComplexCommandItem extends CommandItem implements ComplexCommand.ComplexCommandContext {
-			static HashMap<String,Vector<ComplexCommandItem>> GetGroups = new HashMap<>();
 			
 			ComplexCommand complexCommand;
 			private LanguageConfig languageConfig;
+			@SuppressWarnings("unused")
 			private Vector<ComplexCommandItem> getGroup;
 
 			public ComplexCommandItem(ParsedCommandItem parent, Node node, ComplexCommand.Type type, LanguageConfig languageConfig) {
 				super(parent, node);
 				this.languageConfig = languageConfig;
 				complexCommand = new ComplexCommand(node,type,this);
+				indirectValues.add(complexCommand.cmd.getIndirectValues());
 				
 				if (type==ComplexCommand.Type.Get) {
 					String tagList = complexCommand.cmd.baseTagList.toString();
-					getGroup = GetGroups.get(tagList);
-					if (getGroup==null) GetGroups.put(tagList, getGroup = new Vector<>());
-					getGroup.add(this);
+					getGroup = getGroups.add(tagList,this);
 				}
 			}
 

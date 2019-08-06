@@ -192,9 +192,14 @@ final class Ctrl {
 	}
 	
 	public static Node sendGetCommand_Node(String address, Device.KnownCommand knownCommand) {
-		
-		if (showCommands) Log.info(Ctrl.class, "GET: %s", knownCommand.toFullString());
-		String command = buildGetCommand(knownCommand.getTagList());
+		String fullString = knownCommand.toFullString();
+		TagList tagList = knownCommand.getTagList();
+		return sendGetCommand_Node(address, fullString, tagList);
+	}
+
+	public static Node sendGetCommand_Node(String address, String infoString, TagList tagList) {
+		if (showCommands) Log.info(Ctrl.class, "GET: %s", infoString);
+		String command = buildGetCommand(tagList);
 		Document document = sendCommand_controlled(address, command);
 		if (lastRC!=RC_OK) return null;
 		if (document==null) return null;
@@ -202,7 +207,7 @@ final class Ctrl {
 //		StringBuilder sb = new StringBuilder();
 //		XML.showXMLformated(sb,"",document);
 		
-		TagList tagList = knownCommand.getTagList().addBefore("YAMAHA_AV");
+		tagList = tagList.addBefore("YAMAHA_AV");
 		Vector<Node> nodes = XML.getNodes(document, tagList);
 		if (nodes.isEmpty()) { Log.error(XML.class, "Can't find subnode in response: TagList=%s", tagList); return null; }
 		if (nodes.size()>1) Log.warning(XML.class, "Found more than one subnode in response: TagList=%s", tagList);

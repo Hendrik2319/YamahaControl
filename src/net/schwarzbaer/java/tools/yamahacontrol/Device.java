@@ -10,8 +10,8 @@ import java.util.Locale;
 import java.util.Vector;
 
 import org.w3c.dom.Node;
-import org.w3c.dom.NodeList;
 
+import net.schwarzbaer.java.tools.yamahacontrol.CommandList.ComplexCommand.DeviceDefinedValue;
 import net.schwarzbaer.java.tools.yamahacontrol.XML.TagList;
 import net.schwarzbaer.java.tools.yamahacontrol.YamahaControl.Log;
 
@@ -544,7 +544,18 @@ public final class Device {
 	}
 
 	static class Inputs {
-
+		
+		static class DeviceSceneInput extends DeviceDefinedValue {
+			
+			public static DeviceSceneInput parse(Node node) {
+				return (DeviceSceneInput) DeviceDefinedValue.parse(node);
+			}
+			public static DeviceSceneInput[] getValues(String address, KnownCommand knownCommand) {
+				return (DeviceSceneInput[]) DeviceDefinedValue.getValues(address, knownCommand.getTagList(), knownCommand.toFullString());
+			}
+			
+		}
+		
 		private Device device;
 		private DeviceSceneInput[] scenes;
 		private DeviceSceneInput[] inputs;
@@ -557,8 +568,8 @@ public final class Device {
 
 		public boolean hasScenes() { return scenes!=null; }
 		public boolean hasInputs() { return inputs!=null; }
-		public void askScenes() { scenes = getSceneInput(KnownCommand.MainZone.GetSceneItems); }
-		public void askInputs() { inputs = getSceneInput(KnownCommand.MainZone.GetInputItems); }
+		public void askScenes() { scenes = DeviceSceneInput.getValues(device.address, KnownCommand.MainZone.GetSceneItems); }
+		public void askInputs() { inputs = DeviceSceneInput.getValues(device.address, KnownCommand.MainZone.GetInputItems); }
 		public DeviceSceneInput[] getScenes() { return scenes; }
 		public DeviceSceneInput[] getInputs() { return inputs; }
 		public void setScene(DeviceSceneInput dsi) {
@@ -587,46 +598,6 @@ public final class Device {
 				if (device.mainZone.basicStatus.currentInput.equals(dsi.ID))
 					return dsi;
 			return null;
-		}
-
-		private DeviceSceneInput[] getSceneInput(KnownCommand knownCommand) {
-			Node node = Ctrl.sendGetCommand_Node(device.address,knownCommand);
-			if (node == null) return null;
-			
-			NodeList itemNodes = node.getChildNodes();
-			DeviceSceneInput[] dsiArr = new DeviceSceneInput[itemNodes.getLength()];
-			for (int i=0; i<itemNodes.getLength(); ++i)
-				dsiArr[i] = DeviceSceneInput.parse(itemNodes.item(i));
-			return dsiArr;
-		}
-		
-		static class DeviceSceneInput {
-			public String ID;
-			public String rw;
-			public String title;
-			public String srcName;
-			public String srcNumber;
-			public DeviceSceneInput() {
-				this.ID = null;
-				this.rw = null;
-				this.title = null;
-				this.srcName = null;
-				this.srcNumber = null;
-			}
-
-			static DeviceSceneInput parse(Node item) {
-				DeviceSceneInput dsi = new DeviceSceneInput();
-				XML.forEachChild(item, value->{
-					switch (value.getNodeName()) {
-					case "Param"     : dsi.ID        = XML.getSubValue(value); break;
-					case "RW"        : dsi.rw        = XML.getSubValue(value); break;
-					case "Title"     : dsi.title     = XML.getSubValue(value); break;
-					case "Src_Name"  : dsi.srcName   = XML.getSubValue(value); break;
-					case "Src_Number": dsi.srcNumber = XML.getSubValue(value); break;
-					}
-				});
-				return dsi;
-			}
 		}
 	}
 
