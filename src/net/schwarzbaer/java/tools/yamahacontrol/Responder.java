@@ -360,11 +360,9 @@ public class Responder extends Ctrl.HttpInterface {
 		private HashMap<String,TableEntry.Command> commands;
 		private LabelRendererComponent rendererLabel;
 		private CheckBoxRendererComponent rendererCheckBox;
-		private JTable table;
 
 		ResponseTableModel() {
 			super(ColumnID.values());
-			table = null;
 			commands = new HashMap<>();
 			rows = TableEntry.createEntries(commands);
 			rendererLabel = new Tables.LabelRendererComponent();
@@ -377,10 +375,6 @@ public class Responder extends Ctrl.HttpInterface {
 		private void rebuildRows() {
 			rows = TableEntry.createEntries(commands);
 			fireTableUpdate();
-		}
-
-		public void setTable(JTable table) {
-			this.table = table;
 		}
 
 		public TableEntry getRow(int rowIndex) {
