@@ -1128,6 +1128,14 @@ public class CommandList {
 				this.srcNumber = null;
 			}
 			
+			public DeviceDefinedValue(DeviceDefinedValue ddv) {
+				this.ID        = ddv.ID       ;
+				this.rw        = ddv.rw       ;
+				this.title     = ddv.title    ;
+				this.srcName   = ddv.srcName  ;
+				this.srcNumber = ddv.srcNumber;
+			}
+
 			static DeviceDefinedValue[] getValues(String address, TagList tagList) {
 				return getValues(address, tagList, "");
 			}

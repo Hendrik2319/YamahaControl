@@ -7,6 +7,7 @@ import java.awt.Dimension;
 import java.awt.Graphics2D;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
+import java.awt.Image;
 import java.awt.Insets;
 import java.awt.Toolkit;
 import java.awt.datatransfer.Clipboard;
@@ -21,6 +22,7 @@ import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.io.PrintStream;
@@ -48,6 +50,7 @@ import java.util.function.Function;
 import java.util.function.Predicate;
 
 import javax.activation.DataHandler;
+import javax.imageio.ImageIO;
 import javax.swing.AbstractButton;
 import javax.swing.BorderFactory;
 import javax.swing.ButtonGroup;
@@ -327,8 +330,26 @@ public class YamahaControl {
 		contentPane.add(mainControlPanel,BorderLayout.WEST);
 		contentPane.add(subUnitPanel,BorderLayout.CENTER);
 		
+		Vector<Image> icons = new Vector<>();
+		String[] iconNames = new String[] { "Yamaha_Logo_16.png", "Yamaha_Logo_24.png", "Yamaha_Logo_32.png", "Yamaha_Logo_48.png", "Yamaha_Logo_64.png", "Yamaha_Logo_96.png", "Yamaha_Logo_128.png", "Yamaha_Logo_256.png" };
+		for (String name:iconNames) {
+			name = "/"+name;
+			try {
+				InputStream stream = iconNames.getClass().getResourceAsStream(name);
+				if (stream==null) {
+					System.err.printf("Can't find application icon \"%s\" in resources.%n", name);
+					continue;
+				}
+				BufferedImage image = ImageIO.read(stream);
+				icons.add(image);
+			} catch (IOException e1) {
+				System.err.printf("Can't read application icon \"%s\" from resources: %s%n", name, e1.getMessage());
+			}
+		}
+		
 		mainWindow = new StandardMainWindow("YamahaControl");
 		mainWindow.startGUI(contentPane);
+		mainWindow.setIconImages(icons);
 		
 		guiRegions.forEach(gr->gr.setEnabledGUI(false));
 	}

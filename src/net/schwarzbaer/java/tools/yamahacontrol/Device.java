@@ -547,11 +547,15 @@ public final class Device {
 		
 		static class DeviceSceneInput extends DeviceDefinedValue {
 			
+			public DeviceSceneInput(DeviceDefinedValue ddv) { super(ddv); }
+			
 			public static DeviceSceneInput parse(Node node) {
-				return (DeviceSceneInput) DeviceDefinedValue.parse(node);
+				return new DeviceSceneInput(DeviceDefinedValue.parse(node));
 			}
 			public static DeviceSceneInput[] getValues(String address, KnownCommand knownCommand) {
-				return (DeviceSceneInput[]) DeviceDefinedValue.getValues(address, knownCommand.getTagList(), knownCommand.toFullString());
+				DeviceDefinedValue[] ddvArr = DeviceDefinedValue.getValues(address, knownCommand.getTagList(), knownCommand.toFullString());
+				DeviceSceneInput[] dsiArr = Arrays.stream(ddvArr).map(DeviceSceneInput::new).toArray(n->new DeviceSceneInput[n]);
+				return dsiArr;
 			}
 			
 		}
