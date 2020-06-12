@@ -13,16 +13,15 @@ import java.util.Locale;
 
 import net.schwarzbaer.gui.Canvas;
 import net.schwarzbaer.image.BumpMapping;
-import net.schwarzbaer.image.ImageCache;
-import net.schwarzbaer.image.BumpMapping.NormalFunctionPolar;
 import net.schwarzbaer.image.BumpMapping.Normal;
+import net.schwarzbaer.image.ImageCache;
 
 public class RotaryCtrl extends Canvas {
 		private static final Color COLOR_DISABLED_MARKER = new Color(0x8080B0);
 		//private static final Color COLOR_DISABLED_BACKGROUND = new Color(0xE8E8E8);
 		private static final long serialVersionUID = -5870265710270984615L;
 		private double angle;
-		private int radius;
+		private final int radius;
 		private double zeroAngle;
 		private double value;
 		private double deltaPerFullCircle;
@@ -30,7 +29,7 @@ public class RotaryCtrl extends Canvas {
 		private RotaryCtrl.ValueListener valueListener;
 		private int decimals;
 		private double tickInterval;
-		private boolean showInnerCircle;
+		private boolean valueIn2Rows;
 		private double minValue;
 		private double maxValue;
 		private MouseHandler mouseHandler;
@@ -40,11 +39,11 @@ public class RotaryCtrl extends Canvas {
 			public void valueChanged(double value, boolean isAdjusting);
 		}
 		
-		public RotaryCtrl(int width, boolean showInnerCircle, double minValue, double maxValue, double deltaPerFullCircle, double tickInterval, int decimals, double zeroAngle_deg, RotaryCtrl.ValueListener valueListener) {
+		public RotaryCtrl(int width, boolean valueIn2Rows, double minValue, double maxValue, double deltaPerFullCircle, double tickInterval, int decimals, double zeroAngle_deg, RotaryCtrl.ValueListener valueListener) {
 			super(width, width);
 			this.minValue = minValue;
 			this.maxValue = maxValue;
-			this.showInnerCircle = showInnerCircle;
+			this.valueIn2Rows = valueIn2Rows;
 			this.deltaPerFullCircle = deltaPerFullCircle;
 			this.decimals = decimals;
 			this.tickInterval = tickInterval;
@@ -56,30 +55,37 @@ public class RotaryCtrl extends Canvas {
 			value = 0.0;
 			unit = null;
 			
+			double r1 = radius/2;
+			double r2 = radius/2+5;
+			double r3 = radius-15;
+			double r4 = radius;
+			double tr = 2;
+			
+			if (r2+tr > r3-tr) {
+				r3 = (r2+r4)/2;
+				//throw new IllegalArgumentException();
+			}
+			
+			Normal vFace  = new Normal(0,0,1);
+			Normal vInner = BumpMapping.ConstructivePolarNormalFunction.Constant.computeNormal(r1+tr, r2   , 0, 5);
+			Normal vOuter = BumpMapping.ConstructivePolarNormalFunction.Constant.computeNormal(r3   , r4-tr, 5, 0);
+			
 			BumpMapping bumpMapping = new BumpMapping(
 				new Normal(1,-1,2).normalize(),
 				Color.WHITE,new Color(0xf0f0f0),new Color(0x707070),
-				new NormalFunctionPolar() {
-					Normal vFace  = new Normal( 0,0,1);
-					Normal vInner = new Normal(-1,0,1);
-					Normal vOuter = new Normal( 1,0,3);
-					@Override
-					public Normal getNormal(double w, double r) {
-						Normal n;
-						int r1 = radius/2;
-						int r2 = radius/2+5;
-						int r3 = radius-15;
-						int r4 = radius;
-						if      (r1  <r && r<=r2  ) n = vInner;
-						else if (r3  <r && r<=r4  ) n = vOuter;
-						//else if (r1-2<r && r<=r1  ) n = Vector3D.blend(r, r1-2, r1  , vFace, vInner);
-						else if (r2  <r && r<=r2+2) n = Normal.blend(r, r2  , r2+2, vInner, vFace);
-						else if (r3-2<r && r<=r3  ) n = Normal.blend(r, r3-2, r3  , vFace, vOuter);
-						//else if (r4  <r && r<=r4+2) n = Vector3D.blend(r, r4  , r4+2, vOuter, vFace);
-						else                        n = vFace;
-						return n.normalize().rotateZ(w);
-					}
-				}
+				new BumpMapping.ConstructivePolarNormalFunction.Group(
+					new BumpMapping.ConstructivePolarNormalFunction.Constant  (   0.0, r1-tr ),
+					new BumpMapping.ConstructivePolarNormalFunction.RoundBlend(r1-tr , r1    , vFace,new Normal(1,0,0)),
+					new BumpMapping.ConstructivePolarNormalFunction.RoundBlend(r1    , r1+tr , new Normal(-1,0,0),vInner),
+					new BumpMapping.ConstructivePolarNormalFunction.Constant  (r1+tr , r2    , 0, 5),
+					new BumpMapping.ConstructivePolarNormalFunction.RoundBlend(r2    , r2+tr , vInner, vFace),
+					new BumpMapping.ConstructivePolarNormalFunction.Constant  (r2+tr , r3-tr ),
+					new BumpMapping.ConstructivePolarNormalFunction.RoundBlend(r3-tr , r3    , vFace, vOuter),
+					new BumpMapping.ConstructivePolarNormalFunction.Constant  (r3    , r4-tr , 5, 0),
+					new BumpMapping.ConstructivePolarNormalFunction.RoundBlend(r4-tr , r4    , vOuter,new Normal(1,0,0)),
+					new BumpMapping.ConstructivePolarNormalFunction.RoundBlend(r4    , r4+tr , new Normal(-1,0,0),vFace),
+					new BumpMapping.ConstructivePolarNormalFunction.Constant  (r4+tr , Double.POSITIVE_INFINITY)
+				)
 			);
 			backgroundImageCache = new ImageCache<Image>((w,h)->bumpMapping.renderImage(w,h));
 			
@@ -194,15 +200,15 @@ public class RotaryCtrl extends Canvas {
 			
 			//Color ctrlBackground = Color.WHITE;
 			Color ctrlTicks  = Color.BLACK;
-			Color ctrlLines  = new Color(0xd0d0d0); //Color.BLACK;
-			Color ctrlLines2 = new Color(0xd0d0d0); //Color.GRAY;
+//			Color ctrlLines  = new Color(0xd0d0d0); //Color.BLACK;
+//			Color ctrlLines2 = new Color(0xd0d0d0); //Color.GRAY;
 			Color ctrlMarker = Color.BLACK; //Color.BLUE;
 			Color ctrlText   = Color.BLACK;
 			if (!isEnabled()) {
 				//ctrlBackground = COLOR_DISABLED_BACKGROUND;
 				ctrlTicks  = Color.GRAY;
-				ctrlLines  = new Color(0xd0d0d0); //Color.GRAY;
-				ctrlLines2 = new Color(0xd0d0d0); //Color.GRAY;
+//				ctrlLines  = new Color(0xd0d0d0); //Color.GRAY;
+//				ctrlLines2 = new Color(0xd0d0d0); //Color.GRAY;
 				ctrlMarker = COLOR_DISABLED_MARKER;
 				ctrlText   = Color.GRAY;
 			}
@@ -222,26 +228,42 @@ public class RotaryCtrl extends Canvas {
 			//g.setColor(ctrlBackground);
 			//g.fillOval(width/2-radius, height/2-radius, radius*2, radius*2);
 			
-			g.setColor(ctrlLines);
-			g.drawOval(x+width/2-radius, y+height/2-radius, radius*2, radius*2);
-			if (showInnerCircle) {
-				g.setColor(ctrlLines2);
-				g.drawOval(x+width/2-radius/2, y+height/2-radius/2, radius, radius);
-			}
+//			g.setColor(ctrlLines);
+//			g.drawOval(x+width/2-radius, y+height/2-radius, radius*2, radius*2);
+//			if (showInnerCircle) {
+//				g.setColor(ctrlLines2);
+//				g.drawOval(x+width/2-radius/2, y+height/2-radius/2, radius, radius);
+//			}
 			
 			g.setColor(ctrlMarker);
 			if (g2!=null) g2.setStroke( new BasicStroke(5,BasicStroke.CAP_ROUND,BasicStroke.JOIN_ROUND) );
 			drawRadiusLine(g, x,y, width, height, 0.9, 0.7, angle+zeroAngle);
 			if (g2!=null) g2.setStroke(new BasicStroke(1));
 			
-			String str = unit==null?"":String.format(Locale.ENGLISH, "%1."+decimals+"f %s", value, unit);
-			Rectangle2D stringBounds = g.getFontMetrics().getStringBounds(str,g);
-			int strX = width/2-(int)Math.round(stringBounds.getWidth()/2+stringBounds.getX());
-			int strY = height/2-(int)Math.round(stringBounds.getHeight()/2+stringBounds.getY());
-			
-			g.setColor(ctrlText);
-			g.drawString(str, x+strX, y+strY);
-			//g.drawString(String.format(Locale.ENGLISH, "%6.1f", angle/Math.PI*180), width/2, height/2+15);
+			if (unit!=null) {
+				if (valueIn2Rows) {
+					String str1 = String.format(Locale.ENGLISH, "%1."+decimals+"f", value);
+					String str2 = unit;
+					Rectangle2D stringBounds1 = g.getFontMetrics().getStringBounds(str1,g);
+					Rectangle2D stringBounds2 = g.getFontMetrics().getStringBounds(str2,g);
+					int strX1 = width /2-(int)Math.round(stringBounds1.getWidth ()/2+stringBounds1.getX());
+					int strY1 = height/2-(int)Math.round(stringBounds1.getHeight()/2+stringBounds1.getY()) - 6;
+					int strX2 = width /2-(int)Math.round(stringBounds2.getWidth ()/2+stringBounds2.getX());
+					int strY2 = height/2-(int)Math.round(stringBounds2.getHeight()/2+stringBounds2.getY()) + 6;
+					
+					g.setColor(ctrlText);
+					g.drawString(str1, x+strX1, y+strY1);
+					g.drawString(str2, x+strX2, y+strY2);
+				} else {
+					String str = String.format(Locale.ENGLISH, "%1."+decimals+"f %s", value, unit);
+					Rectangle2D stringBounds = g.getFontMetrics().getStringBounds(str,g);
+					int strX = width /2-(int)Math.round(stringBounds.getWidth ()/2+stringBounds.getX());
+					int strY = height/2-(int)Math.round(stringBounds.getHeight()/2+stringBounds.getY());
+					
+					g.setColor(ctrlText);
+					g.drawString(str, x+strX, y+strY);
+				}
+			}
 		}
 
 		private void drawRadiusLine(Graphics g, int x, int y, int width, int height, double r1, double r2, double angle) {

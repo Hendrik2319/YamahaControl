@@ -500,7 +500,7 @@ final class SubUnits {
 			buttonPanel.add(presetLabel = new JLabel("Preset:"), 0,7, 0,0, 1,1, GridBagConstraints.BOTH);
 			buttonPanel.add(presetPanel, 1,7, 0,0, 3,1, GridBagConstraints.BOTH);
 			
-			tuneCtrl = new RotaryCtrl(150,false, -1.0, +1.0, 1.0, 1.0, 1, -90, new RotaryCtrl.ValueListener() {
+			tuneCtrl = new RotaryCtrl(150,true, -1.0, +1.0, 1.0, 1.0, 1, -90, new RotaryCtrl.ValueListener() {
 				@Override public void valueChanged(double value, boolean isAdjusting) {
 					if (device==null || device.tuner.playInfo.tuningBand==null) return;
 					switch(device.tuner.playInfo.tuningBand) {
