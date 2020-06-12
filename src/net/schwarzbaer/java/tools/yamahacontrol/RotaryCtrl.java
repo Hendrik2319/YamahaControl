@@ -59,7 +59,7 @@ public class RotaryCtrl extends Canvas {
 			double r2 = radius/2+5;
 			double r3 = radius-15;
 			double r4 = radius;
-			double tr = 2;
+			double tr = 3;
 			
 			if (r2+tr > r3-tr) {
 				r3 = (r2+r4)/2;
