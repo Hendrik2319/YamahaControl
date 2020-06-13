@@ -14,6 +14,7 @@ import java.util.Locale;
 import net.schwarzbaer.gui.Canvas;
 import net.schwarzbaer.image.BumpMapping;
 import net.schwarzbaer.image.BumpMapping.Normal;
+import net.schwarzbaer.image.BumpMapping.NormalXY;
 import net.schwarzbaer.image.ImageCache;
 
 public class RotaryCtrl extends Canvas {
@@ -66,25 +67,29 @@ public class RotaryCtrl extends Canvas {
 				//throw new IllegalArgumentException();
 			}
 			
-			Normal vFace  = new Normal(0,0,1);
-			Normal vInner = BumpMapping.ConstructivePolarNormalFunction.Constant.computeNormal(r1+tr, r2   , 0, 5);
-			Normal vOuter = BumpMapping.ConstructivePolarNormalFunction.Constant.computeNormal(r3   , r4-tr, 5, 0);
+			NormalXY vFace  = new NormalXY(0,1);
+			NormalXY vInner = BumpMapping.ProfileXY.Constant.computeNormal(r1+tr, r2   , 0, 5);
+			NormalXY vOuter = BumpMapping.ProfileXY.Constant.computeNormal(r3   , r4-tr, 5, 0);
+			NormalXY vHorizOutside = new NormalXY( 1,0);
+			NormalXY vHorizInside  = new NormalXY(-1,0);
 			
 			BumpMapping bumpMapping = new BumpMapping(
 				new Normal(1,-1,2).normalize(),
 				Color.WHITE,new Color(0xf0f0f0),new Color(0x707070),
-				new BumpMapping.ConstructivePolarNormalFunction.Group(
-					new BumpMapping.ConstructivePolarNormalFunction.Constant  (   0.0, r1-tr ),
-					new BumpMapping.ConstructivePolarNormalFunction.RoundBlend(r1-tr , r1    , vFace,new Normal(1,0,0)),
-					new BumpMapping.ConstructivePolarNormalFunction.RoundBlend(r1    , r1+tr , new Normal(-1,0,0),vInner),
-					new BumpMapping.ConstructivePolarNormalFunction.Constant  (r1+tr , r2    , 0, 5),
-					new BumpMapping.ConstructivePolarNormalFunction.RoundBlend(r2    , r2+tr , vInner, vFace),
-					new BumpMapping.ConstructivePolarNormalFunction.Constant  (r2+tr , r3-tr ),
-					new BumpMapping.ConstructivePolarNormalFunction.RoundBlend(r3-tr , r3    , vFace, vOuter),
-					new BumpMapping.ConstructivePolarNormalFunction.Constant  (r3    , r4-tr , 5, 0),
-					new BumpMapping.ConstructivePolarNormalFunction.RoundBlend(r4-tr , r4    , vOuter,new Normal(1,0,0)),
-					new BumpMapping.ConstructivePolarNormalFunction.RoundBlend(r4    , r4+tr , new Normal(-1,0,0),vFace),
-					new BumpMapping.ConstructivePolarNormalFunction.Constant  (r4+tr , Double.POSITIVE_INFINITY)
+				new BumpMapping.RotatedProfile(
+					new BumpMapping.ProfileXY.Group(
+						new BumpMapping.ProfileXY.Constant  (   0.0, r1-tr ),
+						new BumpMapping.ProfileXY.RoundBlend(r1-tr , r1    , vFace,vHorizOutside),
+						new BumpMapping.ProfileXY.RoundBlend(r1    , r1+tr , vHorizInside,vInner),
+						new BumpMapping.ProfileXY.Constant  (r1+tr , r2    , 0, 5),
+						new BumpMapping.ProfileXY.RoundBlend(r2    , r2+tr , vInner, vFace),
+						new BumpMapping.ProfileXY.Constant  (r2+tr , r3-tr ),
+						new BumpMapping.ProfileXY.RoundBlend(r3-tr , r3    , vFace, vOuter),
+						new BumpMapping.ProfileXY.Constant  (r3    , r4-tr , 5, 0),
+						new BumpMapping.ProfileXY.RoundBlend(r4-tr , r4    , vOuter,vHorizOutside),
+						new BumpMapping.ProfileXY.RoundBlend(r4    , r4+tr , vHorizInside,vFace),
+						new BumpMapping.ProfileXY.Constant  (r4+tr , Double.POSITIVE_INFINITY)
+					)
 				)
 			);
 			backgroundImageCache = new ImageCache<Image>((w,h)->bumpMapping.renderImage(w,h));
