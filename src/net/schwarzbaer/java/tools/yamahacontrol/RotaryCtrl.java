@@ -15,6 +15,7 @@ import net.schwarzbaer.gui.Canvas;
 import net.schwarzbaer.image.BumpMapping;
 import net.schwarzbaer.image.BumpMapping.Normal;
 import net.schwarzbaer.image.BumpMapping.NormalXY;
+import net.schwarzbaer.image.BumpMapping.ProfileXY;
 import net.schwarzbaer.image.ImageCache;
 
 public class RotaryCtrl extends Canvas {
@@ -68,8 +69,8 @@ public class RotaryCtrl extends Canvas {
 			}
 			
 			NormalXY vFace  = new NormalXY(0,1);
-			NormalXY vInner = BumpMapping.ProfileXY.Constant.computeNormal(r1+tr, r2   , 0, 5);
-			NormalXY vOuter = BumpMapping.ProfileXY.Constant.computeNormal(r3   , r4-tr, 5, 0);
+			NormalXY vInner = ProfileXY.Constant.computeNormal(r1+tr, r2   , 0, 5);
+			NormalXY vOuter = ProfileXY.Constant.computeNormal(r3   , r4-tr, 5, 0);
 			NormalXY vHorizOutside = new NormalXY( 1,0);
 			NormalXY vHorizInside  = new NormalXY(-1,0);
 			
@@ -77,18 +78,18 @@ public class RotaryCtrl extends Canvas {
 				new Normal(1,-1,2).normalize(),
 				Color.WHITE,new Color(0xf0f0f0),new Color(0x707070),
 				new BumpMapping.RotatedProfile(
-					new BumpMapping.ProfileXY.Group(
-						new BumpMapping.ProfileXY.Constant  (   0.0, r1-tr ),
-						new BumpMapping.ProfileXY.RoundBlend(r1-tr , r1    , vFace,vHorizOutside),
-						new BumpMapping.ProfileXY.RoundBlend(r1    , r1+tr , vHorizInside,vInner),
-						new BumpMapping.ProfileXY.Constant  (r1+tr , r2    , 0, 5),
-						new BumpMapping.ProfileXY.RoundBlend(r2    , r2+tr , vInner, vFace),
-						new BumpMapping.ProfileXY.Constant  (r2+tr , r3-tr ),
-						new BumpMapping.ProfileXY.RoundBlend(r3-tr , r3    , vFace, vOuter),
-						new BumpMapping.ProfileXY.Constant  (r3    , r4-tr , 5, 0),
-						new BumpMapping.ProfileXY.RoundBlend(r4-tr , r4    , vOuter,vHorizOutside),
-						new BumpMapping.ProfileXY.RoundBlend(r4    , r4+tr , vHorizInside,vFace),
-						new BumpMapping.ProfileXY.Constant  (r4+tr , Double.POSITIVE_INFINITY)
+					new ProfileXY.Group(
+						new ProfileXY.Constant  (   0.0, r1-tr ),
+						new ProfileXY.RoundBlend(r1-tr , r1    , vFace,vHorizOutside),
+						new ProfileXY.RoundBlend(r1    , r1+tr , vHorizInside,vInner),
+						new ProfileXY.Constant  (r1+tr , r2    , 0, 5),
+						new ProfileXY.RoundBlend(r2    , r2+tr , vInner, vFace),
+						new ProfileXY.Constant  (r2+tr , r3-tr ),
+						new ProfileXY.RoundBlend(r3-tr , r3    , vFace, vOuter),
+						new ProfileXY.Constant  (r3    , r4-tr , 5, 0),
+						new ProfileXY.RoundBlend(r4-tr , r4    , vOuter,vHorizOutside),
+						new ProfileXY.RoundBlend(r4    , r4+tr , vHorizInside,vFace),
+						new ProfileXY.Constant  (r4+tr , Double.POSITIVE_INFINITY)
 					)
 				)
 			);
