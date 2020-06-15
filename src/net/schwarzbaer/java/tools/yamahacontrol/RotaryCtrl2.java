@@ -125,9 +125,9 @@ public class RotaryCtrl2 extends Canvas {
 					tempBumpMapping.setOverSampling(bumpMapping.getOverSampling());
 					tempBumpMapping.setNormalFunction(rotatedProfile);
 					
-					BufferedImage[] arr = new BufferedImage[720];
+					BufferedImage[] arr = new BufferedImage[400];
 					for (int i=0; i<arr.length; i++) {
-						double angle_deg = i*0.5;
+						double angle_deg = i*360.0/arr.length;
 						ExtraNormalFunctionPolar.Rotated marker = new ExtraNormalFunctionPolar.Rotated(zeroAngle_deg+angle_deg, bigLine);
 						rotatedProfile.setExtras(new ExtraNormalFunctionPolar.Stencil( (w,r)->r<=radius, marker ));
 						arr[i] = tempBumpMapping.renderImage(fixedWidth,fixedWidth);
