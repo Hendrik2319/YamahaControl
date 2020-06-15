@@ -248,7 +248,7 @@ final class SubUnits {
 		private YamahaControl.ToggleButtonGroup<Value.ScanFreq> bgScanAM;
 		private YamahaControl.ToggleButtonGroup<Value.ScanFreq> bgScanFM;
 		private YamahaControl.ToggleButtonGroup<Value.ScanTP> bgScanFMTP;
-		private RotaryCtrl tuneCtrl;
+		private RotaryCtrl2 tuneCtrl;
 		private YamahaControl.ButtonFactory<Value.UpDown> presetButtons;
 		private JComboBox<Device.PlayInfo_Tuner.Preset> presetCmbBx;
 		private boolean presetCmbBx_ignoreSelectionEvent;
@@ -500,7 +500,7 @@ final class SubUnits {
 			buttonPanel.add(presetLabel = new JLabel("Preset:"), 0,7, 0,0, 1,1, GridBagConstraints.BOTH);
 			buttonPanel.add(presetPanel, 1,7, 0,0, 3,1, GridBagConstraints.BOTH);
 			
-			tuneCtrl = new RotaryCtrl(150,true, -1.0, +1.0, 1.0, 1.0, 1, -90, (value, isAdjusting) -> {
+			tuneCtrl = new RotaryCtrl2(150,true, -1.0, +1.0, 1.0, 1.0, 1, -90, (value, isAdjusting) -> {
 				if (device==null || device.tuner.playInfo.tuningBand==null) return;
 				switch(device.tuner.playInfo.tuningBand) {
 				case AM: freqAmSetter.set(value, isAdjusting); break;
