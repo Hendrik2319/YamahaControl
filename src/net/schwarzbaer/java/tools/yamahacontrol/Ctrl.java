@@ -246,6 +246,7 @@ final class Ctrl {
 		}
 		public abstract HttpResponse sendCommand(String address, String command, boolean verbose);
 		public abstract String getContentFromURL(String urlStr, boolean verbose);
+		public abstract byte[] getBinaryContentFromURL(String urlStr, boolean verbose);
 	}
 
 	public static class HttpResponse {
@@ -292,6 +293,17 @@ final class Ctrl {
 				addToCommProtocol(command,response.string);
 
 			return response;
+		}
+
+		@Override
+		public byte[] getBinaryContentFromURL(String urlStr, boolean verbose) {
+			HttpResponse response = sendHTTPRequest(
+					urlStr,
+					connection->{ connection.setDoInput(true); return true; },
+					null,
+					verbose);
+			if (response==null) return null;
+			return response.bytes;
 		}
 
 		@Override

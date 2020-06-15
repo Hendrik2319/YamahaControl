@@ -94,6 +94,12 @@ public class Responder extends Ctrl.HttpInterface {
 	}
 
 	@Override
+	public byte[] getBinaryContentFromURL(String urlStr, boolean verbose) {
+		throw new UnsupportedOperationException();
+		// TODO
+	}
+
+	@Override
 	public String getContentFromURL(String urlStr, boolean verbose) {
 		if (urlStr==null) return null;
 		if (urlStr.startsWith("http://") && urlStr.endsWith("/YamahaRemoteControl/desc.xml")) {

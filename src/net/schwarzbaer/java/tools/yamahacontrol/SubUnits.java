@@ -9,6 +9,11 @@ import java.awt.Insets;
 import java.awt.Window;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.FileAlreadyExistsException;
+import java.nio.file.Files;
+import java.nio.file.StandardOpenOption;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Vector;
@@ -22,6 +27,7 @@ import javax.swing.JCheckBoxMenuItem;
 import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JDialog;
+import javax.swing.JFileChooser;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
@@ -131,12 +137,16 @@ final class SubUnits {
 		private static final long serialVersionUID = -8583320100311806933L;
 		
 		private StandardMainWindow mainWindow;
+		private JFileChooser fileChooser;
 	
 		public SubUnitNetRadio(StandardMainWindow mainWindow) {
 			super("NET RADIO", "Net Radio", UpdateWish.NetRadioConfig, UpdateWish.NetRadioListInfo, UpdateWish.NetRadioPlayInfo);
 			this.mainWindow = mainWindow;
 			modules.add(new PlayButtonModule(this, this));
 			withExtraCharsetConversion = true;
+			fileChooser = new JFileChooser("./");
+			fileChooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
+			fileChooser.setMultiSelectionEnabled(false);
 		}
 	
 		@Override
@@ -152,8 +162,40 @@ final class SubUnits {
 		@Override public void addExtraButtons(Vector<AbstractButton> buttons) {
 			buttons.add(YamahaControl.createButton("Add Song to PreferredSongs",e->addSongToPreferredSongs(),true));
 			buttons.add(YamahaControl.createButton("Show List",e->showPreferredSongs(),true));
+			buttons.add(YamahaControl.createButton("Save AlbumCover",e->saveAlbumCover(true),true));
 		}
 		
+		private void saveAlbumCover(boolean verbose) {
+			if (device == null) return;
+			if (device.netRadio.playInfo.albumCoverURL == null) return;
+			if (verbose) System.out.printf("%nRead AlbumCover ...%n");
+			byte[] content = Ctrl.http.getBinaryContentFromURL("http://"+device.address+device.netRadio.playInfo.albumCoverURL, verbose );
+			
+			int pos = device.netRadio.playInfo.albumCoverURL.lastIndexOf('/');
+			String filename;
+			if (pos<0) filename = device.netRadio.playInfo.albumCoverURL;
+			else filename = device.netRadio.playInfo.albumCoverURL.substring(pos+1);
+			if (!filename.isEmpty() && (device.netRadio.playInfo.albumCoverID!=null || device.netRadio.playInfo.currentStation!=null)) {
+				pos = filename.lastIndexOf('.');
+				String extra = "";
+				if (device.netRadio.playInfo.albumCoverID  !=null) extra += " - "+device.netRadio.playInfo.albumCoverID  .toString();
+				if (device.netRadio.playInfo.currentStation!=null) extra += " - "+device.netRadio.playInfo.currentStation.toString();
+				if (pos<0) filename += extra;
+				else filename = filename.substring(0,pos)+extra+filename.substring(pos);
+				
+				File folder = fileChooser.getCurrentDirectory();
+				fileChooser.setSelectedFile(new File(folder, filename));
+			}
+			
+			if (fileChooser.showSaveDialog(mainWindow)!=JFileChooser.APPROVE_OPTION) return;
+			File file = fileChooser.getSelectedFile();
+			
+			if (verbose) System.out.printf("Write data to file \"%s\"%n",file.getAbsolutePath());
+			try { Files.write(file.toPath(), content, StandardOpenOption.CREATE_NEW); }
+			catch (FileAlreadyExistsException e) { if (verbose) System.err.printf("Can't write file. File \"%s\" already exists.%n",file.getAbsolutePath()); }
+			catch (IOException e) { e.printStackTrace(); }
+		}
+
 		private void showPreferredSongs() {
 			List<String> list = YamahaControl.readPreferredSongsFromFileToCheck();
 			SubUnits.SimpleTextAreaDialog dlg = new SubUnits.SimpleTextAreaDialog( mainWindow );
