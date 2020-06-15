@@ -114,7 +114,8 @@ public class RotaryCtrl2 extends Canvas {
 			new Thread(new Runnable() {
 				@Override
 				public void run() {
-					System.out.printf("[ %-10s] Start rendering of marker images ...%n", ID);
+					BufferedImage[] arr = new BufferedImage[400];
+					System.out.printf("[ %-10s] Start rendering of %d marker images ...%n", ID, arr.length);
 					
 					RotatedProfile rotatedProfile = createRotaryCtrlProfile(radius,innerRing,outerRing,transition,height);
 					rotatedProfile.showExtrasOnly(true);
@@ -125,13 +126,12 @@ public class RotaryCtrl2 extends Canvas {
 					tempBumpMapping.setOverSampling(bumpMapping.getOverSampling());
 					tempBumpMapping.setNormalFunction(rotatedProfile);
 					
-					BufferedImage[] arr = new BufferedImage[400];
 					for (int i=0; i<arr.length; i++) {
 						double angle_deg = i*360.0/arr.length;
 						ExtraNormalFunctionPolar.Rotated marker = new ExtraNormalFunctionPolar.Rotated(zeroAngle_deg+angle_deg, bigLine);
 						rotatedProfile.setExtras(new ExtraNormalFunctionPolar.Stencil( (w,r)->r<=radius, marker ));
 						arr[i] = tempBumpMapping.renderImage(fixedWidth,fixedWidth);
-						if (i%100==99) System.out.printf("[ %-10s] ... %d marker images rendered.%n", ID, i+1);
+						if (i%100==99 && i<arr.length-1) System.out.printf("[ %-10s] ... %d images rendered.%n", ID, i+1);
 					}
 					
 					System.out.printf("[ %-10s] Rendering of %d marker images finished.%n", ID, arr.length);
