@@ -51,12 +51,13 @@ public class RotaryCtrl2 extends Canvas {
 		private final BumpMapping bumpMapping;
 		
 		private BufferedImage backgroundImage;
+		private BufferedImage[] markerImages;
 		
 		public interface ValueListener {
 			public void valueChanged(double value, boolean isAdjusting);
 		}
 		
-		public RotaryCtrl2(int width, boolean valueIn2Rows, double minValue, double maxValue, double deltaPerFullCircle, double tickInterval, int decimals, double zeroAngle_deg, RotaryCtrl2.ValueListener valueListener) {
+		public RotaryCtrl2(String ID, int width, boolean valueIn2Rows, double minValue, double maxValue, double deltaPerFullCircle, double tickInterval, int decimals, double zeroAngle_deg, RotaryCtrl2.ValueListener valueListener) {
 			super(width, width);
 			this.fixedWidth = width;
 			this.minValue = minValue;
@@ -94,6 +95,9 @@ public class RotaryCtrl2 extends Canvas {
 			mouseHandler = new MouseHandler();
 			addMouseListener(mouseHandler);
 			addMouseMotionListener(mouseHandler);
+			
+			markerImages = null;
+			renderMarkerImages(ID,5,15,3,5);
 		}
 		
 		private void updateBackgroundImage(boolean inBackgroundThread) {
@@ -104,6 +108,37 @@ public class RotaryCtrl2 extends Canvas {
 				}).start();
 			} else
 				backgroundImage = bumpMapping.renderImage(fixedWidth,fixedWidth);
+		}
+		
+		private void renderMarkerImages(String ID, double innerRing, double outerRing, double transition, double height) {
+			new Thread(new Runnable() {
+				@Override
+				public void run() {
+					System.out.printf("[ %-10s] Start rendering of marker images ...%n", ID);
+					
+					RotatedProfile rotatedProfile = createRotaryCtrlProfile(radius,innerRing,outerRing,transition,height);
+					rotatedProfile.showExtrasOnly(true);
+					LineOnX bigLine = getTickLine(radius, innerRing, outerRing, transition, true);
+					
+					BumpMapping tempBumpMapping = new BumpMapping(false);
+					tempBumpMapping.setShading(Shading.clone(bumpMapping.getShading()));
+					tempBumpMapping.setOverSampling(bumpMapping.getOverSampling());
+					tempBumpMapping.setNormalFunction(rotatedProfile);
+					
+					BufferedImage[] arr = new BufferedImage[720];
+					for (int i=0; i<arr.length; i++) {
+						double angle_deg = i*0.5;
+						ExtraNormalFunctionPolar.Rotated marker = new ExtraNormalFunctionPolar.Rotated(zeroAngle_deg+angle_deg, bigLine);
+						rotatedProfile.setExtras(new ExtraNormalFunctionPolar.Stencil( (w,r)->r<=radius, marker ));
+						arr[i] = tempBumpMapping.renderImage(fixedWidth,fixedWidth);
+						if (i%100==99) System.out.printf("[ %-10s] ... %d marker images rendered.%n", ID, i+1);
+					}
+					
+					System.out.printf("[ %-10s] Rendering of %d marker images finished.%n", ID, arr.length);
+					markerImages = arr;
+					repaint();
+				}
+			}).start();
 		}
 		
 		private static RotatedProfile createRotaryCtrlProfile(double radius, double innerRing, double outerRing, double transition, double height) {
@@ -298,10 +333,8 @@ public class RotaryCtrl2 extends Canvas {
 				ctrlText   = Color.GRAY;
 			}
 			
-			int imWidth  = backgroundImage.getWidth();
-			int imHeight = backgroundImage.getHeight();
-			int imX = x + (width -imWidth )/2;
-			int imY = y + (height-imHeight)/2;
+			int imX = x + (width -fixedWidth)/2;
+			int imY = y + (height-fixedWidth)/2;
 			g.drawImage(backgroundImage, imX, imY, null);
 			
 //			g.setColor(ctrlTicks);
@@ -313,15 +346,23 @@ public class RotaryCtrl2 extends Canvas {
 //				drawRadiusLine(g, x,y, width, height, ri, ra, zeroAngle-a);
 //			}
 			
-			g.setColor(ctrlMarker);
-			if (g2!=null) g2.setStroke( new BasicStroke(5,BasicStroke.CAP_ROUND,BasicStroke.JOIN_ROUND) );
-			drawRadiusLine(g, x,y, width, height, 0.9, 0.7, angle+zeroAngle);
-			if (g2!=null) g2.setStroke(new BasicStroke(1));
+			if (markerImages==null) {
+				g.setColor(ctrlMarker);
+				if (g2!=null) g2.setStroke( new BasicStroke(5,BasicStroke.CAP_ROUND,BasicStroke.JOIN_ROUND) );
+				drawRadiusLine(g, x,y, width, height, 0.9, 0.7, angle+zeroAngle);
+				if (g2!=null) g2.setStroke(new BasicStroke(1));
+				
+			} else {
+				int index = (int) Math.round( angle/(2*Math.PI)*markerImages.length );
+				index = index%markerImages.length;
+				while (index<0) index+=markerImages.length;
+				g.drawImage(markerImages[index], imX, imY, null);
+			}
 			
-			drawValue(g, x, y, width, height, ctrlText);
+			drawValueStr(g, x, y, width, height, ctrlText);
 		}
 
-		private void drawValue(Graphics g, int x, int y, int width, int height, Color ctrlText) {
+		private void drawValueStr(Graphics g, int x, int y, int width, int height, Color ctrlText) {
 			if (unit!=null) {
 				if (valueIn2Rows) {
 					String str1 = String.format(Locale.ENGLISH, "%1."+decimals+"f", value);
