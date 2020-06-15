@@ -9,6 +9,7 @@ import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Image;
 import java.awt.Insets;
+import java.awt.RenderingHints;
 import java.awt.Toolkit;
 import java.awt.datatransfer.Clipboard;
 import java.awt.datatransfer.DataFlavor;
@@ -172,9 +173,9 @@ public class YamahaControl {
 		smallImages = new EnumMap<>(SmallImages.class);
 		for (SmallImages id:SmallImages.values()) {
 			switch (id) {
-			case IconOff    : smallImages.put(id, ImageToolbox.createIcon_Circle(16,12,10,Color.BLACK,Color.GREEN.darker())); break;
-			case IconOn     : smallImages.put(id, ImageToolbox.createIcon_Circle(16,12,10,Color.BLACK,Color.GREEN)); break;
-			case IconUnknown: smallImages.put(id, ImageToolbox.createIcon_Circle(16,12,10,Color.BLACK,Color.GRAY)); break;
+			case IconOff    : smallImages.put(id, ImageToolbox.createIcon_Circle(16,12,11,Color.BLACK,Color.GREEN.darker())); break;
+			case IconOn     : smallImages.put(id, ImageToolbox.createIcon_Circle(16,12,11,Color.BLACK,Color.GREEN)); break;
+			case IconUnknown: smallImages.put(id, ImageToolbox.createIcon_Circle(16,12,11,Color.BLACK,Color.GRAY)); break;
 			case FolderIcon : smallImages.put(id, FileSystemView.getFileSystemView().getSystemIcon(new File("./"))); break;
 			}
 		}
@@ -359,12 +360,16 @@ public class YamahaControl {
 		public static Icon createIcon_Circle(int imgWidth, int imgHeight, int diameter, Color border, Color fill) {
 			BufferedImage image = new BufferedImage(imgWidth, imgHeight, BufferedImage.TYPE_INT_ARGB);
 			Graphics2D g2 = image.createGraphics();
+			g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 			
-			g2.setPaint(fill);
-			g2.fillOval(imgWidth/2-diameter/2, imgHeight/2-diameter/2, diameter, diameter);
+			int x = (imgWidth -diameter)/2;
+			int y = (imgHeight-diameter)/2;
 			
-			g2.setPaint(border);
-			g2.drawOval(imgWidth/2-diameter/2, imgHeight/2-diameter/2, diameter, diameter);
+			Color fill2 = fill;
+			Color fill1 = fill2.darker();
+			g2.setPaint(fill1 ); g2.fillOval(x+1, y+1, diameter-2, diameter-2);
+			g2.setPaint(fill2 ); g2.fillOval(x+2, y+2, diameter-4, diameter-4);
+			g2.setPaint(border); g2.drawOval(x  , y  , diameter-1, diameter-1);
 			
 			return new ImageIcon(image);
 		}

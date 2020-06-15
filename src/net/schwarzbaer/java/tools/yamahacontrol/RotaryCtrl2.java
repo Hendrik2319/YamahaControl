@@ -83,7 +83,7 @@ public class RotaryCtrl2 extends Canvas {
 				new MixedShading(
 					(Indexer.Polar)(w,r)->radius/2.0<=r && r<radius ? 1 : 0,
 					new Shading.GUISurfaceShading(sun,Color.WHITE,new Color(0xf0f0f0),new Color(0x707070)),
-					new MaterialShading(sun, new Color(0xf0f0f0), 0, 40, false, 0)
+					new MaterialShading(sun, new Color(0xf0f0f0), 0, 40, true, 0.5)
 				)
 			);
 			
