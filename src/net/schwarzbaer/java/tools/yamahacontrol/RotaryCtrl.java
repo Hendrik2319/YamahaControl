@@ -75,7 +75,7 @@ public class RotaryCtrl extends Canvas {
 			NormalXY vHorizOutside = new NormalXY( 1,0);
 			NormalXY vHorizInside  = new NormalXY(-1,0);
 			
-			BumpMapping bumpMapping = new BumpMapping(false);
+			BumpMapping bumpMapping = new BumpMapping(false,false);
 			bumpMapping.setShading(
 				new Shading.GUISurfaceShading(
 					new Normal(1,-1,2).normalize(),

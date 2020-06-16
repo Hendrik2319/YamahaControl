@@ -79,7 +79,7 @@ public class RotaryCtrl2 extends Canvas {
 			setTicks(rotaryCtrlProfile, radius,5,15,3, this.deltaPerFullCircle, this.tickInterval, this.zeroAngle_deg);			
 			
 			Normal sun = new Normal(1,-1,2).normalize();
-			bumpMapping = new BumpMapping(false);
+			bumpMapping = new BumpMapping(false,false);
 			bumpMapping.setShading(
 				new MixedShading(
 					(Indexer.Polar)(w,r)->radius/2.0<=r && r<radius ? 1 : 0,
@@ -121,7 +121,7 @@ public class RotaryCtrl2 extends Canvas {
 					rotatedProfile.showExtrasOnly(true);
 					LineOnX bigLine = getTickLine(radius, innerRing, outerRing, transition, true);
 					
-					BumpMapping tempBumpMapping = new BumpMapping(false);
+					BumpMapping tempBumpMapping = new BumpMapping(false,false);
 					tempBumpMapping.setShading(Shading.clone(bumpMapping.getShading()));
 					tempBumpMapping.setOverSampling(bumpMapping.getOverSampling());
 					tempBumpMapping.setNormalFunction(rotatedProfile);
