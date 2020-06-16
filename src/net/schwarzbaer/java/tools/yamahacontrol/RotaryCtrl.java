@@ -16,6 +16,7 @@ import net.schwarzbaer.image.BumpMapping;
 import net.schwarzbaer.image.BumpMapping.Normal;
 import net.schwarzbaer.image.BumpMapping.NormalXY;
 import net.schwarzbaer.image.BumpMapping.ProfileXY;
+import net.schwarzbaer.image.BumpMapping.Shading;
 import net.schwarzbaer.image.ImageCache;
 
 public class RotaryCtrl extends Canvas {
@@ -74,9 +75,14 @@ public class RotaryCtrl extends Canvas {
 			NormalXY vHorizOutside = new NormalXY( 1,0);
 			NormalXY vHorizInside  = new NormalXY(-1,0);
 			
-			BumpMapping bumpMapping = new BumpMapping(
-				new Normal(1,-1,2).normalize(),
-				Color.WHITE,new Color(0xf0f0f0),new Color(0x707070),
+			BumpMapping bumpMapping = new BumpMapping(false);
+			bumpMapping.setShading(
+				new Shading.GUISurfaceShading(
+					new Normal(1,-1,2).normalize(),
+					Color.WHITE, new Color(0xf0f0f0), new Color(0x707070)
+				)
+			);
+			bumpMapping.setNormalFunction(
 				new BumpMapping.RotatedProfile(
 					new ProfileXY.Group(
 						new ProfileXY.Constant  (   0.0, r1-tr ),
@@ -93,6 +99,7 @@ public class RotaryCtrl extends Canvas {
 					)
 				)
 			);
+			
 			backgroundImageCache = new ImageCache<Image>((w,h)->bumpMapping.renderImage(w,h));
 			
 			mouseHandler = new MouseHandler();
