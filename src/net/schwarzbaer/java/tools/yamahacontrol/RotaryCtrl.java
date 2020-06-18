@@ -15,10 +15,10 @@ import net.schwarzbaer.gui.Canvas;
 import net.schwarzbaer.image.ImageCache;
 import net.schwarzbaer.image.bumpmapping.BumpMapping;
 import net.schwarzbaer.image.bumpmapping.BumpMapping.Normal;
+import net.schwarzbaer.image.bumpmapping.BumpMapping.NormalFunction.Polar.RotatedProfile;
 import net.schwarzbaer.image.bumpmapping.BumpMapping.NormalXY;
 import net.schwarzbaer.image.bumpmapping.BumpMapping.ProfileXY;
-import net.schwarzbaer.image.bumpmapping.BumpMapping.Shading;
-import net.schwarzbaer.image.bumpmapping.BumpMapping.NormalFunction.Polar.RotatedProfile;
+import net.schwarzbaer.image.bumpmapping.Shading;
 
 public class RotaryCtrl extends Canvas {
 		private static final Color COLOR_DISABLED_MARKER = new Color(0x8080B0);
