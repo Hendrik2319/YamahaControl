@@ -13,14 +13,13 @@ import java.util.Locale;
 
 import net.schwarzbaer.gui.Canvas;
 import net.schwarzbaer.image.BumpMapping;
-import net.schwarzbaer.image.BumpMapping.ExtraNormalFunctionPolar;
-import net.schwarzbaer.image.BumpMapping.ExtraNormalFunctionPolar.LineOnX;
+import net.schwarzbaer.image.BumpMapping.ExtraNormalFunction;
 import net.schwarzbaer.image.BumpMapping.Indexer;
 import net.schwarzbaer.image.BumpMapping.Normal;
+import net.schwarzbaer.image.BumpMapping.NormalFunction.Polar.RotatedProfile;
 import net.schwarzbaer.image.BumpMapping.NormalXY;
 import net.schwarzbaer.image.BumpMapping.OverSampling;
 import net.schwarzbaer.image.BumpMapping.ProfileXY;
-import net.schwarzbaer.image.BumpMapping.RotatedProfile;
 import net.schwarzbaer.image.BumpMapping.Shading;
 import net.schwarzbaer.image.BumpMapping.Shading.MaterialShading;
 import net.schwarzbaer.image.BumpMapping.Shading.MixedShading;
@@ -119,7 +118,7 @@ public class RotaryCtrl2 extends Canvas {
 					
 					RotatedProfile rotatedProfile = createRotaryCtrlProfile(radius,innerRing,outerRing,transition,height);
 					rotatedProfile.showExtrasOnly(true);
-					LineOnX bigLine = getTickLine(radius, innerRing, outerRing, transition, true);
+					ExtraNormalFunction.Polar.LineOnX bigLine = getTickLine(radius, innerRing, outerRing, transition, true);
 					
 					BumpMapping tempBumpMapping = new BumpMapping(false,false);
 					tempBumpMapping.setShading(Shading.clone(bumpMapping.getShading()));
@@ -128,8 +127,8 @@ public class RotaryCtrl2 extends Canvas {
 					
 					for (int i=0; i<arr.length; i++) {
 						double angle_deg = i*360.0/arr.length;
-						ExtraNormalFunctionPolar.Rotated marker = new ExtraNormalFunctionPolar.Rotated(zeroAngle_deg+angle_deg, bigLine);
-						rotatedProfile.setExtras(new ExtraNormalFunctionPolar.Stencil( (w,r)->r<=radius, marker ));
+						ExtraNormalFunction.Polar.Rotated marker = new ExtraNormalFunction.Polar.Rotated(zeroAngle_deg+angle_deg, bigLine);
+						rotatedProfile.setExtras(new ExtraNormalFunction.Polar.Stencil( (w,r)->r<=radius, marker ));
 						arr[i] = tempBumpMapping.renderImage(fixedWidth,fixedWidth);
 						if (i%100==99 && i<arr.length-1) System.out.printf("[ %-10s] ... %d images rendered.%n", ID, i+1);
 					}
@@ -170,7 +169,7 @@ public class RotaryCtrl2 extends Canvas {
 			);
 		}
 		
-		private static LineOnX getTickLine(double radius, double innerRing, double outerRing, double transition, boolean getBigLine) {
+		private static ExtraNormalFunction.Polar.LineOnX getTickLine(double radius, double innerRing, double outerRing, double transition, boolean getBigLine) {
 			double ramp = 1;
 			double lineHeight = 2;
 			
@@ -196,23 +195,23 @@ public class RotaryCtrl2 extends Canvas {
 			double maxRS = radius+5;
 			
 			if (getBigLine)
-				return new ExtraNormalFunctionPolar.LineOnX(minRB, maxRB, profileBigLine   );
-			return new ExtraNormalFunctionPolar.LineOnX(minRS, maxRS, profileSmallLine );
+				return new ExtraNormalFunction.Polar.LineOnX(minRB, maxRB, profileBigLine   );
+			return new ExtraNormalFunction.Polar.LineOnX(minRS, maxRS, profileSmallLine );
 		}
 		
 		private static void setTicks(RotatedProfile background, double radius, double innerRing, double outerRing, double transition, double deltaPerFullCircle, double tickInterval, double zeroAngle_deg) {
 			//LineOnX bigLine   = getTickLine(radius, innerRing, outerRing, transition, true);
-			LineOnX smallLine = getTickLine(radius, innerRing, outerRing, transition, false);
+			ExtraNormalFunction.Polar.LineOnX smallLine = getTickLine(radius, innerRing, outerRing, transition, false);
 			
 			double angleTick = 360*tickInterval/deltaPerFullCircle;
-			ExtraNormalFunctionPolar.Group outerTicks = new ExtraNormalFunctionPolar.Group();
-			outerTicks.add(new ExtraNormalFunctionPolar.Rotated(zeroAngle_deg, smallLine));
+			ExtraNormalFunction.Polar.Group outerTicks = new ExtraNormalFunction.Polar.Group();
+			outerTicks.add(new ExtraNormalFunction.Polar.Rotated(zeroAngle_deg, smallLine));
 			for (double a=angleTick; a<180*0.9; a+=angleTick) {
-				outerTicks.add(new ExtraNormalFunctionPolar.Rotated(zeroAngle_deg-a, smallLine));
-				outerTicks.add(new ExtraNormalFunctionPolar.Rotated(zeroAngle_deg+a, smallLine));
+				outerTicks.add(new ExtraNormalFunction.Polar.Rotated(zeroAngle_deg-a, smallLine));
+				outerTicks.add(new ExtraNormalFunction.Polar.Rotated(zeroAngle_deg+a, smallLine));
 			}
 			
-			background.setExtras(new ExtraNormalFunctionPolar.Stencil( (w,r)->r> radius, outerTicks ));
+			background.setExtras(new ExtraNormalFunction.Polar.Stencil( (w,r)->r> radius, outerTicks ));
 		}
 		
 		public boolean isAdjusting() {

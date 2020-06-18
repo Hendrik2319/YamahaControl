@@ -14,6 +14,7 @@ import java.util.Locale;
 import net.schwarzbaer.gui.Canvas;
 import net.schwarzbaer.image.BumpMapping;
 import net.schwarzbaer.image.BumpMapping.Normal;
+import net.schwarzbaer.image.BumpMapping.NormalFunction.Polar.RotatedProfile;
 import net.schwarzbaer.image.BumpMapping.NormalXY;
 import net.schwarzbaer.image.BumpMapping.ProfileXY;
 import net.schwarzbaer.image.BumpMapping.Shading;
@@ -83,7 +84,7 @@ public class RotaryCtrl extends Canvas {
 				)
 			);
 			bumpMapping.setNormalFunction(
-				new BumpMapping.RotatedProfile(
+				new RotatedProfile(
 					new ProfileXY.Group(
 						new ProfileXY.Constant  (   0.0, r1-tr ),
 						new ProfileXY.RoundBlend(r1-tr , r1    , vFace,vHorizOutside),
