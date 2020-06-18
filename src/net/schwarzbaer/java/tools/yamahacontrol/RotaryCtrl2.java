@@ -13,13 +13,13 @@ import java.util.Locale;
 
 import net.schwarzbaer.gui.Canvas;
 import net.schwarzbaer.image.bumpmapping.BumpMapping;
-import net.schwarzbaer.image.bumpmapping.BumpMapping.ExtraNormalFunction;
 import net.schwarzbaer.image.bumpmapping.BumpMapping.Indexer;
 import net.schwarzbaer.image.bumpmapping.BumpMapping.Normal;
-import net.schwarzbaer.image.bumpmapping.BumpMapping.NormalFunction.Polar.RotatedProfile;
 import net.schwarzbaer.image.bumpmapping.BumpMapping.NormalXY;
 import net.schwarzbaer.image.bumpmapping.BumpMapping.OverSampling;
-import net.schwarzbaer.image.bumpmapping.BumpMapping.ProfileXY;
+import net.schwarzbaer.image.bumpmapping.ExtraNormalFunction;
+import net.schwarzbaer.image.bumpmapping.NormalFunction.Polar.RotatedProfile;
+import net.schwarzbaer.image.bumpmapping.ProfileXY;
 import net.schwarzbaer.image.bumpmapping.Shading;
 import net.schwarzbaer.image.bumpmapping.Shading.MaterialShading;
 import net.schwarzbaer.image.bumpmapping.Shading.MixedShading;
