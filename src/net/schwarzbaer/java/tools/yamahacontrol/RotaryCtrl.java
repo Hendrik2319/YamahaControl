@@ -12,13 +12,13 @@ import java.awt.geom.Rectangle2D;
 import java.util.Locale;
 
 import net.schwarzbaer.gui.Canvas;
-import net.schwarzbaer.image.BumpMapping;
-import net.schwarzbaer.image.BumpMapping.Normal;
-import net.schwarzbaer.image.BumpMapping.NormalFunction.Polar.RotatedProfile;
-import net.schwarzbaer.image.BumpMapping.NormalXY;
-import net.schwarzbaer.image.BumpMapping.ProfileXY;
-import net.schwarzbaer.image.BumpMapping.Shading;
 import net.schwarzbaer.image.ImageCache;
+import net.schwarzbaer.image.bumpmapping.BumpMapping;
+import net.schwarzbaer.image.bumpmapping.BumpMapping.Normal;
+import net.schwarzbaer.image.bumpmapping.BumpMapping.NormalXY;
+import net.schwarzbaer.image.bumpmapping.BumpMapping.ProfileXY;
+import net.schwarzbaer.image.bumpmapping.BumpMapping.Shading;
+import net.schwarzbaer.image.bumpmapping.BumpMapping.NormalFunction.Polar.RotatedProfile;
 
 public class RotaryCtrl extends Canvas {
 		private static final Color COLOR_DISABLED_MARKER = new Color(0x8080B0);
