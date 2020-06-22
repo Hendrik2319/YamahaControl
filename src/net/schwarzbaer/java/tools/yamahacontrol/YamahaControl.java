@@ -10,11 +10,6 @@ import java.awt.GridBagLayout;
 import java.awt.Image;
 import java.awt.Insets;
 import java.awt.RenderingHints;
-import java.awt.Toolkit;
-import java.awt.datatransfer.Clipboard;
-import java.awt.datatransfer.DataFlavor;
-import java.awt.datatransfer.Transferable;
-import java.awt.datatransfer.UnsupportedFlavorException;
 import java.awt.event.ActionListener;
 import java.awt.image.BufferedImage;
 import java.io.BufferedReader;
@@ -28,8 +23,6 @@ import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.io.PrintStream;
 import java.io.PrintWriter;
-import java.io.Reader;
-import java.io.StringWriter;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -50,7 +43,6 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
-import javax.activation.DataHandler;
 import javax.imageio.ImageIO;
 import javax.swing.AbstractButton;
 import javax.swing.BorderFactory;
@@ -81,6 +73,7 @@ import javax.swing.filechooser.FileSystemView;
 import net.schwarzbaer.gui.StandardMainWindow;
 import net.schwarzbaer.java.tools.yamahacontrol.Device.UpdateWish;
 import net.schwarzbaer.java.tools.yamahacontrol.Device.Value;
+import net.schwarzbaer.system.ClipboardTools;
 
 public class YamahaControl {
 	
@@ -534,52 +527,11 @@ public class YamahaControl {
 
 	static void copyToClipBoard(String str) {
 		if (str==null) return;
-		Toolkit toolkit = Toolkit.getDefaultToolkit();
-		Clipboard clipboard = toolkit.getSystemClipboard();
-		DataHandler content = new DataHandler(str,"text/plain");
-		try { clipboard.setContents(content,null); }
-		catch (IllegalStateException e1) { e1.printStackTrace(); }
+		ClipboardTools.copyToClipBoard(str);
 	}
 
 	static String pasteFromClipBoard() {
-		Toolkit toolkit = Toolkit.getDefaultToolkit();
-		Clipboard clipboard = toolkit.getSystemClipboard();
-		Transferable transferable = clipboard.getContents(null);
-		if (transferable==null) return null;
-		
-		DataFlavor textFlavor = new DataFlavor(String.class, "text/plain; class=<java.lang.String>");
-		
-		if (!transferable.isDataFlavorSupported(textFlavor)) {
-			DataFlavor[] transferDataFlavors = transferable.getTransferDataFlavors();
-			if (transferDataFlavors==null || transferDataFlavors.length==0) return null;
-			
-			System.out.println("transferDataFlavors: "+toString(transferDataFlavors));
-			textFlavor = DataFlavor.selectBestTextFlavor(transferDataFlavors);
-		}
-		
-		if (textFlavor==null) return null;
-		
-		Reader reader;
-		try { reader = textFlavor.getReaderForText(transferable); }
-		catch (UnsupportedFlavorException | IOException e) { return null; }
-		StringWriter sw = new StringWriter();
-		
-		int n; char[] cbuf = new char[100000];
-		try { while ((n=reader.read(cbuf))>=0) if (n>0) sw.write(cbuf, 0, n); }
-		catch (IOException e) {}
-		
-		try { reader.close(); } catch (IOException e) {}
-		return sw.toString();
-	}
-
-	private static String toString(DataFlavor[] dataFlavors) {
-		if (dataFlavors==null) return "<null>";
-		String str = "";
-		for (DataFlavor df:dataFlavors) {
-			if (!str.isEmpty()) str+=",\r\n";
-			str+=""+df;
-		}
-		return "[\r\n"+str+"\r\n]";
+		return ClipboardTools.getStringFromClipBoard(true);
 	}
 
 	public static <E extends Enum<E>> E getNext(E value, E[] allValues) {
