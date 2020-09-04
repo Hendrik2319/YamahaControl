@@ -12,6 +12,7 @@ import java.util.Vector;
 import org.w3c.dom.Node;
 
 import net.schwarzbaer.java.tools.yamahacontrol.CommandList.ComplexCommand.DeviceDefinedValue;
+import net.schwarzbaer.java.tools.yamahacontrol.Device.Value.PlayStop;
 import net.schwarzbaer.java.tools.yamahacontrol.XML.TagList;
 import net.schwarzbaer.java.tools.yamahacontrol.YamahaControl.Log;
 
@@ -1477,6 +1478,7 @@ public final class Device {
 			parse(Ctrl.sendGetCommand_Node(address,getPlayInfoCmd));
 		}
 		protected abstract void parse(Node node);
+		public abstract String getWindowTitleInfo(boolean withExtraCharsetConversion);
 		
 		protected String convertUTF8(String str, boolean active) {
 			return convert(str, active, StandardCharsets.UTF_8);
@@ -1549,6 +1551,8 @@ public final class Device {
 			this.radioTextB = null;
 			this.clockTime = null;
 		}
+		
+		@Override public String getWindowTitleInfo(boolean withExtraCharsetConversion) { return null; }
 
 		@Override
 		public String toString(boolean withExtraCharsetConversion) {
@@ -1776,6 +1780,16 @@ public final class Device {
 		}
 	
 		@Override
+		public String getWindowTitleInfo(boolean withExtraCharsetConversion) {
+			if (playState==PlayStop.Stop) return "NetRadio stopped";
+			String str = "";
+			if (currentStation!=null) {                                 str+=convertUTF8(currentStation,withExtraCharsetConversion); }
+			if (currentAlbum  !=null) { if (!str.isEmpty()) str+=" | "; str+=convertUTF8(currentAlbum  ,withExtraCharsetConversion); }
+			if (currentSong   !=null) { if (!str.isEmpty()) str+=" | "; str+=convertUTF8(currentSong   ,withExtraCharsetConversion); }
+			return str;
+		}
+
+		@Override
 		public String toString(boolean withExtraCharsetConversion) {
 			StringBuilder sb = new StringBuilder();
 			sb.append(name+": ").append(deviceStatus==null?"???":deviceStatus.getLabel());
@@ -1871,6 +1885,8 @@ public final class Device {
 			this.inputLogoURL_M = null;
 			this.inputLogoURL_L = null;
 		}
+		
+		@Override public String getWindowTitleInfo(boolean withExtraCharsetConversion) { return null; }
 		
 		@Override public Value.PlayPauseStop getPlayState() { return playState; }
 		
@@ -1994,7 +2010,8 @@ public final class Device {
 			this.albumCoverURL = null;
 			this.albumCoverFormat = null;
 		}
-	
+		
+		@Override public String getWindowTitleInfo(boolean withExtraCharsetConversion) { return null; }
 		@Override public Value.PlayPauseStop getPlayState() { return playState; }
 		@Override public Value.OffOneAll     getRepeat   () { return repeat; }
 		@Override public Shuffle             getShuffle  () { return shuffle; }

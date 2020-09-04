@@ -4,6 +4,7 @@ import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
+import java.awt.Frame;
 import java.awt.GridBagConstraints;
 import java.awt.Insets;
 import java.awt.Window;
@@ -38,7 +39,7 @@ import javax.swing.JTextField;
 import javax.swing.JToggleButton;
 import javax.swing.SwingUtilities;
 
-import net.schwarzbaer.gui.StandardMainWindow;
+import net.schwarzbaer.java.tools.yamahacontrol.Device.PlayInfo;
 import net.schwarzbaer.java.tools.yamahacontrol.Device.UpdateWish;
 import net.schwarzbaer.java.tools.yamahacontrol.Device.Value;
 
@@ -49,21 +50,24 @@ final class SubUnits {
 		
 		protected boolean disableSubUnitIfNotReady = true;
 		
+		protected final Frame window;
 		protected Device device;
 		protected Boolean isReady;
 		private JLabel readyStateLabel;
 		private JLabel tabHeaderComp;
 	
-		private String inputID;
-		private String tabTitle;
+		private final String inputID;
+		private final String tabTitle;
 	
 		private JButton activateBtn;
 		private Device.Inputs.DeviceSceneInput activateInput;
 
-		private UpdateWish readyStateUpdateWish;
+		private final UpdateWish readyStateUpdateWish;
+
 	
-		protected AbstractSubUnit(String inputID, String tabTitle, UpdateWish readyStateUpdateWish) {
+		protected AbstractSubUnit(Frame window, String inputID, String tabTitle, UpdateWish readyStateUpdateWish) {
 			super(new BorderLayout(3,3));
+			this.window = window;
 			this.inputID = inputID;
 			this.tabTitle = tabTitle;
 			this.readyStateUpdateWish = readyStateUpdateWish;
@@ -104,7 +108,11 @@ final class SubUnits {
 				activateInput = device.inputs.findInput(inputID);
 				activateBtn.setEnabled(activateInput!=null);
 			}
+			
+			boolean wasReady = isReady();
 			isReady = getReadyState();
+			if (wasReady && !isReady()) window.setTitle("YamahaControl");
+			
 			if (disableSubUnitIfNotReady) setEnabledGUI(isReady());
 			tabHeaderComp.setOpaque(isReady());
 			tabHeaderComp.setBackground(isReady()?Color.GREEN:null);
@@ -112,7 +120,7 @@ final class SubUnits {
 			readyStateLabel.setIcon(YamahaControl.smallImages.get(isReady==null?YamahaControl.SmallImages.IconUnknown:(isReady?YamahaControl.SmallImages.IconOn:YamahaControl.SmallImages.IconOff)));
 		}
 		
-		public boolean isReady() { return isReady!=null && (boolean)isReady; }
+		public boolean isReady() { return isReady!=null && isReady.booleanValue(); }
 	
 		@Override
 		public EnumSet<UpdateWish> getUpdateWishes(YamahaControl.UpdateReason reason) {
@@ -131,17 +139,23 @@ final class SubUnits {
 //		}
 	
 		@Override public void setEnabledGUI(boolean enabled) { /*setEnabled(enabled);*/ }
+
+		public void setWindowTitle(String info) {
+			if (isReady()) {
+				if (info!=null && !info.isEmpty()) window.setTitle("YamahaControl - "+info);
+				else                               window.setTitle("YamahaControl");
+				System.out.printf("setWindowTitle[%s] %s%n", tabTitle, info);
+			}
+		}
 	}
 
 	static class SubUnitNetRadio extends AbstractSubUnit_ListPlay implements PlayButtonModule.Caller, ButtonModule.ExtraButtons {
 		private static final long serialVersionUID = -8583320100311806933L;
 		
-		private StandardMainWindow mainWindow;
 		private JFileChooser fileChooser;
 	
-		public SubUnitNetRadio(StandardMainWindow mainWindow) {
-			super("NET RADIO", "Net Radio", UpdateWish.NetRadioConfig, UpdateWish.NetRadioListInfo, UpdateWish.NetRadioPlayInfo);
-			this.mainWindow = mainWindow;
+		public SubUnitNetRadio(Frame window) {
+			super(window, "NET RADIO", "Net Radio", UpdateWish.NetRadioConfig, UpdateWish.NetRadioListInfo, UpdateWish.NetRadioPlayInfo);
 			modules.add(new PlayButtonModule(this, this));
 			withExtraCharsetConversion = true;
 			fileChooser = new JFileChooser("./");
@@ -187,7 +201,7 @@ final class SubUnits {
 				fileChooser.setSelectedFile(new File(folder, filename));
 			}
 			
-			if (fileChooser.showSaveDialog(mainWindow)!=JFileChooser.APPROVE_OPTION) return;
+			if (fileChooser.showSaveDialog(window)!=JFileChooser.APPROVE_OPTION) return;
 			File file = fileChooser.getSelectedFile();
 			
 			if (verbose) System.out.printf("Write data to file \"%s\"%n",file.getAbsolutePath());
@@ -198,7 +212,7 @@ final class SubUnits {
 
 		private void showPreferredSongs() {
 			List<String> list = YamahaControl.readPreferredSongsFromFileToCheck();
-			SubUnits.SimpleTextAreaDialog dlg = new SubUnits.SimpleTextAreaDialog( mainWindow );
+			SubUnits.SimpleTextAreaDialog dlg = new SubUnits.SimpleTextAreaDialog( window );
 			dlg.showDlg( "Preferred Songs ("+YamahaControl.getPreferredSongsFile().getPath()+")", list );
 		}
 
@@ -214,8 +228,8 @@ final class SubUnits {
 	static class SubUnitUSB extends AbstractSubUnit_PlayInfoExt<Value.OnOff> {
 		private static final long serialVersionUID = 2909543552931897755L;
 	
-		public SubUnitUSB() {
-			super("USB", "USB Device", UpdateWish.USBConfig, UpdateWish.USBListInfo, UpdateWish.USBPlayInfo, Value.OnOff.values());
+		public SubUnitUSB(Frame window) {
+			super(window, "USB", "USB Device", UpdateWish.USBConfig, UpdateWish.USBListInfo, UpdateWish.USBPlayInfo, Value.OnOff.values());
 		}
 		
 		@Override
@@ -231,8 +245,8 @@ final class SubUnits {
 	static class SubUnitDLNA extends AbstractSubUnit_PlayInfoExt<Value.OnOff> {
 		private static final long serialVersionUID = -4585259335586086032L;
 	
-		public SubUnitDLNA() {
-			super("SERVER", "DLNA Server", UpdateWish.DLNAConfig, UpdateWish.DLNAListInfo, UpdateWish.DLNAPlayInfo, Value.OnOff.values());
+		public SubUnitDLNA(Frame window) {
+			super(window, "SERVER", "DLNA Server", UpdateWish.DLNAConfig, UpdateWish.DLNAListInfo, UpdateWish.DLNAPlayInfo, Value.OnOff.values());
 		}
 		
 		@Override
@@ -249,8 +263,8 @@ final class SubUnits {
 		private static final long serialVersionUID = -4180795479139795928L;
 		private JButton modeBtn;
 	
-		public SubUnitIPodUSB() {
-			super("iPod (USB)", "iPod (USB) [untested]", UpdateWish.IPodUSBConfig, UpdateWish.IPodUSBListInfo, UpdateWish.IPodUSBPlayInfo, Value.ShuffleIPod.values());
+		public SubUnitIPodUSB(Frame window) {
+			super(window, "iPod (USB)", "iPod (USB) [untested]", UpdateWish.IPodUSBConfig, UpdateWish.IPodUSBListInfo, UpdateWish.IPodUSBPlayInfo, Value.ShuffleIPod.values());
 			setExtraButtons(this);
 		}
 	
@@ -306,8 +320,8 @@ final class SubUnits {
 	
 	
 	
-		public SubUnitTuner() {
-			super("TUNER","Tuner", UpdateWish.TunerConfig, UpdateWish.TunerPlayInfo);
+		public SubUnitTuner(Frame window) {
+			super(window, "TUNER","Tuner", UpdateWish.TunerConfig, UpdateWish.TunerPlayInfo);
 			isEnabled = true;
 			selectedBand = null;
 			presetCmbBx_ignoreSelectionEvent = false;
@@ -582,8 +596,8 @@ final class SubUnits {
 		private static final long serialVersionUID = 8375036678437177239L;
 	
 		// [Source_Device | SD_AirPlay | AirPlay]   
-		public SubUnitAirPlay() {
-			super("AirPlay", "AirPlay [untested]", UpdateWish.AirPlayConfig, UpdateWish.AirPlayPlayInfo);
+		public SubUnitAirPlay(Frame window) {
+			super(window, "AirPlay", "AirPlay [untested]", UpdateWish.AirPlayConfig, UpdateWish.AirPlayPlayInfo);
 		}
 		
 		@Override public Device.PlayInfo_AirPlaySpotify getPlayInfo() { return device==null?null:device.airPlay.playInfo; }
@@ -601,8 +615,8 @@ final class SubUnits {
 	static class SubUnitSpotify extends AbstractSubUnit_AirPlaySpotify {
 		private static final long serialVersionUID = -869960569061323838L;
 	
-		public SubUnitSpotify() {
-			super("Spotify", "Spotify [untested]", UpdateWish.SpotifyConfig, UpdateWish.SpotifyPlayInfo);
+		public SubUnitSpotify(Frame window) {
+			super(window, "Spotify", "Spotify [untested]", UpdateWish.SpotifyConfig, UpdateWish.SpotifyPlayInfo);
 		}
 		
 		@Override public Device.PlayInfo_AirPlaySpotify getPlayInfo() { return device==null?null:device.spotify.playInfo; }
@@ -857,8 +871,8 @@ final class SubUnits {
 	
 		protected boolean withExtraCharsetConversion;
 		
-		protected AbstractSubUnit_Play(String inputID, String tabTitle, UpdateWish readyStateUpdateWish, UpdateWish playInfoUpdateWish) {
-			super(inputID, tabTitle, readyStateUpdateWish);
+		protected AbstractSubUnit_Play(Frame window, String inputID, String tabTitle, UpdateWish readyStateUpdateWish, UpdateWish playInfoUpdateWish) {
+			super(window, inputID, tabTitle, readyStateUpdateWish);
 			this.playInfoUpdateWish = playInfoUpdateWish;
 			comps = new Vector<>();
 			modules = new Vector<>();
@@ -962,17 +976,20 @@ final class SubUnits {
 		protected abstract Device.PlayInfo getPlayInfo();
 	
 		public void updatePlayInfo() {
-			updatePlayInfoOutput();
+			PlayInfo playInfo = updatePlayInfoOutput();
+			if (playInfo!=null) setWindowTitle(playInfo.getWindowTitleInfo(withExtraCharsetConversion));
 			modules.forEach(m->m.updateButtons());
 		}
 	
-		private void updatePlayInfoOutput() {
+		private PlayInfo updatePlayInfoOutput() {
 			float hPos = YamahaControl.getScrollPos(playinfoScrollPane.getHorizontalScrollBar());
 			float vPos = YamahaControl.getScrollPos(playinfoScrollPane.getVerticalScrollBar());
-			if (device!=null) playinfoOutput.setText(getPlayInfo().toString(withExtraCharsetConversion));
+			PlayInfo playInfo = null;
+			if (device!=null) playinfoOutput.setText((playInfo = getPlayInfo()).toString(withExtraCharsetConversion));
 			else              playinfoOutput.setText("<no data>");
 			YamahaControl.setScrollPos(playinfoScrollPane.getHorizontalScrollBar(),hPos);
 			YamahaControl.setScrollPos(playinfoScrollPane.getVerticalScrollBar(),vPos);
+			return playInfo;
 		}
 	}
 
@@ -985,8 +1002,8 @@ final class SubUnits {
 			protected UpdateWish listInfoUpdateWish;
 	
 		
-			public AbstractSubUnit_ListPlay(String inputID, String tabTitle, UpdateWish readyStateUpdateWish, UpdateWish listInfoUpdateWish, UpdateWish playInfoUpdateWish) {
-				super(inputID, tabTitle, readyStateUpdateWish, playInfoUpdateWish);
+			public AbstractSubUnit_ListPlay(Frame window, String inputID, String tabTitle, UpdateWish readyStateUpdateWish, UpdateWish listInfoUpdateWish, UpdateWish playInfoUpdateWish) {
+				super(window, inputID, tabTitle, readyStateUpdateWish, playInfoUpdateWish);
 				this.listInfoUpdateWish = listInfoUpdateWish;
 			}
 	
@@ -1060,8 +1077,8 @@ final class SubUnits {
 		private static final long serialVersionUID = 8830354607137619068L;
 		private ButtonModule lastModule;
 		
-		public AbstractSubUnit_PlayInfoExt(String inputID, String tabTitle, UpdateWish readyStateUpdateWish, UpdateWish listInfoUpdateWish, UpdateWish playInfoUpdateWish, Shuffle[] shuffleValues) {
-			super(inputID, tabTitle, readyStateUpdateWish, listInfoUpdateWish, playInfoUpdateWish);
+		public AbstractSubUnit_PlayInfoExt(Frame window, String inputID, String tabTitle, UpdateWish readyStateUpdateWish, UpdateWish listInfoUpdateWish, UpdateWish playInfoUpdateWish, Shuffle[] shuffleValues) {
+			super(window, inputID, tabTitle, readyStateUpdateWish, listInfoUpdateWish, playInfoUpdateWish);
 			modules.add( new PlayButtonModuleExt(this, null));
 			modules.add( lastModule = new ReapeatShuffleButtonModule<Shuffle>(this, shuffleValues, null));
 		}
@@ -1077,8 +1094,8 @@ final class SubUnits {
 		private static final long serialVersionUID = -1847669703849102028L;
 		private ButtonModule lastModule;
 	
-		public AbstractSubUnit_AirPlaySpotify(String inputID, String tabTitle, UpdateWish readyStateUpdateWish, UpdateWish playInfoUpdateWish) {
-			super(inputID, tabTitle, readyStateUpdateWish, playInfoUpdateWish);
+		public AbstractSubUnit_AirPlaySpotify(Frame window, String inputID, String tabTitle, UpdateWish readyStateUpdateWish, UpdateWish playInfoUpdateWish) {
+			super(window, inputID, tabTitle, readyStateUpdateWish, playInfoUpdateWish);
 			modules.add( lastModule = new PlayButtonModuleExt(this, null));
 		}
 		

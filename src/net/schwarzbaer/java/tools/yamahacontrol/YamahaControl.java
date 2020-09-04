@@ -257,6 +257,7 @@ public class YamahaControl {
 	}
 
 	private void createGUI() {
+		mainWindow = new StandardMainWindow("YamahaControl");
 		
 		OnOffBtn onOffBtn = new OnOffBtn();
 		guiRegions.add(onOffBtn);
@@ -312,12 +313,12 @@ public class YamahaControl {
 		JTabbedPane subUnitPanel = new JTabbedPane();
 		subUnitPanel.setBorder(BorderFactory.createTitledBorder("Sub Units"));
 		new SubUnits.SubUnitNetRadio(mainWindow).addTo(guiRegions,subUnitPanel);
-		new SubUnits.SubUnitDLNA    ().addTo(guiRegions,subUnitPanel);
-		new SubUnits.SubUnitUSB     ().addTo(guiRegions,subUnitPanel);
-		new SubUnits.SubUnitTuner   ().addTo(guiRegions,subUnitPanel);
-		new SubUnits.SubUnitIPodUSB ().addTo(guiRegions,subUnitPanel);
-		new SubUnits.SubUnitSpotify ().addTo(guiRegions,subUnitPanel);
-		new SubUnits.SubUnitAirPlay ().addTo(guiRegions,subUnitPanel);
+		new SubUnits.SubUnitDLNA    (mainWindow).addTo(guiRegions,subUnitPanel);
+		new SubUnits.SubUnitUSB     (mainWindow).addTo(guiRegions,subUnitPanel);
+		new SubUnits.SubUnitTuner   (mainWindow).addTo(guiRegions,subUnitPanel);
+		new SubUnits.SubUnitIPodUSB (mainWindow).addTo(guiRegions,subUnitPanel);
+		new SubUnits.SubUnitSpotify (mainWindow).addTo(guiRegions,subUnitPanel);
+		new SubUnits.SubUnitAirPlay (mainWindow).addTo(guiRegions,subUnitPanel);
 		
 		JPanel contentPane = new JPanel(new BorderLayout(3,3));
 		contentPane.setBorder(BorderFactory.createEmptyBorder(3,3,3,3));
@@ -341,7 +342,6 @@ public class YamahaControl {
 			}
 		}
 		
-		mainWindow = new StandardMainWindow("YamahaControl");
 		mainWindow.startGUI(contentPane);
 		mainWindow.setIconImages(icons);
 		
