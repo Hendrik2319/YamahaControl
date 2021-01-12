@@ -4,6 +4,7 @@ import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
+import java.awt.Font;
 import java.awt.Frame;
 import java.awt.GridBagConstraints;
 import java.awt.Insets;
@@ -54,8 +55,8 @@ final class SubUnits {
 		protected Device device;
 		protected Boolean isReady;
 		private JLabel readyStateLabel;
-		private JLabel tabHeaderComp;
-	
+		private TabHeaderComp tabHeaderComp;
+		
 		private final String inputID;
 		private final String tabTitle;
 	
@@ -75,7 +76,7 @@ final class SubUnits {
 		}
 	
 		private void createPanel() {
-			tabHeaderComp = new JLabel("  "+tabTitle+"  ");
+			tabHeaderComp = new TabHeaderComp(tabTitle);
 			
 			JPanel northPanel = new JPanel(new FlowLayout(FlowLayout.LEFT,3,3));
 			northPanel.add(activateBtn = YamahaControl.createButton("Activate", e->{ if (activateInput!=null) device.inputs.setInput(activateInput); }, false));
@@ -114,8 +115,7 @@ final class SubUnits {
 			if (wasReady && !isReady()) window.setTitle("YamahaControl");
 			
 			if (disableSubUnitIfNotReady) setEnabledGUI(isReady());
-			tabHeaderComp.setOpaque(isReady());
-			tabHeaderComp.setBackground(isReady()?Color.GREEN:null);
+			tabHeaderComp.setReady(isReady());
 			readyStateLabel.setText(tabTitle+" is "+(isReady==null?"not answering":(isReady?"Ready":"Not Ready")));
 			readyStateLabel.setIcon(YamahaControl.smallImages.get(isReady==null?YamahaControl.SmallImages.IconUnknown:(isReady?YamahaControl.SmallImages.IconOn:YamahaControl.SmallImages.IconOff)));
 		}
@@ -142,9 +142,39 @@ final class SubUnits {
 
 		public void setWindowTitle(String info) {
 			if (isReady()) {
-				if (info!=null && !info.isEmpty()) window.setTitle("YamahaControl - "+info);
-				else                               window.setTitle("YamahaControl");
-				System.out.printf("setWindowTitle[%s] %s%n", tabTitle, info);
+				String title = "YamahaControl";
+				if (info!=null && !info.isEmpty()) title += " - "+info;
+				if (!title.equals(window.getTitle())) {
+					window.setTitle(title);
+					System.out.printf("setWindowTitle[%s] %s%n", tabTitle, info);
+				}
+			}
+		}
+		
+		private static class TabHeaderComp extends JLabel {
+			
+			private static final long serialVersionUID = 694848205055774285L;
+			private static final Color READY_TEXT_COLOR = new Color(0x00d000);
+
+			private final Font defaultFont;
+			private final Font readyFont;
+			private Color defaultTextColor;
+			
+			TabHeaderComp(String tabTitle) {
+				super("  "+tabTitle+"  ");
+				defaultFont = getFont();
+				defaultTextColor = getForeground();
+				if (!defaultFont.isBold())
+					readyFont = defaultFont.deriveFont(Font.BOLD);
+				else
+					readyFont = defaultFont.deriveFont(Font.ITALIC);
+			}
+
+			public void setReady(boolean isReady) {
+//				setOpaque(isReady);
+//				setBackground(isReady?Color.GREEN:null);
+				setFont(isReady ? readyFont : defaultFont);
+				setForeground(isReady ? READY_TEXT_COLOR : defaultTextColor);
 			}
 		}
 	}
