@@ -389,8 +389,8 @@ class LineList2 {
 			} else {
 				switch (line.attr) {
 				case Container     : rendererComponent.setIcon(YamahaControl.smallImages.get(SmallImages.FolderIcon)); break;
-				case Item          : rendererComponent.setIcon(YamahaControl.smallImages.get(SmallImages.IconOn)); break;
-				case UnplayableItem: rendererComponent.setIcon(YamahaControl.smallImages.get(SmallImages.IconOff)); break;
+				case Item          : rendererComponent.setIcon(YamahaControl.smallImages.get(SmallImages.IconPlay  )); break;
+				case UnplayableItem: rendererComponent.setIcon(YamahaControl.smallImages.get(SmallImages.IconNoPlay)); break;
 				case Unselectable  : rendererComponent.setIcon(null); rendererComponent.setEnabled(false); break;
 				}
 				rendererComponent.setText(line.txt==null?"":line.txt);

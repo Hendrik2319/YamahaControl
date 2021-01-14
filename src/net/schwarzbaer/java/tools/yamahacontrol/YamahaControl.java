@@ -9,6 +9,7 @@ import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Image;
 import java.awt.Insets;
+import java.awt.Polygon;
 import java.awt.RenderingHints;
 import java.awt.event.ActionListener;
 import java.awt.image.BufferedImage;
@@ -127,6 +128,12 @@ public class YamahaControl {
 		
 		readPreferredSongsFromFile();
 		createSmallImages();
+//		BufferedImage mergedIcons = mergeIcons(SmallImages.values(), smallImages::get);
+//		try {
+//			ImageIO.write(mergedIcons, "png", new File("./MergedSmallImages.png"));
+//		} catch (IOException e) {
+//			e.printStackTrace();
+//		}
 		
 		
 		System.out.println("YamahaControl");
@@ -160,7 +167,7 @@ public class YamahaControl {
 		}
 	}
 
-	public enum SmallImages { IconOn, IconOff, IconUnknown, FolderIcon }
+	public enum SmallImages { IconOn, IconOff, IconUnknown, FolderIcon, IconPlay, IconNoPlay }
 	public static EnumMap<SmallImages,Icon> smallImages = null;
 	private static void createSmallImages() {
 		smallImages = new EnumMap<>(SmallImages.class);
@@ -169,9 +176,41 @@ public class YamahaControl {
 			case IconOff    : smallImages.put(id, ImageToolbox.createIcon_Circle(16,12,11,Color.BLACK,Color.GREEN.darker())); break;
 			case IconOn     : smallImages.put(id, ImageToolbox.createIcon_Circle(16,12,11,Color.BLACK,Color.GREEN)); break;
 			case IconUnknown: smallImages.put(id, ImageToolbox.createIcon_Circle(16,12,11,Color.BLACK,Color.GRAY)); break;
+			case IconPlay   : smallImages.put(id, ImageToolbox.createIcon_TriangleToRight(16, 13, 11, 11, Color.BLACK,new Color(0x00ddff))); break;
+			case IconNoPlay : smallImages.put(id, ImageToolbox.createIcon_TriangleToRight(16, 13, 11, 11, Color.BLACK,Color.GRAY)); break;
 			case FolderIcon : smallImages.put(id, FileSystemView.getFileSystemView().getSystemIcon(new File("./"))); break;
 			}
 		}
+	}
+	@SuppressWarnings("unused")
+	private static <A extends Enum<A>> BufferedImage mergeIcons(A[] keys, Function<A,Icon> getIcon) {
+		Icon[] extractedIcons = new Icon[keys.length];
+		int maxHeight = 0;
+		int sumOfWidths = 0;
+		for (int i=0; i<keys.length; i++) {
+			extractedIcons[i] = getIcon.apply(keys[i]);
+			if (extractedIcons[i]!=null) {
+				maxHeight = Math.max(maxHeight, extractedIcons[i].getIconHeight());
+				sumOfWidths += extractedIcons[i].getIconWidth();
+			}
+		}
+		
+		BufferedImage image = new BufferedImage(sumOfWidths+2*extractedIcons.length, maxHeight+2, BufferedImage.TYPE_INT_ARGB);
+		Graphics2D g2 = image.createGraphics();
+		int x=0;
+		for (int i=0; i<extractedIcons.length; i++)
+			if (extractedIcons[i]!=null) {
+				g2.setColor(Color.MAGENTA);
+				int width  = extractedIcons[i].getIconWidth();
+				int height = extractedIcons[i].getIconHeight();
+				g2.drawRect(x, 0, width+1, height+1);
+				extractedIcons[i].paintIcon(null, g2, x, 1);
+				if (height<maxHeight)
+					g2.fillRect(x, height+2, width+2, maxHeight-height);
+				x += width+2;
+			}
+		
+		return image;
 	}
 
 	private StandardMainWindow mainWindow;
@@ -363,6 +402,43 @@ public class YamahaControl {
 			g2.setPaint(fill1 ); g2.fillOval(x+1, y+1, diameter-2, diameter-2);
 			g2.setPaint(fill2 ); g2.fillOval(x+2, y+2, diameter-4, diameter-4);
 			g2.setPaint(border); g2.drawOval(x  , y  , diameter-1, diameter-1);
+			
+			return new ImageIcon(image);
+		}
+
+		public static Icon createIcon_TriangleToRight(int imgWidth, int imgHeight, int triWidth, int triHeight, Color border, Color fill) {
+			BufferedImage image = new BufferedImage(imgWidth, imgHeight, BufferedImage.TYPE_INT_ARGB);
+			Graphics2D g2 = image.createGraphics();
+			g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+			
+			int x = (imgWidth -triWidth)/2;
+			int y = (imgHeight-triHeight)/2;
+			
+			Color fill2 = fill;
+			Color fill1 = fill2.darker();
+			
+			Polygon p;
+			
+			g2.setPaint(fill1);
+			p = new Polygon();
+			p.addPoint(x+1, y+1);
+			p.addPoint(x+triWidth-1, y+triHeight/2);
+			p.addPoint(x+1, y+triHeight-1);
+			g2.fillPolygon(p );
+			
+			g2.setPaint(fill2);
+			p = new Polygon();
+			p.addPoint(x+2, y+2);
+			p.addPoint(x+triWidth-2, y+triHeight/2);
+			p.addPoint(x+2, y+triHeight-2);
+			g2.fillPolygon(p );
+			
+			g2.setPaint(border);
+			p = new Polygon();
+			p.addPoint(x, y);
+			p.addPoint(x+triWidth-1, y+triHeight/2);
+			p.addPoint(x, y+triHeight-1);
+			g2.drawPolygon(p );
 			
 			return new ImageIcon(image);
 		}
