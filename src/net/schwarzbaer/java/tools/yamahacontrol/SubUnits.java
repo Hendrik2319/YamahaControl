@@ -2,12 +2,15 @@ package net.schwarzbaer.java.tools.yamahacontrol;
 
 import java.awt.BorderLayout;
 import java.awt.Color;
+import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
 import java.awt.Frame;
 import java.awt.GridBagConstraints;
+import java.awt.GridBagLayout;
 import java.awt.Insets;
+import java.awt.Point;
 import java.awt.Window;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
@@ -16,8 +19,10 @@ import java.io.IOException;
 import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.StandardOpenOption;
+import java.util.Calendar;
 import java.util.EnumSet;
-import java.util.List;
+import java.util.Locale;
+import java.util.TimeZone;
 import java.util.Vector;
 
 import javax.swing.AbstractButton;
@@ -31,15 +36,21 @@ import javax.swing.JComponent;
 import javax.swing.JDialog;
 import javax.swing.JFileChooser;
 import javax.swing.JLabel;
+import javax.swing.JMenuItem;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
 import javax.swing.JTabbedPane;
+import javax.swing.JTable;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.JToggleButton;
 import javax.swing.SwingUtilities;
+import javax.swing.table.DefaultTableCellRenderer;
 
+import net.schwarzbaer.gui.ContextMenu;
+import net.schwarzbaer.gui.Tables;
+import net.schwarzbaer.gui.Tables.SimplifiedColumnConfig;
 import net.schwarzbaer.java.tools.yamahacontrol.Device.PlayInfo;
 import net.schwarzbaer.java.tools.yamahacontrol.Device.UpdateWish;
 import net.schwarzbaer.java.tools.yamahacontrol.Device.Value;
@@ -79,7 +90,7 @@ final class SubUnits {
 			tabHeaderComp = new TabHeaderComp(tabTitle);
 			
 			JPanel northPanel = new JPanel(new FlowLayout(FlowLayout.LEFT,3,3));
-			northPanel.add(activateBtn = YamahaControl.createButton("Activate", e->{ if (activateInput!=null) device.inputs.setInput(activateInput); }, false));
+			northPanel.add(activateBtn = YamahaControl.createButton("Activate", false, e->{ if (activateInput!=null) device.inputs.setInput(activateInput); }));
 			northPanel.add(readyStateLabel = new JLabel("???",YamahaControl.smallImages.get(YamahaControl.SmallImages.IconUnknown),JLabel.LEFT));
 			
 			add(northPanel,BorderLayout.NORTH);
@@ -204,9 +215,9 @@ final class SubUnits {
 		
 		@Override public void updateExtraButtons() {}
 		@Override public void addExtraButtons(Vector<AbstractButton> buttons) {
-			buttons.add(YamahaControl.createButton("Add Song to PreferredSongs",e->addSongToPreferredSongs(),true));
-			buttons.add(YamahaControl.createButton("Show List",e->showPreferredSongs(),true));
-			buttons.add(YamahaControl.createButton("Save AlbumCover",e->saveAlbumCover(true),true));
+			buttons.add(YamahaControl.createButton("Add Song to PreferredSongs",true,e->addSongToPreferredSongs()));
+			buttons.add(YamahaControl.createButton("Show List",true,e->showPreferredSongs()));
+			buttons.add(YamahaControl.createButton("Save AlbumCover",true,e->saveAlbumCover(true)));
 		}
 		
 		private void saveAlbumCover(boolean verbose) {
@@ -241,16 +252,15 @@ final class SubUnits {
 		}
 
 		private void showPreferredSongs() {
-			List<String> list = YamahaControl.readPreferredSongsFromFileToCheck();
-			SubUnits.SimpleTextAreaDialog dlg = new SubUnits.SimpleTextAreaDialog( window );
-			dlg.showDlg( "Preferred Songs ("+YamahaControl.getPreferredSongsFile().getPath()+")", list );
+			new SubUnits.PreferredSongsViewDialog( window ).showDlg();
 		}
 
 		private void addSongToPreferredSongs() {
 			if (device!=null) {
-				if (device.netRadio.playInfo.currentSong!=null)
+				if (device.netRadio.playInfo.currentSong!=null) {
 					YamahaControl.preferredSongs.add(device.netRadio.playInfo.currentSong);
-				YamahaControl.writePreferredSongsToFile();
+					YamahaControl.preferredSongs.writeToFile();
+				}
 			}
 		}
 	}
@@ -567,14 +577,14 @@ final class SubUnits {
 				device.tuner.setPreset((Device.PlayInfo_Tuner.Preset) presetCmbBx.getSelectedItem());
 				updateDeviceNGui();
 			});
-			updatePresetsButton = YamahaControl.createButton("Update", e->{
+			updatePresetsButton = YamahaControl.createButton("Update", true, e->{
 				if (device==null) return;
 				device.update(EnumSet.of(UpdateWish.TunerPresets));
 				presetCmbBx_ignoreSelectionEvent = true;
 				presetCmbBx.setModel(new DefaultComboBoxModel<>(device.tuner.playInfo.presets));
 				presetCmbBx.setSelectedItem(device.tuner.playInfo.getCurrentPreset());
 				presetCmbBx_ignoreSelectionEvent = false;
-			}, true);
+			});
 			
 			YamahaControl.GridBagPanel presetPanel = new YamahaControl.GridBagPanel();
 			presetPanel.add(presetButtons.createButton("<<",Value.UpDown.Down), 0,0, 0,0, 1,1, GridBagConstraints.HORIZONTAL);
@@ -755,13 +765,13 @@ final class SubUnits {
 		}
 		
 		private JToggleButton createButton(Value.PlayStop playState) {
-			return YamahaControl.createToggleButton(playState.getLabel(), e->{
+			return YamahaControl.createToggleButton(playState.getLabel(), true, playButtons, e->{
 				PlayInfo_PlayStop playInfo = caller.getPlayInfo();
 				if (playInfo!=null) {
 					playInfo.sendPlayback(playState);
 					caller.updateDeviceNGui();
 				}
-			}, true, playButtons);
+			});
 		}
 	}
 
@@ -812,23 +822,23 @@ final class SubUnits {
 		}
 		
 		private JToggleButton createButton(Value.PlayPauseStop playState) {
-			return YamahaControl.createToggleButton(playState.getLabel(), e->{
+			return YamahaControl.createToggleButton(playState.getLabel(), true, playButtons, e->{
 				PlayInfo_PlayPauseStopSkip playInfo = caller.getPlayInfo();
 				if (playInfo!=null) {
 					playInfo.sendPlayback(playState);
 					caller.updateDeviceNGui();
 				}
-			}, true, playButtons);
+			});
 		}
 		
 		private JButton createButton(String title, Value.SkipFwdRev skip) {
-			return YamahaControl.createButton(title, e->{
+			return YamahaControl.createButton(title, true, e->{
 				PlayInfo_PlayPauseStopSkip playInfo = caller.getPlayInfo();
 				if (playInfo!=null) {
 					playInfo.sendPlayback(skip);
 					caller.updateDeviceNGui();
 				}
-			}, true);
+			});
 		}
 		
 	}
@@ -1143,34 +1153,194 @@ final class SubUnits {
 		@Override public abstract Device.PlayInfo_AirPlaySpotify getPlayInfo();
 	}
 
-	private static class SimpleTextAreaDialog extends JDialog {
-		private static final long serialVersionUID = 7939477522501437501L;
-		
-		private JTextArea textArea;
-	
-		public SimpleTextAreaDialog(Window owner) {
-			super(owner,ModalityType.APPLICATION_MODAL);
+	private static class DateInputDialog extends JDialog {
+		private static final long serialVersionUID = -7064575341358904239L;
+		private final Calendar cal;
+		private Long result;
+
+		DateInputDialog(Window owner, String title, Long oldValue) {
+			super(owner, title, ModalityType.APPLICATION_MODAL);
+			result = null;
+			cal = Calendar.getInstance(TimeZone.getTimeZone("CET"), Locale.GERMANY);
+			if (oldValue!=null) cal.setTimeInMillis(oldValue);
 			
-			textArea = new JTextArea();
-			textArea.setEditable(false);
+			JPanel contentPane = new JPanel(new GridBagLayout());
+			contentPane.setBorder(BorderFactory.createEmptyBorder(3,3,3,3));
+			GridBagConstraints c = new GridBagConstraints();
+			c.fill = GridBagConstraints.BOTH;
 			
-			JScrollPane scrollPane = new JScrollPane(textArea);
-			scrollPane.setPreferredSize(new Dimension(800,600));
-			
-			JPanel contentPane = new JPanel(new BorderLayout(3,3));
-			contentPane.add(scrollPane,BorderLayout.CENTER);
+			contentPane.add(createCalFieldComboBox(Calendar.DAY_OF_MONTH, createValues(1,31)     , 0),c);
+			contentPane.add(createCalFieldComboBox(Calendar.MONTH       , createValues(1,12)     ,-1),c);
+			contentPane.add(createCalFieldComboBox(Calendar.YEAR        , createValues(1970,2030), 0),c);
+			contentPane.add(createCalFieldComboBox(Calendar.HOUR_OF_DAY , createValues(0,23)     , 0),c);
+			contentPane.add(createCalFieldComboBox(Calendar.MINUTE      , createValues(0,59)     , 0),c);
+			contentPane.add(createCalFieldComboBox(Calendar.SECOND      , createValues(0,59)     , 0),c);
+			contentPane.add(YamahaControl.createButton("Ok",true,e->{ result = cal.getTimeInMillis(); setVisible(false); }),c);
 			
 			setContentPane(contentPane);
 			pack();
 			setLocationRelativeTo(owner);
 		}
+		
+		private JComboBox<Integer> createCalFieldComboBox(int fieldID, Integer[] values, int valueOffset) {
+			return YamahaControl.createComboBox(values, cal.get(fieldID)-valueOffset, i->cal.set(fieldID, i+valueOffset));
+		}
+		
+		private Integer[] createValues(int first, int last) {
+			if (last<first) throw new IllegalArgumentException();
+			Integer[] values = new Integer[last-first+1];
+			for (int i=0; i<values.length; i++) values[i] = first+i;
+			return values;
+		}
+
+		static Long showDialog(Window owner, String title, Long oldValue) {
+			DateInputDialog dlg = new DateInputDialog(owner, title, oldValue);
+			dlg.setVisible(true);
+			return dlg.result;
+		}
+		
+	}
+
+	private static class PreferredSongsViewDialog extends JDialog {
+		private static final long serialVersionUID = 7939477522501437501L;
+		private String clickedSong;
 	
-		public void showDlg(String title, List<String> list) {
-			if (list==null) return;
-			textArea.setText("");
-			list.forEach(str->{textArea.append(str+"\r\n");});
-			setTitle(title);
+		public PreferredSongsViewDialog(Window owner) {
+			super(owner, String.format("Preferred Songs (%s)", YamahaControl.preferredSongs.getFile().getPath()), ModalityType.APPLICATION_MODAL);
+			
+			JFileChooser fileChooser = new JFileChooser("./");
+			fileChooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
+			fileChooser.setMultiSelectionEnabled(false);
+			
+			SongTableModel tableModel = new SongTableModel();
+			JTable table = new JTable(tableModel);
+			table.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
+			table.setDefaultRenderer(Long.class, new Renderer());
+			
+			tableModel.setColumnWidths(table);
+			Dimension size = table.getPreferredSize();
+			size.height = Math.min(size.height, 600);
+			table.setPreferredScrollableViewportSize(size);
+			
+			JMenuItem miSetDate, miClearDate;
+			ContextMenu tableContextMenu = new ContextMenu();
+			tableContextMenu.addTo(table);
+			tableContextMenu.add(miSetDate = YamahaControl.createMenuItem("Set Date", e->{
+				if (clickedSong==null) return;
+				Long oldValue = YamahaControl.preferredSongs.getTimeStamp(clickedSong);
+				Long newValue = DateInputDialog.showDialog(this, oldValue==null ? "Set Date" : "Change Date", oldValue);
+				if (newValue==null) return;
+				boolean successful = YamahaControl.preferredSongs.setTimeStamp(clickedSong,newValue);
+				if (successful) {
+					YamahaControl.preferredSongs.writeToFile();
+					tableModel.fireTableColumnUpdate(ColumnID.TimeStamp);
+				}
+			}));
+			tableContextMenu.add(miClearDate = YamahaControl.createMenuItem("Clear Date", e->{
+				if (clickedSong==null) return;
+				boolean successful = YamahaControl.preferredSongs.setTimeStamp(clickedSong,null);
+				if (successful) {
+					YamahaControl.preferredSongs.writeToFile();
+					tableModel.fireTableColumnUpdate(ColumnID.TimeStamp);
+				}
+			}));
+			tableContextMenu.add(YamahaControl.createMenuItem("Set Dates of Unset Songs", e->{
+				if (fileChooser.showOpenDialog(this)!=JFileChooser.APPROVE_OPTION) return;
+				File file = fileChooser.getSelectedFile();
+				Long newValue = DateInputDialog.showDialog(this, "Set Date", null);
+				if (newValue==null) return;
+				boolean successful = YamahaControl.preferredSongs.setTimeStampsOfUnsetSongs(file,newValue);
+				if (successful) {
+					YamahaControl.preferredSongs.writeToFile();
+					tableModel.fireTableColumnUpdate(ColumnID.TimeStamp);
+				}
+			}));
+			
+			clickedSong=null;
+			tableContextMenu.addContextMenuInvokeListener((comp, x, y) -> {
+				int rowV = table.rowAtPoint(new Point(x, y));
+				int rowM = rowV<0 ? -1 : table.convertRowIndexToModel(rowV);
+				clickedSong = rowM<0 || rowM>=tableModel.songs.size() ? null : tableModel.songs.get(rowM);
+				
+				miSetDate  .setEnabled(clickedSong!=null);
+				miClearDate.setEnabled(clickedSong!=null);
+				if (clickedSong!=null) {
+					Long timeStamp = YamahaControl.preferredSongs.getTimeStamp(clickedSong);
+					miSetDate  .setText(String.format("%s Date for \"%s\"", timeStamp==null ? "Set" : "Change", clickedSong));
+					miClearDate.setText(String.format("%s Date for \"%s\"", "Clear", clickedSong));
+				} else {
+					miSetDate  .setText("Set Date");
+					miClearDate.setText("Clear Date");
+				}
+			});
+			
+			JPanel contentPane = new JPanel(new BorderLayout(3,3));
+			contentPane.add(new JScrollPane(table),BorderLayout.CENTER);
+			
+			setContentPane(contentPane);
+			pack();
+			setLocationRelativeTo(owner);
+		}
+		
+		public void showDlg() {
 			setVisible(true);
+		}
+		
+		private static class Renderer extends DefaultTableCellRenderer {
+			private static final long serialVersionUID = -8040402180068866311L;
+			private static final Calendar cal = Calendar.getInstance(TimeZone.getTimeZone("CET"), Locale.GERMANY);
+
+			@Override
+			public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus, int row, int column) {
+				Component component = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
+				
+				if (value instanceof Long) {
+					long time = (Long) value;
+					cal.setTimeInMillis(time);
+					//setValue(String.format(Locale.ENGLISH, "%1$td.%1$tm.%1$tY %1$tT", cal));
+					setValue(String.format(Locale.ENGLISH, "%1$tA, %1$te. %1$tb %1$tY, %1$tT [%1$tZ:%1$tz]", cal));
+				}
+				return component;
+			}
+			
+		}
+		
+		private enum ColumnID implements Tables.SimplifiedColumnIDInterface {
+			TimeStamp("Added",   Long.class, 20, -1, 250, 250),
+			Song     ("Song" , String.class, 20, -1, 600, 600),
+			;
+			private final SimplifiedColumnConfig config;
+			ColumnID(String name, Class<?> columnClass, int minWidth, int maxWidth, int prefWidth, int currentWidth) {
+				config = new SimplifiedColumnConfig(name, columnClass, minWidth, maxWidth, prefWidth, currentWidth);
+			}
+			@Override public SimplifiedColumnConfig getColumnConfig() { return config; }
+		}
+		
+		private static class SongTableModel extends Tables.SimplifiedTableModel<ColumnID> {
+			
+			private Vector<String> songs;
+
+			SongTableModel() {
+				super(ColumnID.values());
+				songs = YamahaControl.preferredSongs.getAsSortedList();
+			}
+
+			void fireTableColumnUpdate(ColumnID columnID) {
+				super.fireTableColumnUpdate(getColumn(columnID));
+			}
+
+			@Override public int getRowCount() { return songs.size(); }
+
+			@Override
+			public Object getValueAt(int rowIndex, int columnIndex, ColumnID columnID) {
+				if (rowIndex<0 || rowIndex>=songs.size()) return null;
+				String song = songs.get(rowIndex);
+				switch (columnID) {
+				case TimeStamp: return YamahaControl.preferredSongs.getTimeStamp(song);
+				case Song     : return song;
+				}
+				return null;
+			}
 		}
 	}
 }

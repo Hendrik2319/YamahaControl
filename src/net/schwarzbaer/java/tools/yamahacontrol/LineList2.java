@@ -291,7 +291,7 @@ class LineList2 {
 	}
 	
 	private JButton createButton(Device.Value.CursorSelect cursorSelect, boolean listReset) {
-		JButton button = YamahaControl.createButton(cursorSelect.getLabel(), e->sendCursorSelect(cursorSelect, listReset), true);
+		JButton button = YamahaControl.createButton(cursorSelect.getLabel(), true, e->sendCursorSelect(cursorSelect, listReset));
 		buttons.add(button);
 		return button;
 	}

@@ -165,8 +165,8 @@ public class Responder extends Ctrl.HttpInterface {
 		});
 		
 		JPanel buttonPanel = new JPanel(new GridLayout(1,0,3,3));
-		buttonPanel.add(YamahaControl.createButton("Write CommProtocol to File",e->Ctrl.writeCommProtocolToFile(),true));
-		buttonPanel.add(YamahaControl.createButton("Write Behaviours to File",e->Behaviour.writeToFile(behaviours),true));
+		buttonPanel.add(YamahaControl.createButton("Write CommProtocol to File",true,e->Ctrl.writeCommProtocolToFile()));
+		buttonPanel.add(YamahaControl.createButton("Write Behaviours to File",true,e->Behaviour.writeToFile(behaviours)));
 		
 		JPanel eastPanel = new JPanel(new BorderLayout(3,3));
 		eastPanel.add(buttonPanel,BorderLayout.NORTH);

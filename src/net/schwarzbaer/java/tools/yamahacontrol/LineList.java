@@ -181,7 +181,7 @@ class LineList {
 	}
 	
 	private JButton createButton(LineList.ButtonID buttonID) {
-		JButton button = YamahaControl.createButton(buttonID.getLabel(), createListener(buttonID), true);
+		JButton button = YamahaControl.createButton(buttonID.getLabel(), true, createListener(buttonID));
 		buttons.add(button);
 		return button;
 	}

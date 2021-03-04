@@ -210,7 +210,7 @@ public class CommandList {
 		contextMenu.add(ContextMenuItemType.MenuWithCommandList, "Show Command Usage", e->showCommandUsage(contextMenu.getClickedTreeNode()));
 
 		selectedTreeViewType = TreeViewType.InterpretedDOM;
-		JComboBox<TreeViewType> treeViewTypeComboBox = YamahaControl.createComboBox(TreeViewType.values(),null);
+		JComboBox<TreeViewType> treeViewTypeComboBox = YamahaControl.createComboBox(TreeViewType.values());
 		treeViewTypeComboBox.setSelectedItem(selectedTreeViewType);
 		
 		
@@ -228,9 +228,9 @@ public class CommandList {
 		
 		JPanel northPanel = new JPanel();
 		northPanel.setLayout(new BoxLayout(northPanel, BoxLayout.X_AXIS));
-		northPanel.add(YamahaControl.createButton("Get Data",e->{ selectedAddress = Config.selectAddress(mainWindow); readCommandList(); showCommandList(); },true));
+		northPanel.add(YamahaControl.createButton("Get Data",true,e->{ selectedAddress = Config.selectAddress(mainWindow); readCommandList(); showCommandList(); }));
 		northPanel.add(treeViewTypeComboBox);
-		northPanel.add(YamahaControl.createButton("Write CommProtocol to File",e->Ctrl.writeCommProtocolToFile(),true));
+		northPanel.add(YamahaControl.createButton("Write CommProtocol to File",true,e->Ctrl.writeCommProtocolToFile()));
 		
 		JPanel contentPane = new JPanel(new BorderLayout(3,3));
 		contentPane.setBorder(BorderFactory.createEmptyBorder(3, 3, 3, 3));

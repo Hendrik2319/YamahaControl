@@ -25,15 +25,11 @@ import java.io.OutputStreamWriter;
 import java.io.PrintStream;
 import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
 import java.util.Locale;
 import java.util.Stack;
 import java.util.Vector;
@@ -78,44 +74,99 @@ import net.schwarzbaer.system.ClipboardTools;
 
 public class YamahaControl {
 	
-	private static final String PREFERREDSONGS_FILENAME = "YamahaControl.PreferredSongs.txt";
-	static final HashSet<String> preferredSongs = new HashSet<>();
-
-	static void writePreferredSongsToFile() {
-		Vector<String> list = new Vector<>(preferredSongs);
-		list.sort(Comparator.nullsLast(Comparator.comparing(str->str.toLowerCase())));
-		try (PrintWriter out = new PrintWriter( new OutputStreamWriter( new FileOutputStream(PREFERREDSONGS_FILENAME), StandardCharsets.UTF_8) )) {
-			list.forEach(str->out.println(str));
+	static final PreferredSongs preferredSongs = new PreferredSongs();
+	static class PreferredSongs {
+		private static final String PREFERREDSONGS_FILENAME = "YamahaControl.PreferredSongs.txt";
+		
+		final HashMap<String,Long> songs = new HashMap<>();
+		
+		File getFile() {
+			return new File(PREFERREDSONGS_FILENAME);
 		}
-		catch (FileNotFoundException e) {}
-	}
 
-	static void readPreferredSongsFromFile() {
-		preferredSongs.clear();
-		try (BufferedReader in = new BufferedReader( new InputStreamReader( new FileInputStream(PREFERREDSONGS_FILENAME), StandardCharsets.UTF_8) )) {
-			String line;
-			while ( (line=in.readLine())!=null )
-				if (!line.isEmpty())
-					preferredSongs.add(line);
+		void add(String currentSong) {
+			songs.put(currentSong,System.currentTimeMillis());
 		}
-		catch (FileNotFoundException e) {}
-		catch (IOException e) {
-			e.printStackTrace();
+
+		boolean setTimeStamp(String song, Long timeStamp) {
+			songs.put(song,timeStamp);
+			return true;
 		}
-	}
 
-	static List<String> readPreferredSongsFromFileToCheck() {
-		try {
-			Path path = getPreferredSongsFile().toPath();
-			return Files.readAllLines(path,StandardCharsets.UTF_8);
-		} catch (IOException e) {
-			e.printStackTrace();
-			return null;
-		} 
-	}
+		Long getTimeStamp(String song) {
+			return songs.get(song);
+		}
 
-	static File getPreferredSongsFile() {
-		return new File(PREFERREDSONGS_FILENAME);
+		Vector<String> getAsSortedList() {
+			Vector<String> list = new Vector<>(songs.keySet());
+			list.sort(Comparator.nullsLast(Comparator.<String,String>comparing(String::toLowerCase).thenComparing(Comparator.naturalOrder())));
+			return list;
+		}
+
+		void writeToFile() {
+			System.out.printf("Write list of preferred songs to file \"%s\"%n", PREFERREDSONGS_FILENAME);
+			Vector<String> list = getAsSortedList();
+			try (PrintWriter out = new PrintWriter( new OutputStreamWriter( new FileOutputStream(PREFERREDSONGS_FILENAME), StandardCharsets.UTF_8) )) {
+				list.forEach(str->{
+					Long timestamp = songs.get(str);
+					if (timestamp==null) out.printf("%s%n", str);
+					else                 out.printf("%016X=%s%n", timestamp, str);
+				});
+			}
+			catch (FileNotFoundException e) {}
+		}
+
+		void readFromFile() {
+			System.out.printf("Read list of preferred songs from file \"%s\"%n", PREFERREDSONGS_FILENAME);
+			songs.clear();
+			try (BufferedReader in = new BufferedReader( new InputStreamReader( new FileInputStream(PREFERREDSONGS_FILENAME), StandardCharsets.UTF_8) )) {
+				String line;
+				while ( (line=in.readLine())!=null )
+					
+					if (line.length()>16 && line.charAt(16)=='=') {
+						String timeStr = line.substring(0, 16);
+						String name = line.substring(17);
+						try { songs.put(name,Long.parseUnsignedLong(timeStr, 16)); }
+						catch (NumberFormatException e) { songs.put(line,null); }
+						
+					} else if (!line.isEmpty())
+						songs.put(line,null);
+			}
+			catch (FileNotFoundException e) {}
+			catch (IOException e) {
+				e.printStackTrace();
+			}
+		}
+
+		public boolean setTimeStampsOfUnsetSongs(File file, Long newValue) {
+			if (file==null || newValue==null) return false;
+			
+			Vector<String> unsetSongs = new Vector<>();
+			try(BufferedReader in = new BufferedReader(new InputStreamReader(new FileInputStream(file), StandardCharsets.UTF_8))) {
+				
+				for (String line = in.readLine(); line!=null; line = in.readLine()) {
+					if (!songs.containsKey(line)) {
+						System.err.printf("Found unknown song: \"%s\"%n", line);
+						return false;
+						
+					} else if (songs.get(line)==null)
+						unsetSongs.add(line);
+				}
+				 
+			}
+			catch (FileNotFoundException e) {
+				System.err.printf("FileNotFoundException: %s%n", e.getMessage());
+				return false;
+			} catch (IOException e) {
+				System.err.printf("IOException: %s%n", e.getMessage());
+				return false;
+			}
+			
+			for (String song:unsetSongs)
+				songs.put(song,newValue);
+			
+			return true;
+		}
 	}
 
 	public static void main(String[] args) {
@@ -126,7 +177,7 @@ public class YamahaControl {
 		Ctrl.readCommProtocolFromFile();
 //		new Responder().openWindow();
 		
-		readPreferredSongsFromFile();
+		preferredSongs.readFromFile();
 		createSmallImages();
 //		BufferedImage mergedIcons = mergeIcons(SmallImages.values(), smallImages::get);
 //		try {
@@ -329,9 +380,9 @@ public class YamahaControl {
 		
 		GridBagPanel devicePanel = new GridBagPanel();
 		devicePanel.setBorder(BorderFactory.createTitledBorder("Device"));
-		devicePanel.add(createButton("Connect",e->connectToReciever(),true),0,1,GridBagConstraints.BOTH);
+		devicePanel.add(createButton("Connect",true,e->connectToReciever()),0,1,GridBagConstraints.BOTH);
 		devicePanel.add(onOffBtn.button,0,GridBagConstraints.REMAINDER,GridBagConstraints.BOTH);
-		devicePanel.add(createButton("Open Command List",e->CommandList.openWindow(device==null?null:device.address),true),0,GridBagConstraints.REMAINDER,GridBagConstraints.BOTH);
+		devicePanel.add(createButton("Open Command List",true,e->CommandList.openWindow(device==null?null:device.address)),0,GridBagConstraints.REMAINDER,GridBagConstraints.BOTH);
 		devicePanel.add(updatePanel,0,GridBagConstraints.REMAINDER,GridBagConstraints.BOTH);
 		
 		JTabbedPane settingsPanel = new JTabbedPane();
@@ -546,44 +597,54 @@ public class YamahaControl {
 		button.setEnabled(enabled);
 		return button;
 	}
-	static JButton createButton(String title, ActionListener l, boolean enabled) {
+	static JButton createButton(String title, boolean enabled, ActionListener al) {
 		JButton button = createButton(title,enabled);
-		button.addActionListener(l);
+		if (al!=null) button.addActionListener(al);
 		return button;
 	}
 
-	static JToggleButton createToggleButton(String title, ActionListener l, boolean enabled, ButtonGroup bg) {
-		JToggleButton button = createToggleButton(title, l, enabled);
+	static JToggleButton createToggleButton(String title, boolean enabled, ButtonGroup bg, ActionListener l) {
+		JToggleButton button = createToggleButton(title, enabled, l);
 		if (bg!=null) bg.add(button);
 		return button;
 	}
 
-	static JToggleButton createToggleButton(String title, ActionListener l, boolean enabled) {
+	static JToggleButton createToggleButton(String title, boolean enabled, ActionListener l) {
 		JToggleButton button = new JToggleButton(title);
 		button.setEnabled(enabled);
 		if (l!=null) button.addActionListener(l);
 		return button;
 	}
 
-	static JMenuItem createMenuItem(String title, ActionListener l) {
-		JMenuItem menuItem = new JMenuItem(title);
-		if (l!=null) menuItem.addActionListener(l);
-		return menuItem;
+	static JMenuItem createMenuItem(String title, ActionListener al) {
+		JMenuItem comp = new JMenuItem(title);
+		if (al!=null) comp.addActionListener(al);
+		return comp;
 	}
 
-	static JCheckBoxMenuItem createCheckBoxMenuItem(String title, ActionListener l, ButtonGroup bg) {
+	static JCheckBoxMenuItem createCheckBoxMenuItem(String title, ButtonGroup bg, ActionListener l) {
 		JCheckBoxMenuItem menuItem = new JCheckBoxMenuItem(title);
 		if (l!=null) menuItem.addActionListener(l);
 		if (bg!=null) bg.add(menuItem);
 		return menuItem;
 	}
 
-	static <A> JComboBox<A> createComboBox(A[] values, ActionListener l) {
+	static <A> JComboBox<A> createComboBox(A[] values) {
+		return createComboBox(values, null);
+	}
+	static <A> JComboBox<A> createComboBox(A[] values, Consumer<A> setValue) {
+		return createComboBox(values, null, null);
+	}
+	static <A> JComboBox<A> createComboBox(A[] values, A selected, Consumer<A> setValue) {
 		JComboBox<A> comboBox = new JComboBox<A>(values);
-		if (l!=null) comboBox.addActionListener(l);
+		comboBox.setSelectedItem(selected);
+		if (setValue!=null) comboBox.addActionListener(e->{
+			int i = comboBox.getSelectedIndex();
+			setValue.accept(i<0 ? null : values[i]);
+		});
 		return comboBox;
 	}
-	
+
 	static float getScrollPos(JScrollBar scrollBar) {
 		int min = scrollBar.getMinimum();
 		int max = scrollBar.getMaximum();
@@ -687,7 +748,7 @@ public class YamahaControl {
 		}
 		@Override
 		protected JButton createButton(String title, E buttonID, ActionListener l) {
-			JButton button = YamahaControl.createButton(title, l, true);
+			JButton button = YamahaControl.createButton(title, true, l);
 			return button;
 		}
 	}
@@ -714,7 +775,7 @@ public class YamahaControl {
 		
 		@Override
 		protected JToggleButton createButton(String title, E buttonID, ActionListener l) {
-			JToggleButton button = YamahaControl.createToggleButton(title, l, true, bg);
+			JToggleButton button = YamahaControl.createToggleButton(title, true, bg, l);
 			return button; 
 		}
 		
@@ -925,7 +986,7 @@ public class YamahaControl {
 		
 		OnOffBtn() {
 			device = null;
-			button = createButton("",e->toggleOnOff(),false);
+			button = createButton("",false,e->toggleOnOff());
 			setOnOffButton(null);
 		}
 		@Override public void setEnabledGUI(boolean enabled) {
@@ -1050,9 +1111,9 @@ public class YamahaControl {
 			GridBagPanel volumePanel = new GridBagPanel();
 			volumePanel.add(rotaryCtrl , 0,0, 1,1, 3,1, GridBagConstraints.BOTH);
 			volumePanel.add(volumeBar  , 0,1, 1,1, 3,1, GridBagConstraints.BOTH);
-			volumePanel.add(decBtn  = createButton      ("Vol -",e-> decVol(),true), 0,2, 1,1, 1,1, GridBagConstraints.BOTH);
-			volumePanel.add(muteBtn = createToggleButton("Mute" ,e->muteVol(),true), 1,2, 1,1, 1,1, GridBagConstraints.BOTH);
-			volumePanel.add(incBtn  = createButton      ("Vol +",e-> incVol(),true), 2,2, 1,1, 1,1, GridBagConstraints.BOTH);
+			volumePanel.add(decBtn  = createButton      ("Vol -",true,e-> decVol()), 0,2, 1,1, 1,1, GridBagConstraints.BOTH);
+			volumePanel.add(muteBtn = createToggleButton("Mute" ,true,e->muteVol()), 1,2, 1,1, 1,1, GridBagConstraints.BOTH);
+			volumePanel.add(incBtn  = createButton      ("Vol +",true,e-> incVol()), 2,2, 1,1, 1,1, GridBagConstraints.BOTH);
 			
 			setMuteBtn(null);
 			return volumePanel;
@@ -1177,33 +1238,33 @@ public class YamahaControl {
 		}
 	
 		private JButton createButton(Value.CursorSelectExt cursor) {
-			JButton button = YamahaControl.createButton(cursor.toString(), e->{
+			JButton button = YamahaControl.createButton(cursor.toString(), true, e->{
 				if (device!=null) device.remoteCtrl.setCursorSelect(cursor);
-			}, true);
+			});
 			comps.add(button);
 			return button;
 		}
 	
 		private JButton createButton(Value.MainZoneMenuControl menuCtrl) {
-			JButton button = YamahaControl.createButton(menuCtrl.toString(), e->{
+			JButton button = YamahaControl.createButton(menuCtrl.toString(), true, e->{
 				if (device!=null) device.remoteCtrl.setMenuControl(menuCtrl);
-			}, true);
+			});
 			comps.add(button);
 			return button;
 		}
 	
 		private JButton createButton(Value.PlayPauseStop play) {
-			JButton button = YamahaControl.createButton(play.toString(), e->{
+			JButton button = YamahaControl.createButton(play.toString(), true, e->{
 				if (device!=null) device.remoteCtrl.setPlayback(play);
-			}, true);
+			});
 			comps.add(button);
 			return button;
 		}
 	
 		private JButton createButton(Value.SkipFwdRev skip, String title) {
-			JButton button = YamahaControl.createButton(title, e->{
+			JButton button = YamahaControl.createButton(title, true, e->{
 				if (device!=null) device.remoteCtrl.setPlayback(skip);
-			}, true);
+			});
 			comps.add(button);
 			return button;
 		}
@@ -1335,9 +1396,9 @@ public class YamahaControl {
 						
 						AbstractButton button;
 						if (createNormalButtons) {
-							button = createButton(title, e->setFunction.accept(dsi), true);
+							button = createButton(title, true, e->setFunction.accept(dsi));
 						} else {
-							JToggleButton tButton = createToggleButton(title, e->setFunction.accept(dsi), true, bg);
+							JToggleButton tButton = createToggleButton(title, true, bg, e->setFunction.accept(dsi));
 							buttons.put(dsi,tButton);
 							button = tButton;
 						}
@@ -1447,14 +1508,14 @@ public class YamahaControl {
 				// PUT[P3]:    System,Misc,Network,Network_Name   =   Text: 1..15 (UTF-8)
 				// GET[G2]:    System,Misc,Network,Network_Name   ->   Text: 1..15 (UTF-8)
 				networkNameField = new JTextField("",8);
-				JButton networkNameSetButton = createButton("Set",e->{
+				JButton networkNameSetButton = createButton("Set",true,e->{
 					String networkName = networkNameField.getText();
 					if (!networkName.isEmpty()) {
 						device.system.setNetworkName(networkName.substring(0, 15));
 						device.system.updateNetworkName();
 					}
 					updateNetworkNameField();
-				},true);
+				});
 				networkNameSetButton.setMargin(defaultButtonInsets);
 				
 				// [Power_On]        PUT[P2]     System,Power_Control,Power = On
