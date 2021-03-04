@@ -141,11 +141,14 @@ public class YamahaControl {
 		public boolean setTimeStampsOfUnsetSongs(File file, Function<Long,Long> getData) {
 			if (file==null || getData==null) return false;
 			
+			String wrongLine = new String(new byte[] { (byte) 0xEF, (byte) 0xBB, (byte) 0xBF }, StandardCharsets.UTF_8);
 			Vector<String> unsetSongs = new Vector<>();
 			try(BufferedReader in = new BufferedReader(new InputStreamReader(new FileInputStream(file), StandardCharsets.UTF_8))) {
 				
 				System.out.printf("Read songs from text file \"%s\" ...%n", file.getAbsolutePath());
 				for (String line = in.readLine(); line!=null; line = in.readLine()) {
+					if (line.equals(wrongLine)) continue;
+					
 					if (!songs.containsKey(line)) {
 						System.err.printf("Found unknown song: \"%s\"%n", line);
 						System.err.printf("It could be a wrong file.%n");

@@ -1216,6 +1216,7 @@ final class SubUnits {
 			JTable table = new JTable(tableModel);
 			table.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
 			table.setDefaultRenderer(Long.class, new Renderer());
+			table.setRowSorter(new Tables.SimplifiedRowSorter(tableModel));
 			
 			tableModel.setColumnWidths(table);
 			Dimension size = table.getPreferredSize();
