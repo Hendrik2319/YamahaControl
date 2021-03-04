@@ -1247,9 +1247,7 @@ final class SubUnits {
 			tableContextMenu.add(YamahaControl.createMenuItem("Set Dates of Unset Songs", e->{
 				if (fileChooser.showOpenDialog(this)!=JFileChooser.APPROVE_OPTION) return;
 				File file = fileChooser.getSelectedFile();
-				Long newValue = DateInputDialog.showDialog(this, "Set Date", null);
-				if (newValue==null) return;
-				boolean successful = YamahaControl.preferredSongs.setTimeStampsOfUnsetSongs(file,newValue);
+				boolean successful = YamahaControl.preferredSongs.setTimeStampsOfUnsetSongs(file,oldValue->DateInputDialog.showDialog(this, "Select Date", oldValue));
 				if (successful) {
 					YamahaControl.preferredSongs.writeToFile();
 					tableModel.fireTableColumnUpdate(ColumnID.TimeStamp);

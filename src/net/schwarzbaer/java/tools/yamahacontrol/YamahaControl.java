@@ -138,20 +138,23 @@ public class YamahaControl {
 			}
 		}
 
-		public boolean setTimeStampsOfUnsetSongs(File file, Long newValue) {
-			if (file==null || newValue==null) return false;
+		public boolean setTimeStampsOfUnsetSongs(File file, Function<Long,Long> getData) {
+			if (file==null || getData==null) return false;
 			
 			Vector<String> unsetSongs = new Vector<>();
 			try(BufferedReader in = new BufferedReader(new InputStreamReader(new FileInputStream(file), StandardCharsets.UTF_8))) {
 				
+				System.out.printf("Read songs from text file \"%s\" ...%n", file.getAbsolutePath());
 				for (String line = in.readLine(); line!=null; line = in.readLine()) {
 					if (!songs.containsKey(line)) {
 						System.err.printf("Found unknown song: \"%s\"%n", line);
+						System.err.printf("It could be a wrong file.%n");
 						return false;
 						
 					} else if (songs.get(line)==null)
 						unsetSongs.add(line);
 				}
+				System.out.printf("done%n");
 				 
 			}
 			catch (FileNotFoundException e) {
@@ -161,6 +164,9 @@ public class YamahaControl {
 				System.err.printf("IOException: %s%n", e.getMessage());
 				return false;
 			}
+			
+			Long newValue = getData.apply(file.lastModified());
+			if (newValue==null) return false;
 			
 			for (String song:unsetSongs)
 				songs.put(song,newValue);
