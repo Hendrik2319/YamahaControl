@@ -84,6 +84,16 @@ public class YamahaControl {
 			return new File(PREFERREDSONGS_FILENAME);
 		}
 
+		public boolean rename(String currentSongName, String newSongName) {
+			if (!songs.containsKey(currentSongName)) return false;
+			if ( songs.containsKey(    newSongName)) return false;
+			
+			Long value = songs.remove(currentSongName);
+			songs.put(newSongName, value);
+			
+			return true;
+		}
+
 		void add(String currentSong) {
 			songs.put(currentSong,System.currentTimeMillis());
 		}
@@ -138,7 +148,7 @@ public class YamahaControl {
 			}
 		}
 
-		public boolean setTimeStampsOfUnsetSongs(File file, Function<Long,Long> getData) {
+		boolean setTimeStampsOfUnsetSongs(File file, Function<Long,Long> getData) {
 			if (file==null || getData==null) return false;
 			
 			String wrongLine = new String(new byte[] { (byte) 0xEF, (byte) 0xBB, (byte) 0xBF }, StandardCharsets.UTF_8);

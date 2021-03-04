@@ -51,7 +51,6 @@ import javax.swing.table.DefaultTableCellRenderer;
 import net.schwarzbaer.gui.ContextMenu;
 import net.schwarzbaer.gui.Tables;
 import net.schwarzbaer.gui.Tables.SimplifiedColumnConfig;
-import net.schwarzbaer.java.tools.yamahacontrol.Device.PlayInfo;
 import net.schwarzbaer.java.tools.yamahacontrol.Device.UpdateWish;
 import net.schwarzbaer.java.tools.yamahacontrol.Device.Value;
 
@@ -258,7 +257,7 @@ final class SubUnits {
 		private void addSongToPreferredSongs() {
 			if (device!=null) {
 				if (device.netRadio.playInfo.currentSong!=null) {
-					YamahaControl.preferredSongs.add(device.netRadio.playInfo.currentSong);
+					YamahaControl.preferredSongs.add(Device.PlayInfo.convertUTF8(device.netRadio.playInfo.currentSong, withExtraCharsetConversion));
 					YamahaControl.preferredSongs.writeToFile();
 				}
 			}
@@ -1016,15 +1015,15 @@ final class SubUnits {
 		protected abstract Device.PlayInfo getPlayInfo();
 	
 		public void updatePlayInfo() {
-			PlayInfo playInfo = updatePlayInfoOutput();
+			Device.PlayInfo playInfo = updatePlayInfoOutput();
 			if (playInfo!=null) setWindowTitle(playInfo.getWindowTitleInfo(withExtraCharsetConversion));
 			modules.forEach(m->m.updateButtons());
 		}
 	
-		private PlayInfo updatePlayInfoOutput() {
+		private Device.PlayInfo updatePlayInfoOutput() {
 			float hPos = YamahaControl.getScrollPos(playinfoScrollPane.getHorizontalScrollBar());
 			float vPos = YamahaControl.getScrollPos(playinfoScrollPane.getVerticalScrollBar());
-			PlayInfo playInfo = null;
+			Device.PlayInfo playInfo = null;
 			if (device!=null) playinfoOutput.setText((playInfo = getPlayInfo()).toString(withExtraCharsetConversion));
 			else              playinfoOutput.setText("<no data>");
 			YamahaControl.setScrollPos(playinfoScrollPane.getHorizontalScrollBar(),hPos);
@@ -1203,10 +1202,14 @@ final class SubUnits {
 
 	private static class PreferredSongsViewDialog extends JDialog {
 		private static final long serialVersionUID = 7939477522501437501L;
+		
 		private String clickedSong;
+		private int clickedRow;
 	
 		public PreferredSongsViewDialog(Window owner) {
 			super(owner, String.format("Preferred Songs (%s)", YamahaControl.preferredSongs.getFile().getPath()), ModalityType.APPLICATION_MODAL);
+			clickedSong = null;
+			clickedRow = -1;
 			
 			JFileChooser fileChooser = new JFileChooser("./");
 			fileChooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
@@ -1223,9 +1226,18 @@ final class SubUnits {
 			size.height = Math.min(size.height, 600);
 			table.setPreferredScrollableViewportSize(size);
 			
-			JMenuItem miSetDate, miClearDate;
+			JMenuItem miSetDate, miClearDate, miExtraUTF8;
 			ContextMenu tableContextMenu = new ContextMenu();
 			tableContextMenu.addTo(table);
+			tableContextMenu.add(miExtraUTF8 = YamahaControl.createMenuItem("Perform additional UTF8 conversion to song name", e->{
+				if (clickedSong==null) return;
+				String newSongName = Device.PlayInfo.convertUTF8(clickedSong, true);
+				boolean successful = YamahaControl.preferredSongs.rename(clickedSong,newSongName);
+				if (successful) {
+					tableModel.setValue(clickedRow,newSongName);
+					YamahaControl.preferredSongs.writeToFile();
+				}
+			}));
 			tableContextMenu.add(miSetDate = YamahaControl.createMenuItem("Set Date", e->{
 				if (clickedSong==null) return;
 				Long oldValue = YamahaControl.preferredSongs.getTimeStamp(clickedSong);
@@ -1255,21 +1267,23 @@ final class SubUnits {
 				}
 			}));
 			
-			clickedSong=null;
 			tableContextMenu.addContextMenuInvokeListener((comp, x, y) -> {
 				int rowV = table.rowAtPoint(new Point(x, y));
-				int rowM = rowV<0 ? -1 : table.convertRowIndexToModel(rowV);
-				clickedSong = rowM<0 || rowM>=tableModel.songs.size() ? null : tableModel.songs.get(rowM);
+				clickedRow = rowV<0 ? -1 : table.convertRowIndexToModel(rowV);
+				clickedSong = clickedRow<0 || clickedRow>=tableModel.songs.size() ? null : tableModel.songs.get(clickedRow);
 				
+				miExtraUTF8.setEnabled(clickedSong!=null);
 				miSetDate  .setEnabled(clickedSong!=null);
 				miClearDate.setEnabled(clickedSong!=null);
 				if (clickedSong!=null) {
 					Long timeStamp = YamahaControl.preferredSongs.getTimeStamp(clickedSong);
 					miSetDate  .setText(String.format("%s Date for \"%s\"", timeStamp==null ? "Set" : "Change", clickedSong));
 					miClearDate.setText(String.format("%s Date for \"%s\"", "Clear", clickedSong));
+					miExtraUTF8.setText(String.format("Perform additional UTF8 conversion to song name \"%s\"", clickedSong));
 				} else {
 					miSetDate  .setText("Set Date");
 					miClearDate.setText("Clear Date");
+					miExtraUTF8.setText("Perform additional UTF8 conversion to song name");
 				}
 			});
 			
@@ -1324,6 +1338,12 @@ final class SubUnits {
 				songs = YamahaControl.preferredSongs.getAsSortedList();
 			}
 
+			void setValue(int rowIndex, String newSongName) {
+				if (rowIndex<0 || rowIndex>=songs.size()) return;
+				songs.set(rowIndex, newSongName);
+				fireTableCellUpdate(rowIndex, getColumn(ColumnID.Song));
+			}
+
 			void fireTableColumnUpdate(ColumnID columnID) {
 				super.fireTableColumnUpdate(getColumn(columnID));
 			}
@@ -1340,6 +1360,39 @@ final class SubUnits {
 				}
 				return null;
 			}
+
+			@Override
+			protected boolean isCellEditable(int rowIndex, int columnIndex, ColumnID columnID) {
+				switch (columnID) {
+				case Song: return true;
+				case TimeStamp: break;
+				}
+				return false;
+			}
+
+			@Override
+			protected void setValueAt(Object aValue, int rowIndex, int columnIndex, ColumnID columnID) {
+				if (rowIndex<0 || rowIndex>=songs.size()) return;
+				String song = songs.get(rowIndex);
+				switch (columnID) {
+				case Song:
+					if (aValue instanceof String) {
+						String newName = (String) aValue;
+						boolean successful = YamahaControl.preferredSongs.rename(song, newName);
+						if (successful) {
+							songs.set(rowIndex,newName);
+							YamahaControl.preferredSongs.writeToFile();
+						} else
+							fireTableCellUpdate(rowIndex, columnIndex);
+					}
+					break;
+				case TimeStamp: break;
+				}
+				
+				// TODO Auto-generated method stub
+			}
+			
+			
 		}
 	}
 }

@@ -1480,13 +1480,13 @@ public final class Device {
 		protected abstract void parse(Node node);
 		public abstract String getWindowTitleInfo(boolean withExtraCharsetConversion);
 		
-		protected String convertUTF8(String str, boolean active) {
+		protected static String convertUTF8(String str, boolean active) {
 			return convert(str, active, StandardCharsets.UTF_8);
 		}
-		protected String convertLatin1(String str, boolean active) {
+		protected static String convertLatin1(String str, boolean active) {
 			return convert(str, active, StandardCharsets.ISO_8859_1);
 		}
-		protected String convert(String str, boolean active, Charset charset) {
+		protected static String convert(String str, boolean active, Charset charset) {
 			if (!active) return str;
 			return charset.decode(ByteBuffer.wrap(str.getBytes())).toString();
 		}
