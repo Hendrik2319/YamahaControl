@@ -1229,15 +1229,6 @@ final class SubUnits {
 			JMenuItem miSetDate, miClearDate, miExtraUTF8;
 			ContextMenu tableContextMenu = new ContextMenu();
 			tableContextMenu.addTo(table);
-			tableContextMenu.add(miExtraUTF8 = YamahaControl.createMenuItem("Perform additional UTF8 conversion to song name", e->{
-				if (clickedSong==null) return;
-				String newSongName = Device.PlayInfo.convertUTF8(clickedSong, true);
-				boolean successful = YamahaControl.preferredSongs.rename(clickedSong,newSongName);
-				if (successful) {
-					tableModel.setValue(clickedRow,newSongName);
-					YamahaControl.preferredSongs.writeToFile();
-				}
-			}));
 			tableContextMenu.add(miSetDate = YamahaControl.createMenuItem("Set Date", e->{
 				if (clickedSong==null) return;
 				Long oldValue = YamahaControl.preferredSongs.getTimeStamp(clickedSong);
@@ -1264,6 +1255,16 @@ final class SubUnits {
 				if (successful) {
 					YamahaControl.preferredSongs.writeToFile();
 					tableModel.fireTableColumnUpdate(ColumnID.TimeStamp);
+				}
+			}));
+			tableContextMenu.addSeparator();
+			tableContextMenu.add(miExtraUTF8 = YamahaControl.createMenuItem("Perform additional UTF8 conversion to song name", e->{
+				if (clickedSong==null) return;
+				String newSongName = Device.PlayInfo.convertUTF8(clickedSong, true);
+				boolean successful = YamahaControl.preferredSongs.rename(clickedSong,newSongName);
+				if (successful) {
+					tableModel.setValue(clickedRow,newSongName);
+					YamahaControl.preferredSongs.writeToFile();
 				}
 			}));
 			
