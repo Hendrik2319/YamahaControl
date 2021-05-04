@@ -6,15 +6,24 @@ import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.GridBagConstraints;
 import java.awt.Insets;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
 import java.awt.event.KeyEvent;
 import java.awt.event.KeyListener;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.OutputStreamWriter;
+import java.io.PrintWriter;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.Vector;
 
 import javax.swing.BorderFactory;
+import javax.swing.Icon;
 import javax.swing.JButton;
 import javax.swing.JList;
 import javax.swing.JPanel;
@@ -29,10 +38,12 @@ import javax.swing.border.Border;
 import javax.swing.event.ListDataEvent;
 import javax.swing.event.ListDataListener;
 
+import net.schwarzbaer.gui.FileChooser;
 import net.schwarzbaer.gui.Tables.LabelRendererComponent;
 import net.schwarzbaer.java.tools.yamahacontrol.YamahaControl.FrequentlyTask;
 import net.schwarzbaer.java.tools.yamahacontrol.YamahaControl.GridBagPanel;
 import net.schwarzbaer.java.tools.yamahacontrol.YamahaControl.SmallImages;
+import net.schwarzbaer.java.tools.yamahacontrol.YamahaControl.ToolbarIcons;
 
 class LineList2 {
 	
@@ -52,6 +63,7 @@ class LineList2 {
 	private LineRenderer lineRenderer;
 	private LineListLoader lineListLoader;
 	private FrequentlyTask waitUntilListReady;
+	private final FileChooser txtFileChooser;
 
 	LineList2(LineList2User lineListUser, Device.UpdateWish listInfoUpdateWish, Device.UpdateWish playInfoUpdateWish) {
 		setDeviceAndListInfo(null,null);
@@ -73,6 +85,8 @@ class LineList2 {
 			if (listInfo.menuStatus==Device.Value.ReadyOrBusy.Ready)
 				waitUntilListReady.stop();
 		});
+		
+		txtFileChooser = new FileChooser("Text-File","txt");
 	}
 
 	public void setDeviceAndListInfo(Device device, Device.ListInfo listInfo) {
@@ -165,6 +179,35 @@ class LineList2 {
 			
 			if (listInfo.currentLine!=null)
 				lineListModel.updateData(listInfo.currentLine,listInfo.lines);
+		}
+	}
+
+	private void saveListContentToFile(ActionEvent e) {
+		txtFileChooser.suggestFileName(String.format("L%d - %s", lineListModel.menuLayer, lineListModel.menuName));
+		
+		if (txtFileChooser.showSaveDialog((Component)e.getSource())!=FileChooser.APPROVE_OPTION) return;
+		File file = txtFileChooser.getSelectedFile();
+		
+		try (PrintWriter out = new PrintWriter(new OutputStreamWriter(new FileOutputStream(file), StandardCharsets.UTF_8))) {
+			
+			out.printf("[Layer %d] %s%n", lineListModel.menuLayer, lineListModel.menuName);
+			out.println();
+			for (int i=0; i<lineListModel.lines.length; i++) {
+				Device.ListInfo.Line line = lineListModel.lines[i];
+				String attrStr = "?";
+				if (line.attr!=null)
+					switch (line.attr) {
+					case Container     : attrStr = "F"; break;
+					case Item          : attrStr = ">";break;
+					case UnplayableItem: attrStr = "X";break;
+					case Unselectable  : attrStr = "UnSel";break;
+					}
+				out.printf("<%02d|%02d> [%s] %s%n", i+1, line.index, attrStr, line.txt);
+			}
+			
+		}
+		catch (FileNotFoundException e1) {
+			e1.printStackTrace();
 		}
 	}
 
@@ -288,6 +331,13 @@ class LineList2 {
 		buttonsPanel.setInsets(new Insets(0,3,0,3));
 		buttonsPanel.add(createButton(Device.Value.CursorSelect.ReturnToHome, true), 0,0, 0,0, 1,1, GridBagConstraints.BOTH);
 		buttonsPanel.add(createButton(Device.Value.CursorSelect.Return      , true), 1,0, 0,0, 1,1, GridBagConstraints.BOTH);
+		buttonsPanel.add(createButton("Save List", ToolbarIcons.Save.getIcon(), true, e->saveListContentToFile(e)), 2,0, 0,0, 1,1, GridBagConstraints.BOTH);
+	}
+	
+	private JButton createButton(String title, Icon icon, boolean isEnabled, ActionListener al) {
+		JButton button = YamahaControl.createButton(title, icon, isEnabled, al);
+		buttons.add(button);
+		return button;
 	}
 	
 	private JButton createButton(Device.Value.CursorSelect cursorSelect, boolean listReset) {

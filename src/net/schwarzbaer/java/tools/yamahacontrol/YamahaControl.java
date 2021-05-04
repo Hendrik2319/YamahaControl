@@ -67,12 +67,19 @@ import javax.swing.UIManager;
 import javax.swing.UnsupportedLookAndFeelException;
 import javax.swing.filechooser.FileSystemView;
 
+import net.schwarzbaer.gui.IconSource;
 import net.schwarzbaer.gui.StandardMainWindow;
 import net.schwarzbaer.java.tools.yamahacontrol.Device.UpdateWish;
 import net.schwarzbaer.java.tools.yamahacontrol.Device.Value;
 import net.schwarzbaer.system.ClipboardTools;
 
 public class YamahaControl {
+	
+	private static IconSource.CachedIcons<ToolbarIcons> ToolbarIconsIS = IconSource.createCachedIcons(16, 16, "/Toolbar.png", ToolbarIcons.values());
+	public enum ToolbarIcons {
+		EmptyDoc, OpenFolder, Save, SaveAs, ReloadDoc, CloseDoc, ZZZ, Cut, Copy, Paste, Delete, Colors;
+		public Icon getIcon() { return ToolbarIconsIS.getCachedIcon(this); }
+	}
 	
 	static final PreferredSongs preferredSongs = new PreferredSongs();
 	static class PreferredSongs {
@@ -618,6 +625,12 @@ public class YamahaControl {
 	}
 	static JButton createButton(String title, boolean enabled, ActionListener al) {
 		JButton button = createButton(title,enabled);
+		if (al!=null) button.addActionListener(al);
+		return button;
+	}
+	static JButton createButton(String title, Icon icon, boolean enabled, ActionListener al) {
+		JButton button = new JButton(title,icon);
+		button.setEnabled(enabled);
 		if (al!=null) button.addActionListener(al);
 		return button;
 	}
