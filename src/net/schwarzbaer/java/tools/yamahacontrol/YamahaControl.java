@@ -1063,17 +1063,15 @@ public class YamahaControl {
 		
 		private static final int BAR_MAX = 300;
 		private static final int BAR_MIN = 0;
-		private Device device;
-		private RotaryCtrl2 rotaryCtrl;
+		private Device device = null;
+		private RotaryCtrl2 rotaryCtrl = null;
 		private ValueSetter volumeSetter;
-		private JToggleButton muteBtn;
-		private JButton decBtn;
-		private JButton incBtn;
-		private JProgressBar volumeBar;
+		private JToggleButton muteBtn = null;
+		private JButton decBtn = null;
+		private JButton incBtn = null;
+		private JProgressBar volumeBar = null;
 
 		VolumeCtrl() {
-			device = null;
-			rotaryCtrl = null;
 			volumeSetter = new ValueSetter(10,(value, isAdjusting) -> {
 				device.volume.setVolume(value);
 				if (isAdjusting) {
@@ -1087,9 +1085,6 @@ public class YamahaControl {
 					});
 				}
 			});
-			decBtn = null;
-			muteBtn= null;
-			incBtn = null;
 		}
 		
 		@Override public void setEnabledGUI(boolean enabled) {
