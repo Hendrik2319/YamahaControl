@@ -603,7 +603,7 @@ final class SubUnits {
 				}
 			});
 			addComp(tuneCtrl);
-			freqAmSetter = new YamahaControl.ValueSetter(10,(value, isAdjusting) -> {
+			freqAmSetter = new YamahaControl.ValueSetter((value, isAdjusting) -> {
 				device.tuner.setFreqAM((float)value);
 				if (isAdjusting)
 					SwingUtilities.invokeLater(this::updateFreqAmTxtFld);
@@ -612,7 +612,7 @@ final class SubUnits {
 					SwingUtilities.invokeLater(this::updateGui);
 				}
 			});
-			freqFmSetter = new YamahaControl.ValueSetter(10,(value, isAdjusting) -> {
+			freqFmSetter = new YamahaControl.ValueSetter((value, isAdjusting) -> {
 				device.tuner.setFreqFM((float)value);
 				if (isAdjusting)
 					SwingUtilities.invokeLater(this::updateFreqFmTxtFld);

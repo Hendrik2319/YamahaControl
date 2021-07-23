@@ -930,14 +930,77 @@ public class YamahaControl {
 
 	enum UpdateReason { Initial, Frequently }
 
-	public static class ValueSetter {
+	static class ValueSetter {
+
+		static interface Setter {
+			public void setValue(double value, boolean isAdjusting);
+		}
+
+		private final Setter setter;
+		private final ExecutorService executor;
+		private Double nextValue;
+		private Boolean nextIsAdjusting;
+		private Future<?> runningTask;
+		
+		ValueSetter(Setter setter) {
+			this.setter = setter;
+			executor = Executors.newSingleThreadExecutor();
+			nextValue = null;
+			nextIsAdjusting = null;
+			runningTask = null;
+		}
+
+		synchronized void set(double value, boolean isAdjusting) {
+			//System.out.printf(Locale.ENGLISH, "ValueSetter: set( %1.5f, %s )%n", value, isAdjusting);
+			nextValue = value;
+			nextIsAdjusting = isAdjusting;
+			startTask();
+		}
+
+		private synchronized void startTask() {
+			if (runningTask!=null)
+				return;
+			
+			if (nextValue==null || nextIsAdjusting==null) {
+				nextValue = null;
+				nextIsAdjusting = null;
+				return;
+			}
+			
+			double value = nextValue;
+			boolean isAdjusting = nextIsAdjusting;
+			nextValue = null;
+			nextIsAdjusting = null;
+			
+			runningTask = executor.submit(()->{
+				//System.out.printf(Locale.ENGLISH, "ValueSetter: ( %1.5f, %s ) -> start%n", value, isAdjusting);
+				setter.setValue(value, isAdjusting);
+				//System.out.printf(Locale.ENGLISH, "ValueSetter: ( %1.5f, %s ) -> done%n", value, isAdjusting);
+				synchronized (this) {
+					runningTask = null;
+					startTask();
+				}
+			});
+		}
+
+		synchronized void clear() {
+			nextValue = null;
+			nextIsAdjusting = null;
+			if (runningTask!=null) {
+				runningTask.cancel(false);
+				runningTask = null;
+			}
+		}
+	}
+	
+	static class QueuedValueSetter {
 		private ExecutorService executor;
 		private int counter;
 		private int queueLength;
 		private Stack<Future<?>> runningTasks;
 		private Setter setter;
 
-		ValueSetter(int queueLength, Setter setter) {
+		QueuedValueSetter(int queueLength, Setter setter) {
 			this.queueLength = queueLength;
 			this.setter = setter;
 			executor = Executors.newSingleThreadExecutor();
@@ -1072,7 +1135,7 @@ public class YamahaControl {
 		private JProgressBar volumeBar = null;
 
 		VolumeCtrl() {
-			volumeSetter = new ValueSetter(10,(value, isAdjusting) -> {
+			volumeSetter = new ValueSetter((value, isAdjusting) -> {
 				device.volume.setVolume(value);
 				if (isAdjusting) {
 					SwingUtilities.invokeLater(()->{
@@ -1701,7 +1764,7 @@ public class YamahaControl {
 				bassSlider.setPaintTicks(true);
 				bassSlider.setPreferredSize(new Dimension(20,30));
 				bassSlider.addChangeListener(e -> bassSetter.set(bassSlider.getValue()/2.0, bassSlider.getValueIsAdjusting()));
-				bassSetter = new ValueSetter(10, (value, isAdjusting) -> {
+				bassSetter = new ValueSetter((value, isAdjusting) -> {
 					if (device==null) return;
 					device.mainZone.setBass((float) value);
 					if (!isAdjusting) {
@@ -1718,7 +1781,7 @@ public class YamahaControl {
 				trebleSlider.setPaintTicks(true);
 				trebleSlider.setPreferredSize(new Dimension(20,30));
 				trebleSlider.addChangeListener(e -> trebleSetter.set(trebleSlider.getValue()/2.0, trebleSlider.getValueIsAdjusting()));
-				trebleSetter = new ValueSetter(10, (value, isAdjusting) -> {
+				trebleSetter = new ValueSetter((value, isAdjusting) -> {
 					if (device==null) return;
 					device.mainZone.setTreble((float) value);
 					if (!isAdjusting) {
