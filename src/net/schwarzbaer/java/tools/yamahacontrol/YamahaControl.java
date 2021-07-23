@@ -954,31 +954,36 @@ public class YamahaControl {
 			//System.out.printf(Locale.ENGLISH, "ValueSetter: set( %1.5f, %s )%n", value, isAdjusting);
 			nextValue = value;
 			nextIsAdjusting = isAdjusting;
-			startTask();
-		}
-
-		private synchronized void startTask() {
+			
 			if (runningTask!=null)
 				return;
 			
-			if (nextValue==null || nextIsAdjusting==null) {
-				nextValue = null;
-				nextIsAdjusting = null;
-				return;
-			}
-			
-			double value = nextValue;
-			boolean isAdjusting = nextIsAdjusting;
-			nextValue = null;
-			nextIsAdjusting = null;
-			
 			runningTask = executor.submit(()->{
-				//System.out.printf(Locale.ENGLISH, "ValueSetter: ( %1.5f, %s ) -> start%n", value, isAdjusting);
-				setter.setValue(value, isAdjusting);
-				//System.out.printf(Locale.ENGLISH, "ValueSetter: ( %1.5f, %s ) -> done%n", value, isAdjusting);
-				synchronized (this) {
-					runningTask = null;
-					startTask();
+				
+				boolean isActive = true;
+				while (isActive) {
+					
+					double value_ = 0;
+					boolean isAdjusting_ = false;
+					
+					synchronized (this) {
+						if (nextValue==null || nextIsAdjusting==null) {
+							runningTask = null;
+							isActive = false;
+						} else {
+							value_ = nextValue;
+							isAdjusting_ = nextIsAdjusting;
+						}
+						nextValue = null;
+						nextIsAdjusting = null;
+					}
+					
+					if (isActive) {
+						//System.out.printf(Locale.ENGLISH, "ValueSetter: ( %1.5f, %s ) -> start%n", value_, isAdjusting_);
+						setter.setValue(value_, isAdjusting_);
+						//System.out.printf(Locale.ENGLISH, "ValueSetter: ( %1.5f, %s ) -> done%n", value_, isAdjusting_);
+					}
+					
 				}
 			});
 		}
