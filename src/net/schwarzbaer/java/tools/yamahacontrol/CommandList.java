@@ -73,7 +73,7 @@ public class CommandList {
 		Ctrl.readCommProtocolFromFile();
 //		new Responder().openWindow();
 		
-		openWindow(null);
+		openWindow(null,true);
 		
 		//  http://rx-v475/YamahaRemoteControl/desc.xml
 		
@@ -82,9 +82,9 @@ public class CommandList {
 //		commandList.readCommandList(addr,true);
 	}
 	
-	public static void openWindow(String address) {
+	public static void openWindow(String address, boolean asStandAlone) {
 		CommandList commandList = new CommandList(address);
-		commandList.createGUI();
+		commandList.createGUI(asStandAlone);
 		commandList.readCommandList();
 		commandList.showCommandList();
 	}
@@ -183,7 +183,7 @@ public class CommandList {
 		}
 	}
 	
-	private void createGUI() {
+	private void createGUI(boolean asStandAlone) {
 		fileChooser = new JFileChooser("./");
 		fileChooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
 		fileChooser.setMultiSelectionEnabled(false);
@@ -239,7 +239,7 @@ public class CommandList {
 		
 		mainWindow = new JFrame("CommandList");
 		mainWindow.setContentPane(contentPane);
-		mainWindow.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+		mainWindow.setDefaultCloseOperation(asStandAlone ? JFrame.EXIT_ON_CLOSE : JFrame.DISPOSE_ON_CLOSE);
 		mainWindow.pack();
 		mainWindow.setLocationRelativeTo(null);
 		mainWindow.setVisible(true);

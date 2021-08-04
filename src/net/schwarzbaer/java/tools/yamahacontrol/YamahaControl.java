@@ -229,7 +229,7 @@ public class YamahaControl {
 		case CommandList:
 			if (yamahaControl.device!=null)
 				address = yamahaControl.device.address;
-			CommandList.openWindow(address);
+			CommandList.openWindow(address,true);
 			break;
 		case Generic:
 			if (yamahaControl.device!=null)
@@ -408,7 +408,7 @@ public class YamahaControl {
 		devicePanel.setBorder(BorderFactory.createTitledBorder("Device"));
 		devicePanel.add(createButton("Connect",true,e->connectToReciever()),0,1,GridBagConstraints.BOTH);
 		devicePanel.add(onOffBtn.button,0,GridBagConstraints.REMAINDER,GridBagConstraints.BOTH);
-		devicePanel.add(createButton("Open Command List",true,e->CommandList.openWindow(device==null?null:device.address)),0,GridBagConstraints.REMAINDER,GridBagConstraints.BOTH);
+		devicePanel.add(createButton("Open Command List",true,e->CommandList.openWindow(device==null?null:device.address,false)),0,GridBagConstraints.REMAINDER,GridBagConstraints.BOTH);
 		devicePanel.add(updatePanel,0,GridBagConstraints.REMAINDER,GridBagConstraints.BOTH);
 		
 		JTabbedPane settingsPanel = new JTabbedPane();
