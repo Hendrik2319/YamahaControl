@@ -1207,11 +1207,10 @@ public class CommandList {
 		@Override public boolean  getAllowsChildren() { return true; }
 		@Override public boolean  isLeaf()            { return getChildCount()==0; }
 		
-		@Override public int         getChildCount()            { if (children==null) createChildren(); return children.size(); }
-		@Override public int         getIndex(TreeNode node)    { if (children==null) createChildren(); return children.indexOf(node); }
-		@Override public TreeNode    getChildAt(int childIndex) { if (children==null) createChildren(); return children.get(childIndex); }
-		@SuppressWarnings("rawtypes")
-		@Override public Enumeration children()                 { if (children==null) createChildren(); return children.elements(); }
+		@Override public int               getChildCount()            { if (children==null) createChildren(); return children.size(); }
+		@Override public int               getIndex(TreeNode node)    { if (children==null) createChildren(); return children.indexOf(node); }
+		@Override public TreeNode          getChildAt(int childIndex) { if (children==null) createChildren(); return children.get(childIndex); }
+		@Override public Enumeration<Type> children()                 { if (children==null) createChildren(); return children.elements(); }
 		
 	}
 	
