@@ -8,6 +8,6 @@
 		</attributes>
 	</classpathentry>
 	<classpathentry combineaccessrules="false" kind="src" path="/CommonLib_gui_essentials"/>
-	<classpathentry combineaccessrules="false" kind="src" path="/CommonLib_ImageIO"/>
+	<classpathentry combineaccessrules="false" kind="src" path="/CommonLib_Imaging"/>
 	<classpathentry kind="output" path="bin"/>
 </classpath>
