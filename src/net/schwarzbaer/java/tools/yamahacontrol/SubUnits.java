@@ -1345,8 +1345,9 @@ final class SubUnits {
 				fireTableCellUpdate(rowIndex, getColumn(ColumnID.Song));
 			}
 
-			void fireTableColumnUpdate(ColumnID columnID) {
-				super.fireTableColumnUpdate(getColumn(columnID));
+			@Override
+			public void fireTableColumnUpdate(ColumnID columnID) {
+				super.fireTableColumnUpdate(columnID);
 			}
 
 			@Override public int getRowCount() { return songs.size(); }
