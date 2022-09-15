@@ -69,6 +69,7 @@ import net.schwarzbaer.gui.StandardMainWindow;
 import net.schwarzbaer.java.tools.yamahacontrol.Device.UpdateWish;
 import net.schwarzbaer.java.tools.yamahacontrol.Device.Value;
 import net.schwarzbaer.system.ClipboardTools;
+import net.schwarzbaer.system.Settings;
 
 public class YamahaControl {
 	
@@ -77,6 +78,8 @@ public class YamahaControl {
 		EmptyDoc, OpenFolder, Save, SaveAs, ReloadDoc, CloseDoc, ZZZ, Cut, Copy, Paste, Delete, Colors;
 		public Icon getIcon() { return ToolbarIconsIS.getCachedIcon(this); }
 	}
+	
+	static final AppSettings settings = new AppSettings();
 	
 	static final PreferredSongs preferredSongs = new PreferredSongs();
 	static class PreferredSongs {
@@ -439,9 +442,11 @@ public class YamahaControl {
 		contentPane.add(subUnitPanel,BorderLayout.CENTER);
 		
 		mainWindow.startGUI(contentPane);
-		mainWindow.setIconImagesFromResource("/Yamaha_Logo_","16.png","24.png","32.png","48.png","64.png","96.png","128.png","256.png");
+		mainWindow.setIconImagesFromResource("/Yamaha_Logo_%d.png",16,24,32,48,64,96,128,256);
 		
 		guiRegions.forEach(gr->gr.setEnabledGUI(false));
+		
+		settings.registerAppWindow(mainWindow);
 	}
 	
 	private static class ImageToolbox {
@@ -1924,4 +1929,18 @@ public class YamahaControl {
 		}
 	}
 
+	
+	static class AppSettings extends Settings.DefaultAppSettings<AppSettings.ValueGroup, AppSettings.ValueKey> {
+		enum ValueKey {
+		}
+	
+		enum ValueGroup implements Settings.GroupKeys<ValueKey> {
+			;
+			ValueKey[] keys;
+			ValueGroup(ValueKey...keys) { this.keys = keys;}
+			@Override public ValueKey[] getKeys() { return keys; }
+		}
+		
+		public AppSettings() { super(YamahaControl.class, ValueKey.values()); }
+	}
 }
