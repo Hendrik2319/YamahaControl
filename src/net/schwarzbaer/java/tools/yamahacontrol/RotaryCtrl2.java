@@ -11,18 +11,18 @@ import java.awt.geom.Rectangle2D;
 import java.awt.image.BufferedImage;
 import java.util.Locale;
 
-import net.schwarzbaer.gui.Canvas;
-import net.schwarzbaer.image.bumpmapping.BumpMapping;
-import net.schwarzbaer.image.bumpmapping.BumpMapping.Indexer;
-import net.schwarzbaer.image.bumpmapping.BumpMapping.Normal;
-import net.schwarzbaer.image.bumpmapping.BumpMapping.NormalXY;
-import net.schwarzbaer.image.bumpmapping.BumpMapping.OverSampling;
-import net.schwarzbaer.image.bumpmapping.ExtraNormalFunction;
-import net.schwarzbaer.image.bumpmapping.NormalFunction.Polar.RotatedProfile;
-import net.schwarzbaer.image.bumpmapping.ProfileXY;
-import net.schwarzbaer.image.bumpmapping.Shading;
-import net.schwarzbaer.image.bumpmapping.Shading.MaterialShading;
-import net.schwarzbaer.image.bumpmapping.Shading.MixedShading;
+import net.schwarzbaer.java.lib.gui.Canvas;
+import net.schwarzbaer.java.lib.image.bumpmapping.BumpMapping;
+import net.schwarzbaer.java.lib.image.bumpmapping.ExtraNormalFunction;
+import net.schwarzbaer.java.lib.image.bumpmapping.ProfileXY;
+import net.schwarzbaer.java.lib.image.bumpmapping.Shading;
+import net.schwarzbaer.java.lib.image.bumpmapping.BumpMapping.Indexer;
+import net.schwarzbaer.java.lib.image.bumpmapping.BumpMapping.Normal;
+import net.schwarzbaer.java.lib.image.bumpmapping.BumpMapping.NormalXY;
+import net.schwarzbaer.java.lib.image.bumpmapping.BumpMapping.OverSampling;
+import net.schwarzbaer.java.lib.image.bumpmapping.NormalFunction.Polar.RotatedProfile;
+import net.schwarzbaer.java.lib.image.bumpmapping.Shading.MaterialShading;
+import net.schwarzbaer.java.lib.image.bumpmapping.Shading.MixedShading;
 
 public class RotaryCtrl2 extends Canvas {
 		private static final Color COLOR_DISABLED_MARKER = new Color(0x8080B0);

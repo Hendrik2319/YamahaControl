@@ -64,12 +64,12 @@ import javax.swing.UIManager;
 import javax.swing.UnsupportedLookAndFeelException;
 import javax.swing.filechooser.FileSystemView;
 
-import net.schwarzbaer.gui.IconSource;
-import net.schwarzbaer.gui.StandardMainWindow;
+import net.schwarzbaer.java.lib.gui.IconSource;
+import net.schwarzbaer.java.lib.gui.StandardMainWindow;
+import net.schwarzbaer.java.lib.system.ClipboardTools;
+import net.schwarzbaer.java.lib.system.Settings;
 import net.schwarzbaer.java.tools.yamahacontrol.Device.UpdateWish;
 import net.schwarzbaer.java.tools.yamahacontrol.Device.Value;
-import net.schwarzbaer.system.ClipboardTools;
-import net.schwarzbaer.system.Settings;
 
 public class YamahaControl {
 	

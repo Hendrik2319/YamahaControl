@@ -46,8 +46,8 @@ import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 import org.w3c.dom.Text;
 
-import net.schwarzbaer.gui.Disabler;
-import net.schwarzbaer.gui.IconSource;
+import net.schwarzbaer.java.lib.gui.Disabler;
+import net.schwarzbaer.java.lib.gui.IconSource;
 import net.schwarzbaer.java.tools.yamahacontrol.CommandList.ParsedCommandItem.ComplexCommandItem;
 import net.schwarzbaer.java.tools.yamahacontrol.Ctrl.HttpResponse;
 import net.schwarzbaer.java.tools.yamahacontrol.XML.TagList;

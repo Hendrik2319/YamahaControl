@@ -38,8 +38,8 @@ import javax.swing.border.Border;
 import javax.swing.event.ListDataEvent;
 import javax.swing.event.ListDataListener;
 
-import net.schwarzbaer.gui.FileChooser;
-import net.schwarzbaer.gui.Tables.LabelRendererComponent;
+import net.schwarzbaer.java.lib.gui.FileChooser;
+import net.schwarzbaer.java.lib.gui.Tables.LabelRendererComponent;
 import net.schwarzbaer.java.tools.yamahacontrol.YamahaControl.FrequentlyTask;
 import net.schwarzbaer.java.tools.yamahacontrol.YamahaControl.GridBagPanel;
 import net.schwarzbaer.java.tools.yamahacontrol.YamahaControl.SmallImages;

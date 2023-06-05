@@ -19,8 +19,8 @@ import javax.swing.JTextField;
 import javax.swing.ListCellRenderer;
 import javax.swing.ListSelectionModel;
 
-import net.schwarzbaer.gui.Tables;
-import net.schwarzbaer.gui.Tables.LabelRendererComponent;
+import net.schwarzbaer.java.lib.gui.Tables;
+import net.schwarzbaer.java.lib.gui.Tables.LabelRendererComponent;
 import net.schwarzbaer.java.tools.yamahacontrol.Device.ListInfo;
 import net.schwarzbaer.java.tools.yamahacontrol.Device.UpdateWish;
 import net.schwarzbaer.java.tools.yamahacontrol.YamahaControl.FrequentlyTask;

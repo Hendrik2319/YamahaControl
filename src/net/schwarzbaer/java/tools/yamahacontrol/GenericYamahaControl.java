@@ -25,7 +25,7 @@ import javax.swing.border.TitledBorder;
 
 import org.w3c.dom.Document;
 
-import net.schwarzbaer.gui.StandardMainWindow;
+import net.schwarzbaer.java.lib.gui.StandardMainWindow;
 import net.schwarzbaer.java.tools.yamahacontrol.CommandList.ComplexCommand;
 import net.schwarzbaer.java.tools.yamahacontrol.CommandList.ComplexCommand.CmdParam;
 import net.schwarzbaer.java.tools.yamahacontrol.CommandList.ComplexCommand.DirectValue;

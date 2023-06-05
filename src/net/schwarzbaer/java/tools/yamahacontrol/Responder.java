@@ -37,12 +37,12 @@ import javax.swing.UIManager;
 import javax.swing.UnsupportedLookAndFeelException;
 import javax.swing.table.TableCellRenderer;
 
-import net.schwarzbaer.gui.Disabler;
-import net.schwarzbaer.gui.StandardMainWindow;
-import net.schwarzbaer.gui.Tables;
-import net.schwarzbaer.gui.Tables.CheckBoxRendererComponent;
-import net.schwarzbaer.gui.Tables.LabelRendererComponent;
-import net.schwarzbaer.gui.Tables.SimplifiedColumnConfig;
+import net.schwarzbaer.java.lib.gui.Disabler;
+import net.schwarzbaer.java.lib.gui.StandardMainWindow;
+import net.schwarzbaer.java.lib.gui.Tables;
+import net.schwarzbaer.java.lib.gui.Tables.CheckBoxRendererComponent;
+import net.schwarzbaer.java.lib.gui.Tables.LabelRendererComponent;
+import net.schwarzbaer.java.lib.gui.Tables.SimplifiedColumnConfig;
 import net.schwarzbaer.java.tools.yamahacontrol.Ctrl.HttpResponse;
 import net.schwarzbaer.java.tools.yamahacontrol.Responder.ResponseTableModel.TableEntry;
 import net.schwarzbaer.java.tools.yamahacontrol.YamahaControl.Log;
