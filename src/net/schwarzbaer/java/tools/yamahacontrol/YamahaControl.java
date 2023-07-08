@@ -224,24 +224,25 @@ public class YamahaControl {
 		}
 		
 		String address = null;
-		GUI createGUI = yamahaControl.parseArgs(args);
-		switch (createGUI) {
-		case CommandList:
-			if (yamahaControl.device!=null)
-				address = yamahaControl.device.address;
-			CommandList.openWindow(address,true);
-			break;
-		case Generic:
-			if (yamahaControl.device!=null)
-				address = yamahaControl.device.address;
-			GenericYamahaControl.openWindow(address);
-			break;
-		case YamahaControl:
-			yamahaControl.createGUI();
-			if (yamahaControl.device!=null)
-				yamahaControl.initGUIafterConnect();
-			break;
-		}
+		GUI createdGUI = yamahaControl.parseArgs(args);
+		if (createdGUI!=null)
+			switch (createdGUI) {
+				case CommandList:
+					if (yamahaControl.device!=null)
+						address = yamahaControl.device.address;
+					CommandList.openWindow(address,true);
+					break;
+				case Generic:
+					if (yamahaControl.device!=null)
+						address = yamahaControl.device.address;
+					GenericYamahaControl.openWindow(address);
+					break;
+				case YamahaControl:
+					yamahaControl.createGUI();
+					if (yamahaControl.device!=null)
+						yamahaControl.initGUIafterConnect();
+					break;
+			}
 	}
 
 	public enum SmallImages { IconOn, IconOff, IconUnknown, FolderIcon, IconPlay, IconNoPlay }
@@ -323,15 +324,15 @@ public class YamahaControl {
 	
 	private enum GUI { YamahaControl, CommandList, Generic }
 	private GUI parseArgs(String[] args) {
-		GUI createGUI = null;
+		GUI createdGUI = null;
 		
 		Vector<String> commands = new Vector<>();
 		for (int i=0; i<args.length; ++i) {
 			switch (args[i].toLowerCase()) {
-			case "-addr": if (i+1<args.length) { device = new Device(args[i+1]); ++i; } break;
-			case "-gui"        : createGUI = GUI.YamahaControl; break;
-			case "-commandlist": createGUI = GUI.CommandList; break;
-			case "-generic"    : createGUI = GUI.Generic; break;
+			case "-addr": if (i+1<args.length) { device = new Device(args[++i]); } break;
+			case "-gui"        : createdGUI = GUI.YamahaControl; break;
+			case "-commandlist": createdGUI = GUI.CommandList; break;
+			case "-generic"    : createdGUI = GUI.Generic; break;
 			default: commands.add(args[i]); break;
 			}
 		}
@@ -339,13 +340,19 @@ public class YamahaControl {
 		if (device!=null) {
 			for (String cmd:commands) {
 				switch (cmd.toLowerCase()) {
-				case "switchoff": device.mainZone.setPowerState(Value.PowerState.Standby); break;
-				case "switchon" : device.mainZone.setPowerState(Value.PowerState.On     ); break;
+				case "switchoff" : device.mainZone.setPowerState(Value.PowerState.Standby); break;
+				case "switchon"  : device.mainZone.setPowerState(Value.PowerState.On     ); break;
+				case "togglemute":
+					device.update(EnumSet.of( UpdateWish.BasicStatus ));
+					Value.OnOff value = device.volume.getMute();
+					value = value==null ? Value.OnOff.On : getNext(value, Value.OnOff.values());
+					device.volume.setMute( value );
+					break;
 				}
 			}
 		}
 		
-		return createGUI;
+		return createdGUI;
 	}
 
 	private void showCommands() {
@@ -370,6 +377,8 @@ public class YamahaControl {
 		System.out.println("       switches device off");
 		System.out.println("   SwitchON");
 		System.out.println("       switches device on");
+		System.out.println("   ToggleMute");
+		System.out.println("       toggles volume mute");
 	}
 
 	private void createGUI() {
