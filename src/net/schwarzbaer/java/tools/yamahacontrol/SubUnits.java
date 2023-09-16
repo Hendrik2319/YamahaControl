@@ -1257,7 +1257,9 @@ final class SubUnits {
 					tableModel.fireTableColumnUpdate(ColumnID.TimeStamp);
 				}
 			}));
+			
 			tableContextMenu.addSeparator();
+			
 			tableContextMenu.add(miExtraUTF8 = YamahaControl.createMenuItem("Perform additional UTF8 conversion to song name", e->{
 				if (clickedSong==null) return;
 				String newSongName = Device.PlayInfo.convertUTF8(clickedSong, true);
@@ -1267,6 +1269,16 @@ final class SubUnits {
 					YamahaControl.preferredSongs.writeToFile();
 				}
 			}));
+			
+			tableContextMenu.addSeparator();
+			
+			tableContextMenu.add(YamahaControl.createMenuItem("Merge with another song list", e->{
+				if (fileChooser.showOpenDialog(this)!=JFileChooser.APPROVE_OPTION) return;
+				File file = fileChooser.getSelectedFile();
+				YamahaControl.preferredSongs.addFromFile(file);
+				YamahaControl.preferredSongs.writeToFile();
+			}));
+			
 			
 			tableContextMenu.addContextMenuInvokeListener((comp, x, y) -> {
 				int rowV = table.rowAtPoint(new Point(x, y));

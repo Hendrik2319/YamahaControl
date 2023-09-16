@@ -121,9 +121,10 @@ public class YamahaControl {
 		}
 
 		void writeToFile() {
-			System.out.printf("Write list of preferred songs to file \"%s\"%n", PREFERREDSONGS_FILENAME);
+			File file = new File(PREFERREDSONGS_FILENAME);
+			System.out.printf("Write list of preferred songs to file \"%s\"%n", file.getAbsolutePath());
 			Vector<String> list = getAsSortedList();
-			try (PrintWriter out = new PrintWriter( new OutputStreamWriter( new FileOutputStream(PREFERREDSONGS_FILENAME), StandardCharsets.UTF_8) )) {
+			try (PrintWriter out = new PrintWriter( new OutputStreamWriter( new FileOutputStream(file), StandardCharsets.UTF_8) )) {
 				list.forEach(str->{
 					Long timestamp = songs.get(str);
 					if (timestamp==null) out.printf("%s%n", str);
@@ -134,25 +135,40 @@ public class YamahaControl {
 		}
 
 		void readFromFile() {
-			System.out.printf("Read list of preferred songs from file \"%s\"%n", PREFERREDSONGS_FILENAME);
+			readFromFile(new File(PREFERREDSONGS_FILENAME), songs);
+		}
+
+		private HashMap<String, Long> readFromFile(File file, HashMap<String, Long> songs)
+		{
+			System.out.printf("Read list of preferred songs from file \"%s\"%n", file.getAbsolutePath());
 			songs.clear();
-			try (BufferedReader in = new BufferedReader( new InputStreamReader( new FileInputStream(PREFERREDSONGS_FILENAME), StandardCharsets.UTF_8) )) {
+			
+			try (BufferedReader in = new BufferedReader( new InputStreamReader( new FileInputStream(file), StandardCharsets.UTF_8) ))
+			{
 				String line;
 				while ( (line=in.readLine())!=null )
-					
-					if (line.length()>16 && line.charAt(16)=='=') {
+					if (line.length()>16 && line.charAt(16)=='=')
+					{
 						String timeStr = line.substring(0, 16);
 						String name = line.substring(17);
 						try { songs.put(name,Long.parseUnsignedLong(timeStr, 16)); }
 						catch (NumberFormatException e) { songs.put(line,null); }
 						
-					} else if (!line.isEmpty())
+					}
+					else if (!line.isEmpty())
 						songs.put(line,null);
 			}
 			catch (FileNotFoundException e) {}
 			catch (IOException e) {
 				e.printStackTrace();
 			}
+			
+			return songs; 
+		}
+
+		public void addFromFile(File file)
+		{
+			readFromFile(file, new HashMap<>()).forEach(songs::putIfAbsent);
 		}
 
 		boolean setTimeStampsOfUnsetSongs(File file, Function<Long,Long> getData) {
