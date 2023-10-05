@@ -349,12 +349,12 @@ final class Ctrl {
 			connection.setConnectTimeout(2000);
 			try { connection.connect(); }
 			catch (ConnectException e) {
-				switch (e.getMessage()) {
-				case "Connection refused: connect":
+				switch (e.getMessage().toLowerCase()) {
+				case "connection refused: connect":
 					lastRC = RC_CONNECT_REFUSED;
 					if (verboseOnError) System.err.println("Connection refused at connect");
 					break;
-				case "Connection timed out: connect":
+				case "connection timed out: connect":
 					lastRC = RC_CONNECT_TIMEOUT;
 					if (verboseOnError) System.err.println("Connection timed out at connect");
 					break;
@@ -364,11 +364,14 @@ final class Ctrl {
 				return null;
 			}
 			catch (SocketTimeoutException e) {
-				if (e.getMessage().equals("connect timed out")) {
+				switch (e.getMessage().toLowerCase()) {
+				case "connect timed out":
 					lastRC = RC_CONNECT_TIMEOUT;
 					if (verboseOnError) System.err.println("Socket Timeout");
-				} else
+					break;
+				default:
 					e.printStackTrace();
+				}
 				return null;
 			}
 			catch (IOException e) { e.printStackTrace(); return null; }
