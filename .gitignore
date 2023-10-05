@@ -1,0 +1,26 @@
+*.ymf
+AlbumART.ymf (192.168.2.34, alt).URL
+AlbumART.ymf (192.168.2.74).URL
+AlbumART.ymf.URL
+L2 - Get Access Code.txt
+L3 - ebm, industr.txt
+L3 - fm stations.txt
+L3 - sonstige.txt
+YamahaControl.Win10.png
+YamahaControl.Win7.png
+YamahaControl.cfg
+YamahaControl.jar
+YamahaControl.jar - gui.bat
+YamahaControl.jar 192.168.2.34 SwitchOff.bat
+YamahaControl.jar 192.168.2.34 SwitchOn.bat
+YamahaControl.jar.bat
+YamahaControl.old_working_backup.jar
+bin
+YamahaControl.Win10.later.png
+YamahaControl_08.jar
+start_1.8.bat
+start_17.bat
+YamahaControl_1.8.jar
+YamahaControl_1.8_libs1.8.jar
+YamahaControl_17.jar
+/YamahaControl.PreferredSongs.txt
