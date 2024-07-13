@@ -14,6 +14,8 @@ import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.ProtocolException;
 import java.net.SocketTimeoutException;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.net.URL;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
@@ -333,8 +335,9 @@ final class Ctrl {
 			
 			if (verbose) System.out.println("URL: "+urlStr);
 			URL url;
-			try { url = new URL(urlStr); }
-			catch (MalformedURLException e2) { e2.printStackTrace(); return null; }
+			try { url = new URI(urlStr).toURL(); }
+			catch (MalformedURLException ex) { ex.printStackTrace(); return null; }
+			catch (URISyntaxException ex) { ex.printStackTrace(); return null; }
 			
 			if (verbose) System.out.println("Open Connection ...");
 			HttpURLConnection connection;
