@@ -89,7 +89,7 @@ public class GenericYamahaControl {
 		languagePanel.add(new JLabel("Language: "),BorderLayout.WEST);
 		
 		if (langCodes.size()>1) {
-			JComboBox<String> langSelect = new JComboBox<String>(langCodes);
+			JComboBox<String> langSelect = new JComboBox<>(langCodes);
 			langSelect.addActionListener(e->base.setLanguage((String)langSelect.getSelectedItem()));
 			languagePanel.add(langSelect,BorderLayout.CENTER);
 		} else if (langCodes.size()==1)

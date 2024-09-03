@@ -57,7 +57,7 @@ public class CommandList {
 	private static IconSource.CachedIcons<TreeIcon> treeIcons = null;
 	enum TreeIcon { Menu, Command, Command_PUT, Command_GET, Language, UnitDescription, Document, XMLTag }
 	static {
-		IconSource<TreeIcon> treeIconsIS = new IconSource<TreeIcon>(16,16);
+		IconSource<TreeIcon> treeIconsIS = new IconSource<>(16,16);
 		treeIconsIS.readIconsFromResource("/TreeIcons.png");
 		treeIcons = treeIconsIS.cacheIcons(TreeIcon.values());
 	}
@@ -2240,7 +2240,7 @@ public class CommandList {
 			@Override public String toString() { return "Function Description of Yamaha Device"; }
 			
 			@Override public Iterator<ParsedCommandItem> getChildIterator() {
-				return new Iterator<ParsedCommandItem>() {
+				return new Iterator<>() {
 					int index=0;
 					@Override public boolean hasNext() { return index==0; }
 					@Override public ParsedCommandItem next() { index++; return unitDescription; }
@@ -2295,7 +2295,7 @@ public class CommandList {
 			@Override public String toString() { return String.format("Yamaha Device \"%s\" [Ver%s]", unitName, version); }
 			
 			@Override public Iterator<ParsedCommandItem> getChildIterator() {
-				return new Iterator<ParsedCommandItem>() {
+				return new Iterator<>() {
 					int index=0;
 					@Override public boolean hasNext() { return index<languages.size()+menues.size(); }
 					@Override public ParsedCommandItem next() {
@@ -2395,7 +2395,7 @@ public class CommandList {
 					return true;
 				});
 				
-				subItems = new Vector<ParsedCommandItem>();
+				subItems = new Vector<>();
 				subItems.addAll(menues);
 				subItems.addAll(commands);
 				if (cmdList!=null) subItems.add(cmdList);

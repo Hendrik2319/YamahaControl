@@ -101,7 +101,7 @@ public class RotaryCtrl extends Canvas {
 				)
 			);
 			
-			backgroundImageCache = new ImageCache<Image>((w,h)->bumpMapping.renderImage(w,h));
+			backgroundImageCache = new ImageCache<>((w,h)->bumpMapping.renderImage(w,h));
 			
 			mouseHandler = new MouseHandler();
 			addMouseListener(mouseHandler);

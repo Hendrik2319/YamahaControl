@@ -563,7 +563,7 @@ final class SubUnits {
 			buttonPanel.add(bgScanFMTP.createButton("Scan Down",Value.ScanTP.TPDown), 3,4, 0,0, 1,1, GridBagConstraints.HORIZONTAL);
 			buttonPanel.add(bgScanFMTP.createButton("Cancel"   ,Value.ScanTP.Cancel), 3,5, 0,0, 1,1, GridBagConstraints.HORIZONTAL);
 			
-			presetButtons = new YamahaControl.ButtonFactory<Value.UpDown>(Value.UpDown.class, e->{
+			presetButtons = new YamahaControl.ButtonFactory<>(Value.UpDown.class, e->{
 				if (device==null) return;
 				device.tuner.setPreset(e);
 				updateDeviceNGui();
@@ -1119,7 +1119,7 @@ final class SubUnits {
 		public AbstractSubUnit_PlayInfoExt(Frame window, String inputID, String tabTitle, UpdateWish readyStateUpdateWish, UpdateWish listInfoUpdateWish, UpdateWish playInfoUpdateWish, Shuffle[] shuffleValues) {
 			super(window, inputID, tabTitle, readyStateUpdateWish, listInfoUpdateWish, playInfoUpdateWish);
 			modules.add( new PlayButtonModuleExt(this, null));
-			modules.add( lastModule = new ReapeatShuffleButtonModule<Shuffle>(this, shuffleValues, null));
+			modules.add( lastModule = new ReapeatShuffleButtonModule<>(this, shuffleValues, null));
 		}
 		
 		protected void setExtraButtons(ButtonModule.ExtraButtons extraButtons) {

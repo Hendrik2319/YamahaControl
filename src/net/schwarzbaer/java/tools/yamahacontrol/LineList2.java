@@ -229,7 +229,7 @@ class LineList2 {
 		
 		lineRenderer = new LineRenderer();
 		lineListModel = new LineList2Model();
-		lineList = new JList<Device.ListInfo.Line>(lineListModel);
+		lineList = new JList<>(lineListModel);
 		
 //		if (!KeyStrokesWereListed) {
 //			showKeyStrokes();

@@ -112,7 +112,7 @@ class LineList {
 		
 		ignoreListSelection = false;
 		lineRenderer = new LineRenderer();
-		lineList = new JList<ListInfo.Line>();
+		lineList = new JList<>();
 		lineList.setCellRenderer(lineRenderer);
 		lineList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
 		lineList.addListSelectionListener(e -> {

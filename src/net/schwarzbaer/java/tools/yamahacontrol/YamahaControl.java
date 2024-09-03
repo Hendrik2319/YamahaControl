@@ -678,7 +678,7 @@ public class YamahaControl {
 		return createComboBox(values, null, null);
 	}
 	static <A> JComboBox<A> createComboBox(A[] values, A selected, Consumer<A> setValue) {
-		JComboBox<A> comboBox = new JComboBox<A>(values);
+		JComboBox<A> comboBox = new JComboBox<>(values);
 		comboBox.setSelectedItem(selected);
 		if (setValue!=null) comboBox.addActionListener(e->{
 			int i = comboBox.getSelectedIndex();
@@ -766,7 +766,7 @@ public class YamahaControl {
 
 		AbstractButtonFactory(Class<E> enumClass, Consumer<E> btnCmd) {
 			this.btnCmd = btnCmd;
-			buttons = new EnumMap<E,AbstractButton>(enumClass);
+			buttons = new EnumMap<>(enumClass);
 		}
 		public AbstractButton createButton(String title, E buttonID) {
 			AbstractButton button = createButton(title, buttonID, btnCmd==null?e->{}:e->btnCmd.accept(buttonID));
@@ -1278,7 +1278,7 @@ public class YamahaControl {
 		RemoteCtrl() {
 			super("Remote Control");
 			device = null;
-			comps = new Vector<JComponent>();
+			comps = new Vector<>();
 		}
 	
 		@Override public void setEnabledGUI(boolean enabled) {
@@ -1743,7 +1743,7 @@ public class YamahaControl {
 				
 				// PUT[P9]:    Main_Zone,Surround,Program_Sel,Current,Sound_Program   =   "Hall in Munich" | "Hall in Vienna" | "Chamber" | "Cellar Club" | "The Roxy Theatre" | "The Bottom Line" | "Sports" | "Action Game" | "Roleplaying Game" | "Music Video" | "Standard" | "Spectacle" | "Sci-Fi" | "Adventure" | "Drama" | "Mono Movie" | "Surround Decoder" | "2ch Stereo" | "5ch Stereo"
 				// GET[G1]:    Main_Zone,Basic_Status   ->   Surround,Program_Sel,Current,Sound_Program -> "Hall in Munich" | "Hall in Vienna" | "Chamber" | "Cellar Club" | "The Roxy Theatre" | "The Bottom Line" | "Sports" | "Action Game" | "Roleplaying Game" | "Music Video" | "Standard" | "Spectacle" | "Sci-Fi" | "Adventure" | "Drama" | "Mono Movie" | "Surround Decoder" | "2ch Stereo" | "5ch Stereo"
-				surroundProgramSelect = new ValueComboBox<Value.SurroundProgram>(Value.SurroundProgram.values(), v->{
+				surroundProgramSelect = new ValueComboBox<>(Value.SurroundProgram.values(), v->{
 					device.mainZone.setSurroundProgram(v);
 					updateBasicStatusAndPanel();
 				});
@@ -1752,7 +1752,7 @@ public class YamahaControl {
 				// [Straight_On]    PUT[P10]     Main_Zone,Surround,Program_Sel,Current,Straight = On
 				// [Straight_Off]   PUT[P10]     Main_Zone,Surround,Program_Sel,Current,Straight = Off
 				// GET[G1]:    Main_Zone,Basic_Status   ->   Surround,Program_Sel,Current,Straight -> "On" | "Off"
-				surroundStraightButton = new ValueButton<Value.OnOff>(ValueButton.IconSourceOnOff,v->{
+				surroundStraightButton = new ValueButton<>(ValueButton.IconSourceOnOff,v->{
 					Value.OnOff newValue = v==null?Value.OnOff.On:getNext(v, Value.OnOff.values());
 					device.mainZone.setSurroundStraight(newValue);
 					updateBasicStatusAndPanel();
@@ -1763,7 +1763,7 @@ public class YamahaControl {
 				// [Enhancer_On]    PUT[P11]     Main_Zone,Surround,Program_Sel,Current,Enhancer = On
 				// [Enhancer_Off]   PUT[P11]     Main_Zone,Surround,Program_Sel,Current,Enhancer = Off
 				// GET[G1]:    Main_Zone,Basic_Status   ->   Surround,Program_Sel,Current,Enhancer -> "On" | "Off"
-				surroundEnhancerButton = new ValueButton<Value.OnOff>(ValueButton.IconSourceOnOff,v->{
+				surroundEnhancerButton = new ValueButton<>(ValueButton.IconSourceOnOff,v->{
 					Value.OnOff newValue = v==null?Value.OnOff.On:getNext(v, Value.OnOff.values());
 					device.mainZone.setSurroundEnhancer(newValue);
 					updateBasicStatusAndPanel();
@@ -1808,7 +1808,7 @@ public class YamahaControl {
 				// [Adaptive_DRC_Auto]   PUT[P12]     Main_Zone,Sound_Video,Adaptive_DRC = Auto
 				// [Adaptive_DRC_Off]    PUT[P12]     Main_Zone,Sound_Video,Adaptive_DRC = Off
 				// GET[G1]:    Main_Zone,Basic_Status   ->   Sound_Video,Adaptive_DRC -> "Auto" | "Off"
-				adaptiveDRCButton = new ValueButton<Value.AutoOff>(ValueButton.IconSourceAutoOff,v->{
+				adaptiveDRCButton = new ValueButton<>(ValueButton.IconSourceAutoOff,v->{
 					Value.AutoOff newValue = v==null?Value.AutoOff.Auto:getNext(v, Value.AutoOff.values());
 					device.mainZone.setAdaptiveDRC(newValue);
 					updateBasicStatusAndPanel();
@@ -1819,7 +1819,7 @@ public class YamahaControl {
 				// [CINEMA_DSP_3D_Auto]  PUT[P13]     Main_Zone,Surround,_3D_Cinema_DSP = Auto
 				// [CINEMA_DSP_3D_Off]   PUT[P13]     Main_Zone,Surround,_3D_Cinema_DSP = Off
 				// GET[G1]:    Main_Zone,Basic_Status   ->   Surround,_3D_Cinema_DSP -> "Auto" | "Off"
-				cinemaDSPButton = new ValueButton<Value.AutoOff>(ValueButton.IconSourceAutoOff,v->{
+				cinemaDSPButton = new ValueButton<>(ValueButton.IconSourceAutoOff,v->{
 					Value.AutoOff newValue = v==null?Value.AutoOff.Auto:getNext(v, Value.AutoOff.values());
 					device.mainZone.set3DCinemaDSP(newValue);
 					updateBasicStatusAndPanel();
@@ -1830,7 +1830,7 @@ public class YamahaControl {
 				// [Direct_On]           PUT[P17]     Main_Zone,Sound_Video,Direct,Mode = On
 				// [Direct_Off]          PUT[P17]     Main_Zone,Sound_Video,Direct,Mode = Off
 				// GET[G1]:    Main_Zone,Basic_Status   ->   Sound_Video,Direct,Mode -> "On" | "Off"
-				directModeButton = new ValueButton<Value.OnOff>(ValueButton.IconSourceOnOff,v->{
+				directModeButton = new ValueButton<>(ValueButton.IconSourceOnOff,v->{
 					Value.OnOff newValue = v==null?Value.OnOff.On:getNext(v, Value.OnOff.values());
 					device.mainZone.setDirectMode(newValue);
 					updateBasicStatusAndPanel();
