@@ -1205,7 +1205,8 @@ public class YamahaControl {
 
 		public JPanel createVolumeControlPanel(int width) {
 			// PUT[P2]:    Main_Zone,Volume,Lvl  =  Number: -805..(5)..165 / Exp:"1" / Unit:"dB"
-			rotaryCtrl = new RotaryCtrl2("Volume",width,false, -80.5, +16.5, 8.0, 1.0, 1, -90, (value, isAdjusting) -> {
+			RotaryCtrl2.LabelText label = new RotaryCtrl2.LabelText("Volume",16,8,4,1,10);
+			rotaryCtrl = new RotaryCtrl2("Volume",label,width,false, -80.5, +16.5, 8.0, 1.0, 1, -90, (value, isAdjusting) -> {
 				if (device==null) return;
 				volumeSetter.set(value,isAdjusting);
 			});

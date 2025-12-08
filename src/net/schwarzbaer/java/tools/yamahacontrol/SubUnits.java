@@ -595,7 +595,8 @@ final class SubUnits {
 			buttonPanel.add(presetLabel = new JLabel("Preset:"), 0,7, 0,0, 1,1, GridBagConstraints.BOTH);
 			buttonPanel.add(presetPanel, 1,7, 0,0, 3,1, GridBagConstraints.BOTH);
 			
-			tuneCtrl = new RotaryCtrl2("Tuner",150,true, -1.0, +1.0, 1.0, 1.0, 1, -90, (value, isAdjusting) -> {
+			RotaryCtrl2.LabelText label = new RotaryCtrl2.LabelText("Frequency",8,6,3,1,15);
+			tuneCtrl = new RotaryCtrl2("Tuner",label,150,true, -1.0, +1.0, 1.0, 1.0, 1, -90, (value, isAdjusting) -> {
 				if (device==null || device.tuner.playInfo.tuningBand==null) return;
 				switch(device.tuner.playInfo.tuningBand) {
 				case AM: freqAmSetter.set(value, isAdjusting); break;

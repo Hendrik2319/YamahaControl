@@ -9,25 +9,28 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.geom.Rectangle2D;
 import java.awt.image.BufferedImage;
+import java.util.HashMap;
 import java.util.Locale;
 
 import net.schwarzbaer.java.lib.gui.Canvas;
 import net.schwarzbaer.java.lib.image.bumpmapping.BumpMapping;
-import net.schwarzbaer.java.lib.image.bumpmapping.ExtraNormalFunction;
-import net.schwarzbaer.java.lib.image.bumpmapping.ProfileXY;
-import net.schwarzbaer.java.lib.image.bumpmapping.Shading;
-import net.schwarzbaer.java.lib.image.bumpmapping.BumpMapping.Indexer;
 import net.schwarzbaer.java.lib.image.bumpmapping.BumpMapping.Normal;
 import net.schwarzbaer.java.lib.image.bumpmapping.BumpMapping.NormalXY;
 import net.schwarzbaer.java.lib.image.bumpmapping.BumpMapping.OverSampling;
+import net.schwarzbaer.java.lib.image.bumpmapping.ExtraNormalFunction;
 import net.schwarzbaer.java.lib.image.bumpmapping.NormalFunction.Polar.RotatedProfile;
+import net.schwarzbaer.java.lib.image.bumpmapping.ProfileXY;
+import net.schwarzbaer.java.lib.image.bumpmapping.Shading;
 import net.schwarzbaer.java.lib.image.bumpmapping.Shading.MaterialShading;
 import net.schwarzbaer.java.lib.image.bumpmapping.Shading.MixedShading;
+import net.schwarzbaer.java.lib.image.linegeometry.AlphaCharIO;
+import net.schwarzbaer.java.lib.image.linegeometry.Form;
 
 public class RotaryCtrl2 extends Canvas {
 		private static final Color COLOR_DISABLED_MARKER = new Color(0x8080B0);
 		//private static final Color COLOR_DISABLED_BACKGROUND = new Color(0xE8E8E8);
 		private static final long serialVersionUID = -5870265710270984615L;
+		private static HashMap<Character, Form[]> font = null;
 		
 		private final int fixedWidth;
 		private final int radius;
@@ -56,7 +59,7 @@ public class RotaryCtrl2 extends Canvas {
 			public void valueChanged(double value, boolean isAdjusting);
 		}
 		
-		public RotaryCtrl2(String ID, int width, boolean valueIn2Rows, double minValue, double maxValue, double deltaPerFullCircle, double tickInterval, int decimals, double zeroAngle_deg, RotaryCtrl2.ValueListener valueListener) {
+		public RotaryCtrl2(String ID, LabelText labelText, int width, boolean valueIn2Rows, double minValue, double maxValue, double deltaPerFullCircle, double tickInterval, int decimals, double zeroAngle_deg, RotaryCtrl2.ValueListener valueListener) {
 			super(width, width);
 			this.fixedWidth = width;
 			this.minValue = minValue;
@@ -74,6 +77,9 @@ public class RotaryCtrl2 extends Canvas {
 			value = 0.0;
 			unit = null;
 			
+			if (labelText!=null && font==null)
+				font = AlphaCharIO.readDefaultAlphaCharFont(null,true);
+			
 			rotaryCtrlProfile = createRotaryCtrlProfile(radius,5,15,3,5);
 			setTicks(rotaryCtrlProfile, radius,5,15,3, this.deltaPerFullCircle, this.tickInterval, this.zeroAngle_deg);			
 			
@@ -81,7 +87,7 @@ public class RotaryCtrl2 extends Canvas {
 			bumpMapping = new BumpMapping(false,false);
 			bumpMapping.setShading(
 				new MixedShading(
-					(Indexer.Polar)(w,r)->radius/2.0<=r && r<radius ? 1 : 0,
+					(BumpMapping.Indexer.Polar)(w,r)->radius/2.0<=r && r<radius ? 1 : 0,
 					new Shading.GUISurfaceShading(sun,Color.WHITE,new Color(0xf0f0f0),new Color(0x707070)),
 					new MaterialShading(sun, new Color(0xf0f0f0), 0, 40, true, 0.5)
 				)
@@ -96,7 +102,7 @@ public class RotaryCtrl2 extends Canvas {
 			addMouseMotionListener(mouseHandler);
 			
 			markerImages = null;
-			renderMarkerImages(ID,5,15,3,5);
+			renderMarkerImages(ID,labelText,5,15,3,5);
 		}
 		
 		private void updateBackgroundImage(boolean inBackgroundThread) {
@@ -109,7 +115,7 @@ public class RotaryCtrl2 extends Canvas {
 				backgroundImage = bumpMapping.renderImage(fixedWidth,fixedWidth);
 		}
 		
-		private void renderMarkerImages(String ID, double innerRing, double outerRing, double transition, double height) {
+		private void renderMarkerImages(String ID, LabelText labelText, double innerRing, double outerRing, double transition, double height) {
 			new Thread(new Runnable() {
 				@Override
 				public void run() {
@@ -118,7 +124,9 @@ public class RotaryCtrl2 extends Canvas {
 					
 					RotatedProfile rotatedProfile = createRotaryCtrlProfile(radius,innerRing,outerRing,transition,height);
 					rotatedProfile.showExtrasOnly(true);
-					ExtraNormalFunction.Polar.LineOnX bigLine = getTickLine(radius, innerRing, outerRing, transition, true);
+					ExtraNormalFunction.Polar surface = getTickLine(radius, innerRing, outerRing, transition, true);
+					if (labelText!=null)
+						surface = new ExtraNormalFunction.Polar.Group(surface, labelText.createNF(radius));
 					
 					BumpMapping tempBumpMapping = new BumpMapping(false,false);
 					tempBumpMapping.setShading(Shading.clone(bumpMapping.getShading()));
@@ -127,8 +135,8 @@ public class RotaryCtrl2 extends Canvas {
 					
 					for (int i=0; i<arr.length; i++) {
 						double angle_deg = i*360.0/arr.length;
-						ExtraNormalFunction.Polar.Rotated marker = new ExtraNormalFunction.Polar.Rotated(zeroAngle_deg+angle_deg, bigLine);
-						rotatedProfile.setExtras(new ExtraNormalFunction.Polar.Stencil( (w,r)->r<=radius, marker ));
+						ExtraNormalFunction.Polar.Rotated rotatedSurface = new ExtraNormalFunction.Polar.Rotated(zeroAngle_deg+angle_deg, surface);
+						rotatedProfile.setExtras(new ExtraNormalFunction.Polar.Stencil( (w,r)->r<=radius, rotatedSurface ));
 						arr[i] = tempBumpMapping.renderImage(fixedWidth,fixedWidth);
 						if (i%100==99 && i<arr.length-1) System.out.printf("[ %-10s] ... %d images rendered.%n", ID, i+1);
 					}
@@ -166,6 +174,54 @@ public class RotaryCtrl2 extends Canvas {
 					new ProfileXY.RoundBlend(r4    , r4+tr , vHorizInside,vFace),
 					new ProfileXY.Constant  (r4+tr , Double.POSITIVE_INFINITY)
 				)
+			);
+		}
+		
+		record LabelText (
+				String label,
+				double fontSize_px,
+				double radiusOffset_px,
+				double lineWidth_px,
+				double lineDepth_px,
+				double start_angle_deg
+		) {
+			private ExtraNormalFunction.Polar createNF(double radius_px)
+			{
+				return new ExtraNormalFunction.Polar.BentCartExtra(
+						radius_px,
+						start_angle_deg/180.0*Math.PI,
+						new ExtraNormalFunction.Cart.AlphaCharSquence(
+								0,
+								radiusOffset_px,
+								fontSize_px/100,
+								createLineProfile(
+										lineWidth_px,
+										lineDepth_px
+								),
+								label,
+								font
+						)
+				);
+			}
+		}
+		
+		private static ProfileXY createLineProfile(double lineWidth, double lineHeight) {
+			lineWidth  = Math.max(lineWidth , 0.01);
+			lineHeight = Math.max(lineHeight, 0.01);
+			
+			double x1 =  0 + lineWidth/6;
+			double x2 = x1 + lineWidth/6;
+			double x3 = x2 + lineWidth/6;
+			double xO = x3 + lineWidth/6;
+			
+			NormalXY vFace  = new NormalXY(0,1);
+			NormalXY vRamp = ProfileXY.Constant.computeNormal(x2,x3, 0,lineHeight);
+			
+			return new ProfileXY.Group(
+				new ProfileXY.Constant  ( 0, x1 ),
+				new ProfileXY.RoundBlend(x1, x2, vFace,vRamp),
+				new ProfileXY.Constant  (x2, x3, vRamp),
+				new ProfileXY.RoundBlend(x3, xO, vRamp,vFace)
 			);
 		}
 		
