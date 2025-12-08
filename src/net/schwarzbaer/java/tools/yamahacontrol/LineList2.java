@@ -113,6 +113,7 @@ class LineList2 {
 				int blockIndex = lineListModel.getNextBlockToLoad();
 				if (blockIndex<0) {
 					repeater.stop();
+					lineRenderer.setUpdating(false);
 					break;
 				}
 				listInfo.sendJumpToLine(1+blockIndex*8);
@@ -124,6 +125,7 @@ class LineList2 {
 		public void start() {
 			if (isInStep) return;
 			repeater.start();
+			lineRenderer.setUpdating(true);
 		}
 	}
 
@@ -416,15 +418,23 @@ class LineList2 {
 
 	private static class LineRenderer implements ListCellRenderer<Device.ListInfo.Line>{
 		
-		private LabelRendererComponent rendererComponent;
-		private Border focusBorder;
-		private Border emptyBorder;
+		private static final Color TEXTCOLOR_UPDATING = new Color(0x667EFF);
+		private final LabelRendererComponent rendererComponent;
+		private final Border focusBorder;
+		private final Border emptyBorder;
+		private boolean isUpdating;
 	
 		LineRenderer() {
 			rendererComponent = new LabelRendererComponent();
 			rendererComponent.setPreferredSize(new Dimension(10,20));
 			emptyBorder = BorderFactory.createEmptyBorder(1, 1, 1, 1);
 			focusBorder = BorderFactory.createDashedBorder(Color.DARK_GRAY);
+			isUpdating = false;
+		}
+
+		void setUpdating(boolean isUpdating)
+		{
+			this.isUpdating = isUpdating;
 		}
 
 		@Override
@@ -446,8 +456,8 @@ class LineList2 {
 				rendererComponent.setText(line.txt==null?"":line.txt);
 			}
 			rendererComponent.setOpaque(true);
-			rendererComponent.setBackground(isSelected?list.getSelectionBackground():list.getBackground());
-			rendererComponent.setForeground(isSelected?list.getSelectionForeground():list.getForeground());
+			rendererComponent.setBackground(isSelected ? list.getSelectionBackground() : list.getBackground());
+			rendererComponent.setForeground(isSelected ? list.getSelectionForeground() : isUpdating ? TEXTCOLOR_UPDATING : list.getForeground());
 			
 			rendererComponent.setBorder(cellHasFocus?focusBorder:emptyBorder);
 			
