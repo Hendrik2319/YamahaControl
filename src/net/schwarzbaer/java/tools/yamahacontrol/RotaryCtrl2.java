@@ -183,13 +183,15 @@ public class RotaryCtrl2 extends Canvas {
 				double radiusOffset_px,
 				double lineWidth_px,
 				double lineDepth_px,
-				double start_angle_deg
+				double start_angle_deg,
+				double angleScale
 		) {
 			private ExtraNormalFunction.Polar createNF(double radius_px)
 			{
 				return new ExtraNormalFunction.Polar.BentCartExtra(
 						radius_px,
 						start_angle_deg/180.0*Math.PI,
+						angleScale,
 						new ExtraNormalFunction.Cart.AlphaCharSquence(
 								0,
 								radiusOffset_px,
