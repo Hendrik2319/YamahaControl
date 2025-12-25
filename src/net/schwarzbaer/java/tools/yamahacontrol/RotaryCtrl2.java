@@ -2,6 +2,7 @@ package net.schwarzbaer.java.tools.yamahacontrol;
 
 import java.awt.BasicStroke;
 import java.awt.Color;
+import java.awt.Cursor;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
@@ -322,7 +323,20 @@ public class RotaryCtrl2 extends Canvas {
 			}
 
 			@Override
-			public void mousePressed(MouseEvent e) {
+			public void mouseEntered(MouseEvent e)
+			{
+				updateCursor(e);
+			}
+
+			@Override
+			public void mouseMoved(MouseEvent e)
+			{
+				updateCursor(e);
+			}
+
+			@Override
+			public void mousePressed(MouseEvent e)
+			{
 				if (!isEnabled()) return;
 				
 				pickAngle = getMouseAngle(e.getX(), e.getY(), true)-angle;
@@ -331,7 +345,8 @@ public class RotaryCtrl2 extends Canvas {
 			}
 
 			@Override
-			public void mouseReleased(MouseEvent e) {
+			public void mouseReleased(MouseEvent e)
+			{
 				if (!isEnabled()) return;
 				
 				isAdjusting = false;
@@ -342,7 +357,8 @@ public class RotaryCtrl2 extends Canvas {
 			}
 
 			@Override
-			public void mouseDragged(MouseEvent e) {
+			public void mouseDragged(MouseEvent e)
+			{
 				if (!isEnabled()) return;
 				
 				if (!Double.isNaN(pickAngle))
@@ -351,7 +367,8 @@ public class RotaryCtrl2 extends Canvas {
 			}
 			
 
-			private void changeValue(int mouseX, int mouseY) {
+			private void changeValue(int mouseX, int mouseY)
+			{
 				double mouseAngle = getMouseAngle(mouseX, mouseY, false);
 				double diff = mouseAngle-pickAngle-angle;
 				if      (Math.abs(diff) > Math.abs(diff+2*Math.PI)) pickAngle -= 2*Math.PI;
@@ -365,12 +382,42 @@ public class RotaryCtrl2 extends Canvas {
 				repaint();
 			}
 
-			private double getMouseAngle(int mouseX, int mouseY, boolean checkIfInsideCircle) {
+			private double getMouseAngle(int mouseX, int mouseY, boolean checkIfInsideCircle)
+			{
 				int x = mouseX-width/2;
 				int y = mouseY-height/2;
 				if (checkIfInsideCircle && Math.sqrt(x*x+y*y)>radius) return Double.NaN;
 				double mouseAngle = Math.atan2(y,x);
 				return mouseAngle;
+			}
+
+			private void updateCursor(MouseEvent e)
+			{
+				setCursor( getCursorState(e) );
+			}
+
+			private boolean getCursorState(MouseEvent e)
+			{
+				if (!isEnabled())
+					return false;
+				
+				if (!Double.isNaN(pickAngle))
+					return true;
+				
+				int x = e.getX()-width/2;
+				int y = e.getY()-height/2;
+				return Math.sqrt(x*x+y*y) <= radius;
+			}
+
+			private void setCursor(boolean isInRadius)
+			{
+				RotaryCtrl2.this.setCursor(
+						Cursor.getPredefinedCursor(
+								isInRadius
+									? Cursor.HAND_CURSOR
+									: Cursor.DEFAULT_CURSOR
+						)
+				);
 			}
 		}
 
