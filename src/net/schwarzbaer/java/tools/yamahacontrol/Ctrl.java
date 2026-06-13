@@ -194,14 +194,21 @@ final class Ctrl {
 	}
 	
 	public static Node sendGetCommand_Node(String address, Device.KnownCommand knownCommand) {
+		return sendGetCommand_Node(address, knownCommand, false);
+	}
+	public static Node sendGetCommand_Node(String address, Device.KnownCommand knownCommand, boolean showCommandXML) {
 		String fullString = knownCommand.toFullString();
 		TagList tagList = knownCommand.getTagList();
-		return sendGetCommand_Node(address, fullString, tagList);
+		return sendGetCommand_Node(address, fullString, tagList, showCommandXML);
 	}
 
 	public static Node sendGetCommand_Node(String address, String infoString, TagList tagList) {
+		return sendGetCommand_Node(address, infoString, tagList, false);
+	}
+	public static Node sendGetCommand_Node(String address, String infoString, TagList tagList, boolean showCommandXML) {
 		if (showCommands) Log.info(Ctrl.class, "GET: %s", infoString);
 		String command = buildGetCommand(tagList);
+		if (showCommandXML) System.out.printf("[sendGetCommand] command: %s%n", command);
 		Document document = sendCommand_controlled(address, command);
 		if (lastRC!=RC_OK) return null;
 		if (document==null) return null;
