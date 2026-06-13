@@ -188,19 +188,105 @@ final class SubUnits {
 			}
 		}
 	}
+	
+	private static class AlbumCoverSaver
+	{
+		private final Frame window;
+		private final JFileChooser fileChooser;
+		
+		AlbumCoverSaver(Frame window)
+		{
+			this.window = window;
+			fileChooser = new JFileChooser("./");
+			fileChooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
+			fileChooser.setMultiSelectionEnabled(false);
+		}
+		
+
+		void saveAlbumCover(String deviceAddress, Device.PlayInfo_NetRadio playInfo, boolean verbose)
+		{
+			String albumCoverURL = playInfo.albumCoverURL;
+			Integer albumCoverID = playInfo.albumCoverID;
+			String albumCoverSource = playInfo.currentStation;
+			
+			saveAlbumCover(deviceAddress, albumCoverURL, albumCoverID, albumCoverSource, verbose);
+		}
+
+		void saveAlbumCover(String deviceAddress, Device.PlayInfoExt<?> playInfo, boolean verbose)
+		{
+			String albumCoverURL = playInfo.albumCoverURL;
+			Integer albumCoverID = playInfo.albumCoverID;
+			String albumCoverSource =
+					playInfo.currentArtist!=null && playInfo.currentAlbum!=null
+						? playInfo.currentArtist +" - "+ playInfo.currentAlbum
+						: playInfo.currentArtist!=null
+							? playInfo.currentArtist
+							: playInfo.currentAlbum!=null
+								? playInfo.currentAlbum
+								: null;
+			
+			
+			saveAlbumCover(deviceAddress, albumCoverURL, albumCoverID, albumCoverSource, verbose);
+		}
+
+		private void saveAlbumCover(String deviceAddress, String albumCoverURL, Integer albumCoverID, String albumCoverSource, boolean verbose)
+		{
+			if (albumCoverURL == null) return;
+			if (verbose) System.out.printf("%nRead AlbumCover ...%n");
+			byte[] content = Ctrl.http.getBinaryContentFromURL("http://"+deviceAddress+albumCoverURL, verbose );
+			
+			int pos = albumCoverURL.lastIndexOf('/');
+			String filename;
+			if (pos<0) filename = albumCoverURL;
+			else filename = albumCoverURL.substring(pos+1);
+			if (!filename.isEmpty() && (albumCoverID!=null || albumCoverSource!=null)) {
+				pos = filename.lastIndexOf('.');
+				String extra = "";
+				if (albumCoverID    !=null) extra += " - "+albumCoverID.toString();
+				if (albumCoverSource!=null) extra += " - "+removeNotAllowedChars(albumCoverSource);
+				if (pos<0) filename += extra;
+				else filename = filename.substring(0,pos)+extra+filename.substring(pos);
+				
+				File folder = fileChooser.getCurrentDirectory();
+				fileChooser.setSelectedFile(new File(folder, filename));
+			}
+			
+			if (fileChooser.showSaveDialog(window)!=JFileChooser.APPROVE_OPTION) return;
+			File file = fileChooser.getSelectedFile();
+			
+			if (verbose) System.out.printf("Write data to file \"%s\"%n",file.getAbsolutePath());
+			try { Files.write(file.toPath(), content, StandardOpenOption.CREATE_NEW); }
+			catch (FileAlreadyExistsException e) { if (verbose) System.err.printf("Can't write file. File \"%s\" already exists.%n",file.getAbsolutePath()); }
+			catch (IOException e) { e.printStackTrace(); }
+		}
+
+
+		private static String removeNotAllowedChars(String str)
+		{ // \  /  :  *  ?  "  <  >  |
+			return str
+					.replace("\\", "_")
+					.replace("/", "_")
+					.replace(":", "_")
+					.replace("*", "_")
+					.replace("?", "_")
+					.replace("\"", "_")
+					.replace("<", "_")
+					.replace(">", "_")
+					.replace("|", "_")
+					.replaceAll("[\\x00-\\x1F]", "_");
+		}
+	}
 
 	static class SubUnitNetRadio extends AbstractSubUnit_ListPlay implements PlayButtonModule.Caller, ButtonModule.ExtraButtons {
 		private static final long serialVersionUID = -8583320100311806933L;
 		
-		private JFileChooser fileChooser;
+		private final AlbumCoverSaver albumCoverSaver;
 	
 		public SubUnitNetRadio(Frame window) {
 			super(window, "NET RADIO", "Net Radio", UpdateWish.NetRadioConfig, UpdateWish.NetRadioListInfo, UpdateWish.NetRadioPlayInfo);
 			modules.add(new PlayButtonModule(this, this));
 			withExtraCharsetConversion = true;
-			fileChooser = new JFileChooser("./");
-			fileChooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
-			fileChooser.setMultiSelectionEnabled(false);
+			albumCoverSaver = new AlbumCoverSaver(window);
 		}
 	
 		@Override
@@ -221,33 +307,7 @@ final class SubUnits {
 		
 		private void saveAlbumCover(boolean verbose) {
 			if (device == null) return;
-			if (device.netRadio.playInfo.albumCoverURL == null) return;
-			if (verbose) System.out.printf("%nRead AlbumCover ...%n");
-			byte[] content = Ctrl.http.getBinaryContentFromURL("http://"+device.address+device.netRadio.playInfo.albumCoverURL, verbose );
-			
-			int pos = device.netRadio.playInfo.albumCoverURL.lastIndexOf('/');
-			String filename;
-			if (pos<0) filename = device.netRadio.playInfo.albumCoverURL;
-			else filename = device.netRadio.playInfo.albumCoverURL.substring(pos+1);
-			if (!filename.isEmpty() && (device.netRadio.playInfo.albumCoverID!=null || device.netRadio.playInfo.currentStation!=null)) {
-				pos = filename.lastIndexOf('.');
-				String extra = "";
-				if (device.netRadio.playInfo.albumCoverID  !=null) extra += " - "+device.netRadio.playInfo.albumCoverID  .toString();
-				if (device.netRadio.playInfo.currentStation!=null) extra += " - "+device.netRadio.playInfo.currentStation.toString();
-				if (pos<0) filename += extra;
-				else filename = filename.substring(0,pos)+extra+filename.substring(pos);
-				
-				File folder = fileChooser.getCurrentDirectory();
-				fileChooser.setSelectedFile(new File(folder, filename));
-			}
-			
-			if (fileChooser.showSaveDialog(window)!=JFileChooser.APPROVE_OPTION) return;
-			File file = fileChooser.getSelectedFile();
-			
-			if (verbose) System.out.printf("Write data to file \"%s\"%n",file.getAbsolutePath());
-			try { Files.write(file.toPath(), content, StandardOpenOption.CREATE_NEW); }
-			catch (FileAlreadyExistsException e) { if (verbose) System.err.printf("Can't write file. File \"%s\" already exists.%n",file.getAbsolutePath()); }
-			catch (IOException e) { e.printStackTrace(); }
+			albumCoverSaver.saveAlbumCover(device.address, device.netRadio.playInfo, verbose);
 		}
 
 		private void showPreferredSongs() {
@@ -298,13 +358,12 @@ final class SubUnits {
 		@Override protected Device.ListInfo                 getListInfo(Device device) { return device==null?null:device.dlna.listInfo; }
 	}
 
-	static class SubUnitIPodUSB extends AbstractSubUnit_PlayInfoExt<Value.ShuffleIPod> implements ButtonModule.ExtraButtons {
+	static class SubUnitIPodUSB extends AbstractSubUnit_PlayInfoExt<Value.ShuffleIPod> {
 		private static final long serialVersionUID = -4180795479139795928L;
 		private JButton modeBtn;
 	
 		public SubUnitIPodUSB(Frame window) {
 			super(window, "iPod (USB)", "iPod (USB) [untested]", UpdateWish.IPodUSBConfig, UpdateWish.IPodUSBListInfo, UpdateWish.IPodUSBPlayInfo, Value.ShuffleIPod.values());
-			setExtraButtons(this);
 		}
 	
 		@Override
@@ -324,9 +383,11 @@ final class SubUnits {
 		@Override protected Device.ListInfo                       getListInfo(Device device) { return device==null?null:device.iPodUSB.listInfo; }
 	
 		@Override public void updateExtraButtons() {
+			super.updateExtraButtons();
 			modeBtn.setText(device.iPodUSB.mode==null? "iPod Mode":( "iPod Mode: "+device.iPodUSB.mode.getLabel()));
 		}
 		@Override public void addExtraButtons(Vector<AbstractButton> buttons) {
+			super.addExtraButtons(buttons);
 			buttons.add(modeBtn = YamahaControl.createButton("iPod Mode",true));
 			modeBtn.addActionListener(e->{
 				if (device.iPodUSB.mode==null) return;
@@ -1113,21 +1174,29 @@ final class SubUnits {
 			}
 		}
 
-	private static abstract class AbstractSubUnit_PlayInfoExt<Shuffle extends Enum<Shuffle>&Value> extends AbstractSubUnit_ListPlay implements PlayButtonModuleExt.Caller, ReapeatShuffleButtonModule.Caller<Shuffle> {
+	private static abstract class AbstractSubUnit_PlayInfoExt<Shuffle extends Enum<Shuffle>&Value> extends AbstractSubUnit_ListPlay implements PlayButtonModuleExt.Caller, ReapeatShuffleButtonModule.Caller<Shuffle>, ButtonModule.ExtraButtons {
 		private static final long serialVersionUID = 8830354607137619068L;
-		private ButtonModule lastModule;
+		
+		private final AlbumCoverSaver albumCoverSaver;
 		
 		public AbstractSubUnit_PlayInfoExt(Frame window, String inputID, String tabTitle, UpdateWish readyStateUpdateWish, UpdateWish listInfoUpdateWish, UpdateWish playInfoUpdateWish, Shuffle[] shuffleValues) {
 			super(window, inputID, tabTitle, readyStateUpdateWish, listInfoUpdateWish, playInfoUpdateWish);
 			modules.add( new PlayButtonModuleExt(this, null));
-			modules.add( lastModule = new ReapeatShuffleButtonModule<>(this, shuffleValues, null));
-		}
-		
-		protected void setExtraButtons(ButtonModule.ExtraButtons extraButtons) {
-			lastModule.extraButtons = extraButtons;
+			modules.add( new ReapeatShuffleButtonModule<>(this, shuffleValues, this));
+			albumCoverSaver = new AlbumCoverSaver(window);
 		}
 	
 		@Override public abstract Device.PlayInfoExt<Shuffle> getPlayInfo();
+
+		@Override public void updateExtraButtons() {}
+		@Override public void addExtraButtons(Vector<AbstractButton> buttons) {
+			buttons.add(YamahaControl.createButton("Save AlbumCover",true,e->saveAlbumCover(true)));
+		}
+		
+		private void saveAlbumCover(boolean verbose) {
+			if (device == null) return;
+			albumCoverSaver.saveAlbumCover(device.address, getPlayInfo(), verbose);
+		}
 	}
 
 	private static abstract class AbstractSubUnit_AirPlaySpotify extends AbstractSubUnit_Play implements PlayButtonModuleExt.Caller {
